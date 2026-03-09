@@ -1,4 +1,10 @@
-import type { BuildResult, ExecutionSpec, IssueRef, VerificationReport, WorkflowRun } from "../contracts/index.js";
+import type {
+  BuildResult,
+  ExecutionSpec,
+  IssueRef,
+  VerificationReport,
+  WorkflowRun,
+} from "../contracts/index.js";
 import type { Builder, Planner, Verifier } from "../roles/index.js";
 
 export class FakePlanner implements Planner {
@@ -11,14 +17,14 @@ export class FakePlanner implements Planner {
         {
           id: "ac-1",
           text: "Workflow run contains a populated execution spec",
-          required: true
-        }
+          required: true,
+        },
       ],
       testPlan: ["Run type checks", "Exercise orchestrator flow"],
       risks: ["Spec may need human clarification for ambiguous issues"],
       assumptions: ["Repository context is available locally"],
       openQuestions: [],
-      riskLevel: "medium"
+      riskLevel: "medium",
     };
   }
 }
@@ -29,9 +35,15 @@ export class FakeBuilder implements Builder {
       branchName: `issue/${run.issue.number}`,
       summary: `Prepared workflow changes for issue #${run.issue.number}.`,
       changedFiles: ["src/openclawcode/orchestrator/run.ts"],
+      issueClassification: "workflow-core",
+      scopeCheck: {
+        ok: true,
+        blockedFiles: [],
+        summary: "Scope check passed for workflow-core issue.",
+      },
       testCommands: ["pnpm check", "pnpm test:fast"],
       testResults: ["Workflow skeleton validated"],
-      notes: ["This is a fake builder used for orchestration tests"]
+      notes: ["This is a fake builder used for orchestration tests"],
     };
   }
 }
@@ -47,7 +59,7 @@ export class FakeVerifier implements Verifier {
         : `Issue #${run.issue.number} needs another build iteration.`,
       findings: this.approved ? [] : ["Verification requested additional refinement"],
       missingCoverage: [],
-      followUps: this.approved ? [] : ["Re-run builder after addressing findings"]
+      followUps: this.approved ? [] : ["Re-run builder after addressing findings"],
     };
   }
 }

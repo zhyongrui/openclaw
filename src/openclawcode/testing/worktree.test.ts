@@ -100,6 +100,13 @@ describe("GitWorktreeManager", () => {
 
       await fs.writeFile(path.join(workspace.worktreePath, "README.md"), "# changed\n", "utf8");
       await fs.writeFile(path.join(workspace.worktreePath, "notes.txt"), "hello\n", "utf8");
+      await fs.writeFile(path.join(workspace.worktreePath, "HEARTBEAT.md"), "runtime\n", "utf8");
+      await fs.mkdir(path.join(workspace.worktreePath, ".openclaw"), { recursive: true });
+      await fs.writeFile(
+        path.join(workspace.worktreePath, ".openclaw", "session.json"),
+        "{}\n",
+        "utf8",
+      );
 
       expect(await manager.collectChangedFiles(workspace)).toEqual(["README.md", "notes.txt"]);
     } finally {

@@ -17,6 +17,8 @@ export interface WorkflowWorkspaceManager {
   cleanup(workspace: WorkflowWorkspace): Promise<void>;
 }
 
+const RUNTIME_ARTIFACT_RULES = [".openclaw/", "HEARTBEAT.md", "SOUL.md", "TOOLS.md"];
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -83,6 +85,12 @@ async function listGitWorktrees(repoRoot: string): Promise<GitWorktreeEntry[]> {
   }
 
   return entries;
+}
+
+function shouldIgnoreChangedFile(file: string): boolean {
+  return RUNTIME_ARTIFACT_RULES.some((rule) =>
+    rule.endsWith("/") ? file.startsWith(rule) : file === rule,
+  );
 }
 
 export class GitWorktreeManager implements WorkflowWorkspaceManager {
@@ -181,7 +189,8 @@ export class GitWorktreeManager implements WorkflowWorkspaceManager {
           ...untracked.split("\n"),
         ]
           .map((entry) => entry.trim())
-          .filter(Boolean),
+          .filter(Boolean)
+          .filter((entry) => !shouldIgnoreChangedFile(entry)),
       ),
     ).toSorted();
   }

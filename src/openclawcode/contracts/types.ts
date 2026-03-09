@@ -12,6 +12,7 @@ export type WorkflowStage =
 
 export type RiskLevel = "low" | "medium" | "high";
 export type VerificationDecision = "approve-for-human-review" | "request-changes" | "escalate";
+export type IssueImplementationScope = "command-layer" | "workflow-core" | "mixed";
 
 export interface IssueRef {
   owner: string;
@@ -44,6 +45,12 @@ export interface BuildResult {
   branchName: string;
   summary: string;
   changedFiles: string[];
+  issueClassification?: IssueImplementationScope;
+  scopeCheck?: {
+    ok: boolean;
+    blockedFiles: string[];
+    summary: string;
+  };
   testCommands: string[];
   testResults: string[];
   notes: string[];

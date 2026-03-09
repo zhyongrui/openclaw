@@ -67,6 +67,32 @@ describe("issue scope classification", () => {
     expect(buildScopeGuardrail(run).preferredPaths).toContain("src/commands/openclawcode.ts");
   });
 
+  it("keeps the real issue #2 wording in command-layer classification", () => {
+    const run: WorkflowRun = {
+      ...createRun(),
+      issue: {
+        ...createRun().issue,
+        number: 2,
+        title: "[Feature]: Include changed file list in openclaw code run --json output",
+        body: [
+          "### Summary",
+          "",
+          "Persist and print the builder changed file list in a clearer JSON structure.",
+          "",
+          "### Problem to solve",
+          "",
+          "The workflow already tracks changed files, but CLI users need a stable JSON field they can consume directly when inspecting a run result.",
+          "",
+          "### Proposed solution",
+          "",
+          "Ensure `openclaw code run --json` includes the builder changed file list in a stable structured field and add/update targeted tests.",
+        ].join("\n"),
+      },
+    };
+
+    expect(classifyIssueScope(run)).toBe("command-layer");
+  });
+
   it("classifies orchestration work as workflow-core", () => {
     const run: WorkflowRun = {
       ...createRun(),
@@ -87,8 +113,11 @@ describe("issue scope classification", () => {
       issue: {
         ...createRun().issue,
         number: 4,
-        title: "Expose workflow retry metadata in openclaw code run --json output",
-        body: "Update the CLI output and workflow persistence so rerun metadata is visible.",
+        title: "Expose orchestrator retry metadata in openclaw code run --json output",
+        body: [
+          "Update the CLI output and workflow persistence so rerun metadata is visible.",
+          "This also requires orchestrator resume behavior and stored run record updates.",
+        ].join(" "),
       },
     };
 

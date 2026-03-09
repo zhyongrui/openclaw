@@ -103,6 +103,18 @@ function buildVerifierPrompt(run: WorkflowRun): string {
       (entry) => `- ${entry}`,
     ),
     "",
+    "Recorded Issue Classification:",
+    `- ${run.buildResult?.issueClassification ?? "No issue classification recorded."}`,
+    "",
+    "Recorded Scope Check:",
+    `- ${run.buildResult?.scopeCheck?.summary ?? "No scope-check summary recorded."}`,
+    ...(run.buildResult?.scopeCheck?.blockedFiles.length
+      ? [
+          "- Blocked files:",
+          ...run.buildResult.scopeCheck.blockedFiles.map((entry) => `  - ${entry}`),
+        ]
+      : []),
+    "",
     "Recorded Test Results:",
     ...(run.buildResult?.testResults ?? ["No tests recorded."]).map((entry) => `- ${entry}`),
     "",
@@ -149,10 +161,16 @@ async function autoCommitChanges(
   workspaceDir: string,
   shellRunner: ShellRunner,
   message: string,
+  changedFiles: string[],
 ): Promise<void> {
+  if (changedFiles.length === 0) {
+    return;
+  }
+
+  const pathArgs = changedFiles.map((entry) => JSON.stringify(entry)).join(" ");
   const status = await shellRunner.run({
     cwd: workspaceDir,
-    command: "git status --porcelain",
+    command: `git status --porcelain -- ${pathArgs}`,
   });
   if (status.code !== 0) {
     throw new Error(status.stderr || "Failed to inspect git status");
@@ -163,7 +181,7 @@ async function autoCommitChanges(
 
   const add = await shellRunner.run({
     cwd: workspaceDir,
-    command: "git add -A",
+    command: `git add -A -- ${pathArgs}`,
   });
   if (add.code !== 0) {
     throw new Error(add.stderr || "Failed to stage changes");
@@ -226,6 +244,7 @@ export class AgentBackedBuilder implements Builder {
         run.workspace.worktreePath,
         this.options.shellRunner,
         `feat: implement issue #${run.issue.number}`,
+        changedFiles,
       );
     }
 
@@ -234,6 +253,12 @@ export class AgentBackedBuilder implements Builder {
       summary:
         result.text || `Implemented issue #${run.issue.number} in ${run.workspace.worktreePath}.`,
       changedFiles,
+      issueClassification: scopeCheck.classification,
+      scopeCheck: {
+        ok: scopeCheck.ok,
+        blockedFiles: [...scopeCheck.blockedFiles],
+        summary: scopeCheck.summary,
+      },
       testCommands: [...this.options.testCommands],
       testResults,
       notes: [

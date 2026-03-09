@@ -75,6 +75,12 @@ class FakeBuilder implements Builder {
       branchName: run.workspace?.branchName ?? "openclawcode/issue-1",
       summary: "Builder updated the CLI implementation.",
       changedFiles: ["src/commands/openclawcode.ts"],
+      issueClassification: "command-layer",
+      scopeCheck: {
+        ok: true,
+        blockedFiles: [],
+        summary: "Scope check passed for command-layer issue.",
+      },
       testCommands: ["pnpm test"],
       testResults: ["PASS pnpm test"],
       notes: [],
@@ -178,6 +184,10 @@ describe("runIssueWorkflow", () => {
       expect(savedRun.draftPullRequest?.number).toBe(99);
       expect(savedRun.draftPullRequest?.url).toBe(
         "https://github.com/zhyongrui/openclawcode/pull/99",
+      );
+      expect(savedRun.buildResult?.issueClassification).toBe("command-layer");
+      expect(savedRun.buildResult?.scopeCheck?.summary).toBe(
+        "Scope check passed for command-layer issue.",
       );
     } finally {
       await fs.rm(stateDir, { recursive: true, force: true });

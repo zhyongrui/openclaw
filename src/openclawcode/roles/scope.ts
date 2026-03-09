@@ -1,6 +1,4 @@
-import type { WorkflowRun } from "../contracts/index.js";
-
-export type IssueImplementationScope = "command-layer" | "workflow-core" | "mixed";
+import type { IssueImplementationScope, WorkflowRun } from "../contracts/index.js";
 
 export interface ScopeGuardrail {
   classification: IssueImplementationScope;
@@ -17,30 +15,32 @@ export interface ScopeCheckResult {
 }
 
 const COMMAND_LAYER_HINTS = [
-  "openclaw code run",
-  "--json",
-  "cli",
-  "command",
-  "stdout",
-  "output",
-  "flag",
+  { pattern: "openclaw code run", weight: 4 },
+  { pattern: "--json", weight: 4 },
+  { pattern: "cli", weight: 2 },
+  { pattern: "command", weight: 2 },
+  { pattern: "stdout", weight: 1 },
+  { pattern: "output", weight: 1 },
+  { pattern: "flag", weight: 1 },
+  { pattern: "json field", weight: 2 },
 ];
 
 const WORKFLOW_CORE_HINTS = [
-  "workflow",
-  "orchestrator",
-  "persistence",
-  "resume",
-  "retry",
-  "state machine",
-  "verification",
-  "planner",
-  "builder",
-  "verifier",
-  "draft pr",
-  "pull request",
-  "run record",
-  "artifact",
+  { pattern: "orchestrator", weight: 3 },
+  { pattern: "persistence", weight: 3 },
+  { pattern: "resume", weight: 3 },
+  { pattern: "retry", weight: 2 },
+  { pattern: "state machine", weight: 3 },
+  { pattern: "verification", weight: 2 },
+  { pattern: "planner", weight: 2 },
+  { pattern: "builder", weight: 2 },
+  { pattern: "verifier", weight: 2 },
+  { pattern: "draft pr", weight: 2 },
+  { pattern: "pull request", weight: 2 },
+  { pattern: "run record", weight: 3 },
+  { pattern: "persisted data", weight: 3 },
+  { pattern: "stored run", weight: 3 },
+  { pattern: "workflow artifact", weight: 2 },
 ];
 
 const COMMAND_LAYER_PREFERRED_PATHS = [
@@ -69,8 +69,11 @@ function matchesPathRule(file: string, rule: string): boolean {
   return normalizedFile === normalizedRule;
 }
 
-function countHints(text: string, hints: string[]): number {
-  return hints.reduce((total, hint) => (text.includes(hint) ? total + 1 : total), 0);
+function countHints(text: string, hints: Array<{ pattern: string; weight: number }>): number {
+  return hints.reduce(
+    (total, hint) => (text.includes(hint.pattern) ? total + hint.weight : total),
+    0,
+  );
 }
 
 function collectSupportText(run: WorkflowRun): string {
@@ -88,11 +91,30 @@ export function classifyIssueScope(run: WorkflowRun): IssueImplementationScope {
   const issueText = [run.issue.title, run.issue.body ?? ""].join("\n").toLowerCase();
   const issueCommandScore = countHints(issueText, COMMAND_LAYER_HINTS);
   const issueWorkflowScore = countHints(issueText, WORKFLOW_CORE_HINTS);
+  const strongCommandIssue =
+    issueText.includes("openclaw code run") || issueText.includes("--json");
 
+  if (strongCommandIssue && issueWorkflowScore >= 3) {
+    return "mixed";
+  }
+  if (strongCommandIssue && issueCommandScore > 0) {
+    return "command-layer";
+  }
   if (issueCommandScore > 0 && issueWorkflowScore === 0) {
     return "command-layer";
   }
   if (issueWorkflowScore > 0 && issueCommandScore === 0) {
+    return "workflow-core";
+  }
+  if (issueCommandScore > 0 && issueWorkflowScore > 0) {
+    if (Math.abs(issueCommandScore - issueWorkflowScore) <= 2) {
+      return "mixed";
+    }
+  }
+  if (issueCommandScore > issueWorkflowScore) {
+    return "command-layer";
+  }
+  if (issueWorkflowScore > issueCommandScore) {
     return "workflow-core";
   }
   if (issueCommandScore > 0 && issueWorkflowScore > 0) {
