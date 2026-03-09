@@ -58,10 +58,35 @@ describe("AgentBackedBuilder prompt", () => {
     ]);
 
     expect(prompt).toContain(
-      "Start with targeted reads under src/openclawcode/ and docs/openclawcode/",
+      "Start with targeted reads in the hinted files below, plus nearby tests and docs/openclawcode/",
     );
     expect(prompt).toContain("Avoid broad scans such as `rg ... .`");
     expect(prompt).toContain("- src/openclawcode/app/run-issue.ts");
     expect(prompt).toContain("- src/openclawcode/testing/run-issue.test.ts");
+    expect(prompt).toContain("The workflow host will run these final validation commands");
+    expect(prompt).toContain(
+      "Do not run the full final validation command inside the agent sandbox",
+    );
+  });
+
+  it("adds command-layer hints for CLI-facing issues", () => {
+    const prompt = __testing.buildBuilderPrompt(
+      {
+        ...createRun(),
+        issue: {
+          ...createRun().issue,
+          number: 2,
+          title: "Include changed file list in openclaw code run --json output",
+          body: "Ensure the CLI command exposes a stable --json field for changed files.",
+        },
+      },
+      ["pnpm exec vitest run --config vitest.openclawcode.config.mjs"],
+    );
+
+    expect(prompt).toContain(
+      "When the issue mentions CLI flags, JSON output, or `openclaw code run`",
+    );
+    expect(prompt).toContain("- src/commands/openclawcode.ts");
+    expect(prompt).toContain("- src/commands/openclawcode.test.ts");
   });
 });

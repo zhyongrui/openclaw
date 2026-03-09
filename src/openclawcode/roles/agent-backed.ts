@@ -21,18 +21,35 @@ function renderIssueBody(run: WorkflowRun): string {
   return run.issue.body?.trim() ? run.issue.body.trim() : "No issue body provided.";
 }
 
-function buildRelevantPathHints(): string[] {
-  return [
+function buildRelevantPathHints(run: WorkflowRun): string[] {
+  const issueText = `${run.issue.title}\n${run.issue.body ?? ""}`.toLowerCase();
+  const hints = [
     "src/openclawcode/app/run-issue.ts",
     "src/openclawcode/contracts/types.ts",
     "src/openclawcode/testing/run-issue.test.ts",
     "src/openclawcode/testing/orchestrator.test.ts",
     "src/openclawcode/orchestrator/run.ts",
   ];
+
+  if (
+    issueText.includes("openclaw code run") ||
+    issueText.includes("--json") ||
+    issueText.includes("cli") ||
+    issueText.includes("command")
+  ) {
+    hints.unshift("src/commands/openclawcode.test.ts");
+    hints.unshift("src/commands/openclawcode.ts");
+  }
+
+  return hints;
 }
 
 function buildBuilderPrompt(run: WorkflowRun, testCommands: string[]): string {
   const workspaceRoot = run.workspace?.worktreePath ?? "unknown";
+  const postBuildTestLine =
+    testCommands.length > 0
+      ? `- The workflow host will run these final validation commands after you finish: ${testCommands.join("; ")}`
+      : "- Prepare the code so post-build tests can run.";
   return [
     `You are implementing GitHub issue #${run.issue.number} in the current repository.`,
     `Workspace Root: ${workspaceRoot}`,
@@ -55,18 +72,18 @@ function buildBuilderPrompt(run: WorkflowRun, testCommands: string[]): string {
     "Required behavior:",
     "- Modify code directly in this workspace.",
     "- Treat the workspace root above as the repository root. Use paths relative to it and do not prepend the repository name.",
-    "- Start with targeted reads under src/openclawcode/ and docs/openclawcode/ before any repo-wide search.",
+    "- Start with targeted reads in the hinted files below, plus nearby tests and docs/openclawcode/, before any repo-wide search.",
+    "- When the issue mentions CLI flags, JSON output, or `openclaw code run`, inspect src/commands/openclawcode.ts and src/commands/openclawcode.test.ts early.",
     "- Avoid broad scans such as `rg ... .` unless narrower paths were insufficient.",
     "- Add or update tests when needed.",
+    "- Do not run the full final validation command inside the agent sandbox unless absolutely necessary; prefer lightweight, issue-specific checks.",
     "- Keep changes scoped to the issue.",
     "- Do not ask for clarification unless the issue is impossible to implement safely.",
     "",
     "Likely relevant files:",
-    ...buildRelevantPathHints().map((entry) => `- ${entry}`),
+    ...buildRelevantPathHints(run).map((entry) => `- ${entry}`),
     "",
-    testCommands.length > 0
-      ? `- After editing, ensure these commands pass: ${testCommands.join("; ")}`
-      : "- Prepare the code so post-build tests can run.",
+    postBuildTestLine,
   ].join("\n");
 }
 

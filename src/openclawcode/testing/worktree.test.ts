@@ -2,7 +2,6 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-
 import { execFileUtf8 } from "../../daemon/exec-file.js";
 import { GitWorktreeManager } from "../worktree/index.js";
 
@@ -41,18 +40,46 @@ describe("GitWorktreeManager", () => {
         worktreeRoot: repo.worktreeRoot,
         branchName: "openclawcode/issue-42",
         baseBranch: "main",
-        runId: "issue-42"
+        runId: "issue-42",
       });
       const second = await manager.prepare({
         repoRoot: repo.rootDir,
         worktreeRoot: repo.worktreeRoot,
         branchName: "openclawcode/issue-42",
         baseBranch: "main",
-        runId: "issue-42"
+        runId: "issue-42",
       });
 
       expect(first.worktreePath).toBe(second.worktreePath);
-      expect(await fs.readFile(path.join(first.worktreePath, "README.md"), "utf8")).toContain("temp repo");
+      expect(await fs.readFile(path.join(first.worktreePath, "README.md"), "utf8")).toContain(
+        "temp repo",
+      );
+    } finally {
+      await fs.rm(repo.rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reuses an existing issue branch worktree across reruns", async () => {
+    const repo = await createTempRepo();
+    const manager = new GitWorktreeManager(() => "2026-03-09T12:00:00.000Z");
+
+    try {
+      const first = await manager.prepare({
+        repoRoot: repo.rootDir,
+        worktreeRoot: repo.worktreeRoot,
+        branchName: "openclawcode/issue-45",
+        baseBranch: "main",
+        runId: "issue-45-first",
+      });
+      const second = await manager.prepare({
+        repoRoot: repo.rootDir,
+        worktreeRoot: repo.worktreeRoot,
+        branchName: "openclawcode/issue-45",
+        baseBranch: "main",
+        runId: "issue-45-second",
+      });
+
+      expect(second.worktreePath).toBe(first.worktreePath);
     } finally {
       await fs.rm(repo.rootDir, { recursive: true, force: true });
     }
@@ -68,7 +95,7 @@ describe("GitWorktreeManager", () => {
         worktreeRoot: repo.worktreeRoot,
         branchName: "openclawcode/issue-43",
         baseBranch: "main",
-        runId: "issue-43"
+        runId: "issue-43",
       });
 
       await fs.writeFile(path.join(workspace.worktreePath, "README.md"), "# changed\n", "utf8");
@@ -90,7 +117,7 @@ describe("GitWorktreeManager", () => {
         worktreeRoot: repo.worktreeRoot,
         branchName: "openclawcode/issue-44",
         baseBranch: "main",
-        runId: "issue-44"
+        runId: "issue-44",
       });
 
       await manager.cleanup(workspace);

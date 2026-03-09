@@ -48,7 +48,7 @@ openclaw code run \
   --owner zhyongrui \
   --repo openclawcode \
   --repo-root /home/zyr/pros/openclawcode \
-  --test "npx --yes -p vitest@4.0.18 vitest run --config vitest.openclawcode.config.mjs"
+  --test "pnpm exec vitest run --config vitest.openclawcode.config.mjs"
 ```
 
 This will:
@@ -68,7 +68,7 @@ openclaw code run \
   --owner zhyongrui \
   --repo openclawcode \
   --repo-root /home/zyr/pros/openclawcode \
-  --test "npx --yes -p vitest@4.0.18 vitest run --config vitest.openclawcode.config.mjs" \
+  --test "pnpm exec vitest run --config vitest.openclawcode.config.mjs" \
   --open-pr
 ```
 
@@ -82,7 +82,7 @@ openclaw code run \
   --owner zhyongrui \
   --repo openclawcode \
   --repo-root /home/zyr/pros/openclawcode \
-  --test "npx --yes -p vitest@4.0.18 vitest run --config vitest.openclawcode.config.mjs" \
+  --test "pnpm exec vitest run --config vitest.openclawcode.config.mjs" \
   --open-pr \
   --merge-on-approve
 ```
@@ -105,5 +105,10 @@ Check these first:
 - git push auth
 - test command correctness
 - verifier JSON response quality
+
+Prefer repository-local commands such as `pnpm exec vitest ...` over `npx -p ...`
+for final validation. The workflow host already runs the final test commands after
+the builder finishes, so the builder agent does not need to execute the full suite
+inside its sandbox.
 
 If needed, rerun against a smaller issue with a single targeted test command.
