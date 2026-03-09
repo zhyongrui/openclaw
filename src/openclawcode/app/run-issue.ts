@@ -57,6 +57,13 @@ function defaultBranchName(issueNumber: number): string {
   return `openclawcode/issue-${issueNumber}`;
 }
 
+function shouldAutoMerge(run: WorkflowRun): boolean {
+  return (
+    run.buildResult?.issueClassification === "command-layer" &&
+    (run.buildResult.scopeCheck?.ok ?? true)
+  );
+}
+
 export class GitHubPullRequestPublisher implements PullRequestPublisher {
   constructor(
     private readonly github: GitHubIssueClient,
@@ -183,15 +190,23 @@ export async function runIssueWorkflow(
     run.stage === "ready-for-human-review" &&
     deps.merger
   ) {
-    await deps.merger.merge({
-      run,
-      repo: {
-        owner: request.owner,
-        repo: request.repo,
-      },
-      pullRequest: publishedPullRequest,
-    });
-    run = transitionRun(run, "merged", "Pull request merged automatically", now);
+    if (shouldAutoMerge(run)) {
+      await deps.merger.merge({
+        run,
+        repo: {
+          owner: request.owner,
+          repo: request.repo,
+        },
+        pullRequest: publishedPullRequest,
+      });
+      run = transitionRun(run, "merged", "Pull request merged automatically", now);
+    } else {
+      run = noteRun(
+        run,
+        "Auto-merge skipped: policy requires human review for non-command-layer or failed-scope runs",
+        now,
+      );
+    }
     await deps.store.save(run);
   }
 

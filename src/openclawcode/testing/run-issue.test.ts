@@ -70,16 +70,20 @@ class FakeWorkspaceManager implements WorkflowWorkspaceManager {
 }
 
 class FakeBuilder implements Builder {
+  constructor(
+    private readonly scope: "command-layer" | "workflow-core" | "mixed" = "command-layer",
+  ) {}
+
   async build(run: WorkflowRun): Promise<BuildResult> {
     return {
       branchName: run.workspace?.branchName ?? "openclawcode/issue-1",
       summary: "Builder updated the CLI implementation.",
       changedFiles: ["src/commands/openclawcode.ts"],
-      issueClassification: "command-layer",
+      issueClassification: this.scope,
       scopeCheck: {
         ok: true,
         blockedFiles: [],
-        summary: "Scope check passed for command-layer issue.",
+        summary: `Scope check passed for ${this.scope} issue.`,
       },
       testCommands: ["pnpm test"],
       testResults: ["PASS pnpm test"],
@@ -188,6 +192,64 @@ describe("runIssueWorkflow", () => {
       expect(savedRun.buildResult?.issueClassification).toBe("command-layer");
       expect(savedRun.buildResult?.scopeCheck?.summary).toBe(
         "Scope check passed for command-layer issue.",
+      );
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps approved workflow-core runs for human review even when merge-on-approve is enabled", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-57",
+        worktreePath: "/repo/.openclawcode/worktrees/run-57",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const merger = new FakeMerger();
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 57,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          openPullRequest: true,
+          mergeOnApprove: true,
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder("workflow-core"),
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, [
+            "src/openclawcode/orchestrator/run.ts",
+          ]),
+          shellRunner: new NoopShellRunner(),
+          publisher: new FakePublisher({
+            number: 100,
+            url: "https://github.com/zhyongrui/openclawcode/pull/100",
+          }),
+          merger,
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.stage).toBe("ready-for-human-review");
+      expect(merger.merged).toBe(0);
+      expect(run.history).toContain(
+        "Auto-merge skipped: policy requires human review for non-command-layer or failed-scope runs",
       );
     } finally {
       await fs.rm(stateDir, { recursive: true, force: true });
