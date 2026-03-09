@@ -371,24 +371,9 @@ function mapContainerPathToWorkspaceRoot(params: {
     return params.filePath;
   }
 
-  let candidate = params.filePath.startsWith("@") ? params.filePath.slice(1) : params.filePath;
-  if (/^file:\/\//i.test(candidate)) {
-    try {
-      candidate = fileURLToPath(candidate);
-    } catch {
-      try {
-        const parsed = new URL(candidate);
-        if (parsed.protocol !== "file:") {
-          return params.filePath;
-        }
-        candidate = decodeURIComponent(parsed.pathname || "");
-        if (!candidate.startsWith("/")) {
-          return params.filePath;
-        }
-      } catch {
-        return params.filePath;
-      }
-    }
+  let candidate = normalizeToolPathCandidate(params.filePath);
+  if (candidate === null) {
+    return params.filePath;
   }
 
   const normalizedCandidate = candidate.replace(/\\/g, "/");
@@ -406,6 +391,50 @@ function mapContainerPathToWorkspaceRoot(params: {
   return path.resolve(params.root, ...relative.split("/").filter(Boolean));
 }
 
+function normalizeToolPathCandidate(filePath: string): string | null {
+  let candidate = filePath.startsWith("@") ? filePath.slice(1) : filePath;
+  if (!/^file:\/\//i.test(candidate)) {
+    return candidate;
+  }
+
+  try {
+    return fileURLToPath(candidate);
+  } catch {
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.protocol !== "file:") {
+        return null;
+      }
+      const pathname = decodeURIComponent(parsed.pathname || "");
+      return pathname.startsWith("/") ? pathname : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function canonicalizeWorkspaceToolPath(params: {
+  originalPath: string;
+  mappedPath: string;
+  root: string;
+}): string {
+  const normalizedCandidate = normalizeToolPathCandidate(params.mappedPath);
+  if (!normalizedCandidate || !path.isAbsolute(normalizedCandidate)) {
+    return params.originalPath;
+  }
+
+  const resolvedRoot = path.resolve(params.root);
+  const resolvedCandidate = path.resolve(normalizedCandidate);
+  const relative = path.relative(resolvedRoot, resolvedCandidate);
+  if (relative === "") {
+    return ".";
+  }
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    return params.originalPath;
+  }
+  return relative.split(path.sep).join(path.posix.sep);
+}
+
 export function wrapToolWorkspaceRootGuardWithOptions(
   tool: AnyAgentTool,
   root: string,
@@ -421,6 +450,7 @@ export function wrapToolWorkspaceRootGuardWithOptions(
         normalized ??
         (args && typeof args === "object" ? (args as Record<string, unknown>) : undefined);
       const filePath = record?.path;
+      let nextArgs = normalized ?? args;
       if (typeof filePath === "string" && filePath.trim()) {
         const sandboxPath = mapContainerPathToWorkspaceRoot({
           filePath,
@@ -428,8 +458,19 @@ export function wrapToolWorkspaceRootGuardWithOptions(
           containerWorkdir: options?.containerWorkdir,
         });
         await assertSandboxPath({ filePath: sandboxPath, cwd: root, root });
+        const canonicalPath = canonicalizeWorkspaceToolPath({
+          originalPath: filePath,
+          mappedPath: sandboxPath,
+          root,
+        });
+        if (canonicalPath !== filePath && record) {
+          nextArgs = {
+            ...record,
+            path: canonicalPath,
+          };
+        }
       }
-      return tool.execute(toolCallId, normalized ?? args, signal, onUpdate);
+      return tool.execute(toolCallId, nextArgs, signal, onUpdate);
     },
   };
 }

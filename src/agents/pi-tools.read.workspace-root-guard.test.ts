@@ -32,7 +32,7 @@ describe("wrapToolWorkspaceRootGuardWithOptions", () => {
   });
 
   it("maps container workspace paths to host workspace root", async () => {
-    const { tool } = createToolHarness();
+    const { execute, tool } = createToolHarness();
     const wrapped = wrapToolWorkspaceRootGuardWithOptions(tool, root, {
       containerWorkdir: "/workspace",
     });
@@ -44,10 +44,11 @@ describe("wrapToolWorkspaceRootGuardWithOptions", () => {
       cwd: root,
       root,
     });
+    expect(execute).toHaveBeenCalledWith("tc1", { path: "docs/readme.md" }, undefined, undefined);
   });
 
   it("maps file:// container workspace paths to host workspace root", async () => {
-    const { tool } = createToolHarness();
+    const { execute, tool } = createToolHarness();
     const wrapped = wrapToolWorkspaceRootGuardWithOptions(tool, root, {
       containerWorkdir: "/workspace",
     });
@@ -59,10 +60,11 @@ describe("wrapToolWorkspaceRootGuardWithOptions", () => {
       cwd: root,
       root,
     });
+    expect(execute).toHaveBeenCalledWith("tc2", { path: "docs/readme.md" }, undefined, undefined);
   });
 
   it("maps @-prefixed container workspace paths to host workspace root", async () => {
-    const { tool } = createToolHarness();
+    const { execute, tool } = createToolHarness();
     const wrapped = wrapToolWorkspaceRootGuardWithOptions(tool, root, {
       containerWorkdir: "/workspace",
     });
@@ -74,6 +76,35 @@ describe("wrapToolWorkspaceRootGuardWithOptions", () => {
       cwd: root,
       root,
     });
+    expect(execute).toHaveBeenCalledWith(
+      "tc-at-container",
+      { path: "docs/readme.md" },
+      undefined,
+      undefined,
+    );
+  });
+
+  it("rewrites host absolute workspace paths to workspace-relative paths", async () => {
+    const { execute, tool } = createToolHarness();
+    const wrapped = wrapToolWorkspaceRootGuardWithOptions(tool, root, {
+      containerWorkdir: "/workspace",
+    });
+
+    await wrapped.execute("tc-host-absolute", {
+      path: path.resolve(root, "src", "index.ts"),
+    });
+
+    expect(mocks.assertSandboxPath).toHaveBeenCalledWith({
+      filePath: path.resolve(root, "src", "index.ts"),
+      cwd: root,
+      root,
+    });
+    expect(execute).toHaveBeenCalledWith(
+      "tc-host-absolute",
+      { path: "src/index.ts" },
+      undefined,
+      undefined,
+    );
   });
 
   it("normalizes @-prefixed absolute paths before guard checks", async () => {
