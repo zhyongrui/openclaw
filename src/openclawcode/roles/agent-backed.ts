@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-
 import type { BuildResult, VerificationReport, WorkflowRun } from "../contracts/index.js";
 import type { AgentRunner, ShellRunner } from "../runtime/index.js";
 import type { Builder, Verifier } from "./interfaces.js";
@@ -22,9 +21,21 @@ function renderIssueBody(run: WorkflowRun): string {
   return run.issue.body?.trim() ? run.issue.body.trim() : "No issue body provided.";
 }
 
+function buildRelevantPathHints(): string[] {
+  return [
+    "src/openclawcode/app/run-issue.ts",
+    "src/openclawcode/contracts/types.ts",
+    "src/openclawcode/testing/run-issue.test.ts",
+    "src/openclawcode/testing/orchestrator.test.ts",
+    "src/openclawcode/orchestrator/run.ts",
+  ];
+}
+
 function buildBuilderPrompt(run: WorkflowRun, testCommands: string[]): string {
+  const workspaceRoot = run.workspace?.worktreePath ?? "unknown";
   return [
     `You are implementing GitHub issue #${run.issue.number} in the current repository.`,
+    `Workspace Root: ${workspaceRoot}`,
     "",
     "Issue Title:",
     run.issue.title,
@@ -43,10 +54,19 @@ function buildBuilderPrompt(run: WorkflowRun, testCommands: string[]): string {
     "",
     "Required behavior:",
     "- Modify code directly in this workspace.",
+    "- Treat the workspace root above as the repository root. Use paths relative to it and do not prepend the repository name.",
+    "- Start with targeted reads under src/openclawcode/ and docs/openclawcode/ before any repo-wide search.",
+    "- Avoid broad scans such as `rg ... .` unless narrower paths were insufficient.",
     "- Add or update tests when needed.",
     "- Keep changes scoped to the issue.",
     "- Do not ask for clarification unless the issue is impossible to implement safely.",
-    testCommands.length > 0 ? `- After editing, ensure these commands pass: ${testCommands.join("; ")}` : "- Prepare the code so post-build tests can run."
+    "",
+    "Likely relevant files:",
+    ...buildRelevantPathHints().map((entry) => `- ${entry}`),
+    "",
+    testCommands.length > 0
+      ? `- After editing, ensure these commands pass: ${testCommands.join("; ")}`
+      : "- Prepare the code so post-build tests can run.",
   ].join("\n");
 }
 
@@ -66,20 +86,23 @@ function buildVerifierPrompt(run: WorkflowRun): string {
     run.buildResult?.summary ?? "No build summary recorded.",
     "",
     "Observed Changed Files:",
-    ...(run.buildResult?.changedFiles ?? ["No changed files recorded."]).map((entry) => `- ${entry}`),
+    ...(run.buildResult?.changedFiles ?? ["No changed files recorded."]).map(
+      (entry) => `- ${entry}`,
+    ),
     "",
     "Recorded Test Results:",
     ...(run.buildResult?.testResults ?? ["No tests recorded."]).map((entry) => `- ${entry}`),
     "",
     "Respond with JSON only using this shape:",
-    '{"decision":"approve-for-human-review"|"request-changes"|"escalate","summary":"...","findings":["..."],"missingCoverage":["..."],"followUps":["..."]}'
+    '{"decision":"approve-for-human-review"|"request-changes"|"escalate","summary":"...","findings":["..."],"missingCoverage":["..."],"followUps":["..."]}',
   ].join("\n");
 }
 
 function parseVerificationReport(text: string): VerificationReport {
   const trimmed = text.trim();
   const fenced = trimmed.match(/```json\s*([\s\S]*?)```/i);
-  const candidate = fenced?.[1] ?? trimmed.slice(trimmed.indexOf("{"), trimmed.lastIndexOf("}") + 1);
+  const candidate =
+    fenced?.[1] ?? trimmed.slice(trimmed.indexOf("{"), trimmed.lastIndexOf("}") + 1);
   const parsed = JSON.parse(candidate) as VerificationReport;
   if (
     parsed.decision !== "approve-for-human-review" &&
@@ -95,11 +118,15 @@ function parseVerificationReport(text: string): VerificationReport {
     missingCoverage: Array.isArray(parsed.missingCoverage)
       ? parsed.missingCoverage.map(String)
       : [],
-    followUps: Array.isArray(parsed.followUps) ? parsed.followUps.map(String) : []
+    followUps: Array.isArray(parsed.followUps) ? parsed.followUps.map(String) : [],
   };
 }
 
-async function writePromptArtifact(workspaceDir: string, filename: string, body: string): Promise<void> {
+async function writePromptArtifact(
+  workspaceDir: string,
+  filename: string,
+  body: string,
+): Promise<void> {
   const artifactDir = path.join(workspaceDir, ".openclawcode");
   await fs.mkdir(artifactDir, { recursive: true });
   await fs.writeFile(path.join(artifactDir, filename), `${body}\n`, "utf8");
@@ -108,11 +135,11 @@ async function writePromptArtifact(workspaceDir: string, filename: string, body:
 async function autoCommitChanges(
   workspaceDir: string,
   shellRunner: ShellRunner,
-  message: string
+  message: string,
 ): Promise<void> {
   const status = await shellRunner.run({
     cwd: workspaceDir,
-    command: "git status --porcelain"
+    command: "git status --porcelain",
   });
   if (status.code !== 0) {
     throw new Error(status.stderr || "Failed to inspect git status");
@@ -123,7 +150,7 @@ async function autoCommitChanges(
 
   const add = await shellRunner.run({
     cwd: workspaceDir,
-    command: "git add -A"
+    command: "git add -A",
   });
   if (add.code !== 0) {
     throw new Error(add.stderr || "Failed to stage changes");
@@ -131,7 +158,7 @@ async function autoCommitChanges(
 
   const commit = await shellRunner.run({
     cwd: workspaceDir,
-    command: `git commit -m ${JSON.stringify(message)}`
+    command: `git commit -m ${JSON.stringify(message)}`,
   });
   if (commit.code !== 0) {
     throw new Error(commit.stderr || "Failed to commit changes");
@@ -142,7 +169,7 @@ export class AgentBackedBuilder implements Builder {
   constructor(
     private readonly options: AgentBackedBuilderOptions & {
       collectChangedFiles: (run: WorkflowRun) => Promise<string[]>;
-    }
+    },
   ) {}
 
   async build(run: WorkflowRun): Promise<BuildResult> {
@@ -156,20 +183,20 @@ export class AgentBackedBuilder implements Builder {
     const result = await this.options.agentRunner.run({
       prompt,
       workspaceDir: run.workspace.worktreePath,
-      agentId: this.options.agentId
+      agentId: this.options.agentId,
     });
 
     const testResults: string[] = [];
     for (const command of this.options.testCommands) {
       const outcome = await this.options.shellRunner.run({
         cwd: run.workspace.worktreePath,
-        command
+        command,
       });
       if (outcome.code !== 0) {
         throw new Error(
           [`Test command failed: ${command}`, outcome.stdout.trim(), outcome.stderr.trim()]
             .filter(Boolean)
-            .join("\n")
+            .join("\n"),
         );
       }
       testResults.push(`PASS ${command}`);
@@ -179,7 +206,7 @@ export class AgentBackedBuilder implements Builder {
       await autoCommitChanges(
         run.workspace.worktreePath,
         this.options.shellRunner,
-        `feat: implement issue #${run.issue.number}`
+        `feat: implement issue #${run.issue.number}`,
       );
     }
 
@@ -191,7 +218,7 @@ export class AgentBackedBuilder implements Builder {
       changedFiles,
       testCommands: [...this.options.testCommands],
       testResults,
-      notes: [`Workspace: ${run.workspace.worktreePath}`]
+      notes: [`Workspace: ${run.workspace.worktreePath}`],
     };
   }
 }
@@ -209,8 +236,13 @@ export class AgentBackedVerifier implements Verifier {
     const result = await this.options.agentRunner.run({
       prompt,
       workspaceDir: run.workspace.worktreePath,
-      agentId: this.options.agentId
+      agentId: this.options.agentId,
     });
     return parseVerificationReport(result.text);
   }
 }
+
+export const __testing = {
+  buildBuilderPrompt,
+  buildVerifierPrompt,
+};

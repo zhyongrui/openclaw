@@ -1,13 +1,18 @@
 import path from "node:path";
-
 import type { WorkflowRun } from "../contracts/index.js";
 import type { GitHubIssueClient, PullRequestRef, RepoRef } from "../github/index.js";
-import { buildPullRequestBody, createRun, executeBuild, executePlanning, executeVerification } from "../orchestrator/index.js";
+import {
+  buildPullRequestBody,
+  createRun,
+  executeBuild,
+  executePlanning,
+  executeVerification,
+} from "../orchestrator/index.js";
 import type { WorkflowRunStore } from "../persistence/index.js";
 import type { Builder, Planner, Verifier } from "../roles/index.js";
 import type { ShellRunner } from "../runtime/index.js";
-import type { WorkflowWorkspaceManager } from "../worktree/index.js";
 import { transitionRun, type TimestampFactory } from "../workflow/index.js";
+import type { WorkflowWorkspaceManager } from "../worktree/index.js";
 
 export interface IssueWorkflowRequest extends RepoRef {
   issueNumber: number;
@@ -20,18 +25,11 @@ export interface IssueWorkflowRequest extends RepoRef {
 }
 
 export interface PullRequestPublisher {
-  publish(params: {
-    run: WorkflowRun;
-    repo: RepoRef;
-  }): Promise<PullRequestRef>;
+  publish(params: { run: WorkflowRun; repo: RepoRef }): Promise<PullRequestRef>;
 }
 
 export interface PullRequestMerger {
-  merge(params: {
-    run: WorkflowRun;
-    repo: RepoRef;
-    pullRequest: PullRequestRef;
-  }): Promise<void>;
+  merge(params: { run: WorkflowRun; repo: RepoRef; pullRequest: PullRequestRef }): Promise<void>;
 }
 
 export interface IssueWorkflowDeps {
@@ -51,7 +49,7 @@ function noteRun(run: WorkflowRun, note: string, now: TimestampFactory): Workflo
   return {
     ...run,
     updatedAt: now(),
-    history: [...run.history, note]
+    history: [...run.history, note],
   };
 }
 
@@ -62,7 +60,7 @@ function defaultBranchName(issueNumber: number): string {
 export class GitHubPullRequestPublisher implements PullRequestPublisher {
   constructor(
     private readonly github: GitHubIssueClient,
-    private readonly shellRunner: ShellRunner
+    private readonly shellRunner: ShellRunner,
   ) {}
 
   async publish(params: { run: WorkflowRun; repo: RepoRef }): Promise<PullRequestRef> {
@@ -72,7 +70,7 @@ export class GitHubPullRequestPublisher implements PullRequestPublisher {
 
     const push = await this.shellRunner.run({
       cwd: params.run.workspace.worktreePath,
-      command: `git push -u origin ${params.run.workspace.branchName}`
+      command: `git push -u origin ${params.run.workspace.branchName}`,
     });
     if (push.code !== 0) {
       throw new Error(push.stderr || "Failed to push branch to origin");
@@ -84,7 +82,7 @@ export class GitHubPullRequestPublisher implements PullRequestPublisher {
       title: params.run.draftPullRequest.title,
       body: params.run.draftPullRequest.body,
       head: params.run.workspace.branchName,
-      base: params.run.draftPullRequest.baseBranch
+      base: params.run.draftPullRequest.baseBranch,
     });
   }
 }
@@ -100,20 +98,20 @@ export class GitHubPullRequestMerger implements PullRequestMerger {
     await this.github.mergePullRequest({
       owner: params.repo.owner,
       repo: params.repo.repo,
-      pullNumber: params.pullRequest.number
+      pullNumber: params.pullRequest.number,
     });
   }
 }
 
 export async function runIssueWorkflow(
   request: IssueWorkflowRequest,
-  deps: IssueWorkflowDeps
+  deps: IssueWorkflowDeps,
 ): Promise<WorkflowRun> {
   const now = deps.now ?? (() => new Date().toISOString());
   const issue = await deps.github.fetchIssue({
     owner: request.owner,
     repo: request.repo,
-    issueNumber: request.issueNumber
+    issueNumber: request.issueNumber,
   });
 
   let run = createRun(issue, now);
@@ -127,15 +125,15 @@ export async function runIssueWorkflow(
     worktreeRoot: path.join(request.stateDir, "worktrees"),
     branchName: request.branchName ?? defaultBranchName(request.issueNumber),
     baseBranch: request.baseBranch,
-    runId: run.id
+    runId: run.id,
   });
   run = noteRun(
     {
       ...run,
-      workspace
+      workspace,
     },
     `Workspace prepared at ${workspace.worktreePath}`,
-    now
+    now,
   );
   await deps.store.save(run);
 
@@ -148,20 +146,21 @@ export async function runIssueWorkflow(
       run,
       repo: {
         owner: request.owner,
-        repo: request.repo
-      }
+        repo: request.repo,
+      },
     });
     run = noteRun(
       {
         ...run,
         draftPullRequest: {
           ...run.draftPullRequest!,
+          number: publishedPullRequest.number,
           url: publishedPullRequest.url,
-          openedAt: now()
-        }
+          openedAt: now(),
+        },
       },
       `Draft PR opened: ${publishedPullRequest.url}`,
-      now
+      now,
     );
     await deps.store.save(run);
   } else if (run.draftPullRequest) {
@@ -169,8 +168,8 @@ export async function runIssueWorkflow(
       ...run,
       draftPullRequest: {
         ...run.draftPullRequest,
-        body: buildPullRequestBody(run)
-      }
+        body: buildPullRequestBody(run),
+      },
     };
     await deps.store.save(run);
   }
@@ -188,9 +187,9 @@ export async function runIssueWorkflow(
       run,
       repo: {
         owner: request.owner,
-        repo: request.repo
+        repo: request.repo,
       },
-      pullRequest: publishedPullRequest
+      pullRequest: publishedPullRequest,
     });
     run = transitionRun(run, "merged", "Pull request merged automatically", now);
     await deps.store.save(run);

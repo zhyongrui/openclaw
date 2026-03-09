@@ -62,6 +62,7 @@ export interface PullRequestDraft {
   body: string;
   branchName: string;
   baseBranch: string;
+  number?: number;
   url?: string;
   openedAt?: string;
 }
