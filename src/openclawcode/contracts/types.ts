@@ -80,6 +80,14 @@ export interface WorkflowStageRecord {
   enteredAt: string;
 }
 
+export interface WorkflowWorkspace {
+  repoRoot: string;
+  baseBranch: string;
+  branchName: string;
+  worktreePath: string;
+  preparedAt: string;
+}
+
 export interface WorkflowRun {
   id: string;
   stage: WorkflowStage;
@@ -89,6 +97,7 @@ export interface WorkflowRun {
   attempts: WorkflowAttemptSummary;
   stageRecords: WorkflowStageRecord[];
   executionSpec?: ExecutionSpec;
+  workspace?: WorkflowWorkspace;
   buildResult?: BuildResult;
   draftPullRequest?: PullRequestDraft;
   verificationReport?: VerificationReport;
