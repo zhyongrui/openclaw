@@ -1,6 +1,10 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { WorkflowRun } from "../contracts/index.js";
-import { __testing } from "./agent-backed.js";
+import type { AgentRunner, ShellRunner } from "../runtime/index.js";
+import { AgentBackedBuilder, __testing } from "./agent-backed.js";
 
 function createRun(): WorkflowRun {
   return {
@@ -61,6 +65,7 @@ describe("AgentBackedBuilder prompt", () => {
       "Start with targeted reads in the hinted files below, plus nearby tests and docs/openclawcode/",
     );
     expect(prompt).toContain("Avoid broad scans such as `rg ... .`");
+    expect(prompt).toContain("Issue Classification:");
     expect(prompt).toContain("- src/openclawcode/app/run-issue.ts");
     expect(prompt).toContain("- src/openclawcode/testing/run-issue.test.ts");
     expect(prompt).toContain("The workflow host will run these final validation commands");
@@ -84,15 +89,69 @@ describe("AgentBackedBuilder prompt", () => {
     );
 
     expect(prompt).toContain(
-      "When the issue mentions CLI flags, JSON output, or `openclaw code run`",
+      "This issue appears command-layer focused. Prefer the smallest fix in src/commands/openclawcode.ts and its tests first.",
     );
+    expect(prompt).toContain("- command-layer");
     expect(prompt).toContain("- src/commands/openclawcode.ts");
     expect(prompt).toContain("- src/commands/openclawcode.test.ts");
     expect(prompt).toContain(
-      "This issue appears command-layer focused. Prefer the smallest fix in src/commands/openclawcode.ts and its tests first.",
+      "If the requested behavior can be derived from existing workflow state",
     );
-    expect(prompt).toContain(
-      "If the requested JSON field can be derived from existing WorkflowRun data",
-    );
+  });
+});
+
+class FakeAgentRunner implements AgentRunner {
+  async run() {
+    return {
+      text: "Implemented the change.",
+      raw: {},
+    };
+  }
+}
+
+class FakeShellRunner implements ShellRunner {
+  async run(request: { cwd: string; command: string }) {
+    return {
+      command: request.command,
+      code: 0,
+      stdout: "",
+      stderr: "",
+    };
+  }
+}
+
+describe("AgentBackedBuilder scope enforcement", () => {
+  it("fails command-layer builds that edit blocked workflow-core files", async () => {
+    const worktreePath = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-agent-backed-"));
+    const builder = new AgentBackedBuilder({
+      agentRunner: new FakeAgentRunner(),
+      shellRunner: new FakeShellRunner(),
+      testCommands: ["pnpm exec vitest run --config vitest.openclawcode.config.mjs"],
+      autoCommit: false,
+      collectChangedFiles: async () => [
+        "src/commands/openclawcode.ts",
+        "src/openclawcode/contracts/types.ts",
+      ],
+    });
+
+    try {
+      await expect(
+        builder.build({
+          ...createRun(),
+          issue: {
+            ...createRun().issue,
+            number: 2,
+            title: "Include changed file list in openclaw code run --json output",
+            body: "Ensure the CLI command exposes a stable --json field for changed files.",
+          },
+          workspace: {
+            ...createRun().workspace!,
+            worktreePath,
+          },
+        }),
+      ).rejects.toThrow(/workflow-core files/i);
+    } finally {
+      await fs.rm(worktreePath, { recursive: true, force: true });
+    }
   });
 });

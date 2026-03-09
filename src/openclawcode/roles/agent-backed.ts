@@ -3,6 +3,7 @@ import path from "node:path";
 import type { BuildResult, VerificationReport, WorkflowRun } from "../contracts/index.js";
 import type { AgentRunner, ShellRunner } from "../runtime/index.js";
 import type { Builder, Verifier } from "./interfaces.js";
+import { buildScopeGuardrail, checkBuildScope } from "./scope.js";
 
 export interface AgentBackedBuilderOptions {
   agentRunner: AgentRunner;
@@ -22,7 +23,6 @@ function renderIssueBody(run: WorkflowRun): string {
 }
 
 function buildRelevantPathHints(run: WorkflowRun): string[] {
-  const issueText = `${run.issue.title}\n${run.issue.body ?? ""}`.toLowerCase();
   const hints = [
     "src/openclawcode/app/run-issue.ts",
     "src/openclawcode/contracts/types.ts",
@@ -30,39 +30,18 @@ function buildRelevantPathHints(run: WorkflowRun): string[] {
     "src/openclawcode/testing/orchestrator.test.ts",
     "src/openclawcode/orchestrator/run.ts",
   ];
+  const guardrail = buildScopeGuardrail(run);
 
-  if (
-    issueText.includes("openclaw code run") ||
-    issueText.includes("--json") ||
-    issueText.includes("cli") ||
-    issueText.includes("command")
-  ) {
-    hints.unshift("src/commands/openclawcode.test.ts");
-    hints.unshift("src/commands/openclawcode.ts");
-  }
-
-  return hints;
+  return Array.from(new Set([...guardrail.preferredPaths, ...hints]));
 }
 
 function buildBuilderPrompt(run: WorkflowRun, testCommands: string[]): string {
   const workspaceRoot = run.workspace?.worktreePath ?? "unknown";
-  const issueText = `${run.issue.title}\n${run.issue.body ?? ""}`.toLowerCase();
-  const isCommandLayerIssue =
-    issueText.includes("openclaw code run") ||
-    issueText.includes("--json") ||
-    issueText.includes("cli") ||
-    issueText.includes("command");
+  const guardrail = buildScopeGuardrail(run);
   const postBuildTestLine =
     testCommands.length > 0
       ? `- The workflow host will run these final validation commands after you finish: ${testCommands.join("; ")}`
       : "- Prepare the code so post-build tests can run.";
-  const commandLayerGuardrail = isCommandLayerIssue
-    ? [
-        "- This issue appears command-layer focused. Prefer the smallest fix in src/commands/openclawcode.ts and its tests first.",
-        "- If the requested JSON field can be derived from existing WorkflowRun data, do that instead of changing workflow contracts or persistence.",
-        "- Only change src/openclawcode/contracts/types.ts, orchestrator persistence, or stored run structure when the issue explicitly requires new persisted data.",
-      ]
-    : [];
   return [
     `You are implementing GitHub issue #${run.issue.number} in the current repository.`,
     `Workspace Root: ${workspaceRoot}`,
@@ -86,13 +65,16 @@ function buildBuilderPrompt(run: WorkflowRun, testCommands: string[]): string {
     "- Modify code directly in this workspace.",
     "- Treat the workspace root above as the repository root. Use paths relative to it and do not prepend the repository name.",
     "- Start with targeted reads in the hinted files below, plus nearby tests and docs/openclawcode/, before any repo-wide search.",
-    "- When the issue mentions CLI flags, JSON output, or `openclaw code run`, inspect src/commands/openclawcode.ts and src/commands/openclawcode.test.ts early.",
+    "- Use the issue classification and file hints below to keep the change set narrow.",
     "- Avoid broad scans such as `rg ... .` unless narrower paths were insufficient.",
     "- Add or update tests when needed.",
     "- Do not run the full final validation command inside the agent sandbox unless absolutely necessary; prefer lightweight, issue-specific checks.",
-    ...commandLayerGuardrail,
+    ...guardrail.notes.map((entry) => `- ${entry}`),
     "- Keep changes scoped to the issue.",
     "- Do not ask for clarification unless the issue is impossible to implement safely.",
+    "",
+    "Issue Classification:",
+    `- ${guardrail.classification}`,
     "",
     "Likely relevant files:",
     ...buildRelevantPathHints(run).map((entry) => `- ${entry}`),
@@ -217,6 +199,12 @@ export class AgentBackedBuilder implements Builder {
       agentId: this.options.agentId,
     });
 
+    const changedFiles = await this.options.collectChangedFiles(run);
+    const scopeCheck = checkBuildScope(run, changedFiles);
+    if (!scopeCheck.ok) {
+      throw new Error(scopeCheck.summary);
+    }
+
     const testResults: string[] = [];
     for (const command of this.options.testCommands) {
       const outcome = await this.options.shellRunner.run({
@@ -241,7 +229,6 @@ export class AgentBackedBuilder implements Builder {
       );
     }
 
-    const changedFiles = await this.options.collectChangedFiles(run);
     return {
       branchName: run.workspace.branchName,
       summary:
@@ -249,7 +236,11 @@ export class AgentBackedBuilder implements Builder {
       changedFiles,
       testCommands: [...this.options.testCommands],
       testResults,
-      notes: [`Workspace: ${run.workspace.worktreePath}`],
+      notes: [
+        `Workspace: ${run.workspace.worktreePath}`,
+        `Issue classification: ${scopeCheck.classification}`,
+        scopeCheck.summary,
+      ],
     };
   }
 }
