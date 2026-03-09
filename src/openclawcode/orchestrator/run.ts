@@ -4,11 +4,15 @@ import type {
   IssueRef,
   PullRequestDraft,
   VerificationReport,
-  WorkflowRun
+  WorkflowRun,
 } from "../contracts/index.js";
 import type { WorkflowRunStore } from "../persistence/index.js";
 import type { Builder, Planner, Verifier } from "../roles/index.js";
-import { applyVerificationDecision, transitionRun, type TimestampFactory } from "../workflow/index.js";
+import {
+  applyVerificationDecision,
+  transitionRun,
+  type TimestampFactory,
+} from "../workflow/index.js";
 
 export interface WorkflowAgents {
   planner: Planner;
@@ -40,13 +44,13 @@ async function persistRun(run: WorkflowRun, options: OrchestratorOptions): Promi
 function attachExecutionSpec(
   run: WorkflowRun,
   spec: ExecutionSpec,
-  now: TimestampFactory = nowIso
+  now: TimestampFactory = nowIso,
 ): WorkflowRun {
   return {
     ...run,
     executionSpec: spec,
     updatedAt: now(),
-    history: [...run.history, "Planning completed"]
+    history: [...run.history, "Planning completed"],
   };
 }
 
@@ -62,23 +66,23 @@ export function createRun(issue: IssueRef, now: TimestampFactory = nowIso): Work
       total: 0,
       planning: 0,
       building: 0,
-      verifying: 0
+      verifying: 0,
     },
     stageRecords: [
       {
         toStage: "intake",
         note: "Workflow created from issue intake",
-        enteredAt: createdAt
-      }
+        enteredAt: createdAt,
+      },
     ],
-    history: ["Workflow created from issue intake"]
+    history: ["Workflow created from issue intake"],
   };
 }
 
 export async function executePlanning(
   run: WorkflowRun,
   planner: Planner,
-  now: TimestampFactory = nowIso
+  now: TimestampFactory = nowIso,
 ): Promise<WorkflowRun> {
   const planning = transitionRun(run, "planning", "Planning started", now);
   const spec = await planner.plan(run.issue);
@@ -90,31 +94,30 @@ function createPullRequestDraft(run: WorkflowRun, result: BuildResult): PullRequ
     title: `[Issue #${run.issue.number}] ${run.issue.title}`,
     body: buildPullRequestBody({
       ...run,
-      buildResult: result
+      buildResult: result,
     }),
     branchName: result.branchName,
-    baseBranch: "main"
+    baseBranch: "main",
   };
 }
 
 export async function executeBuild(run: WorkflowRun, builder: Builder): Promise<WorkflowRun> {
-  const building =
-    run.stage === "building" ? run : transitionRun(run, "building", "Build started");
+  const building = run.stage === "building" ? run : transitionRun(run, "building", "Build started");
   const result = await builder.build(building);
   return {
     ...transitionRun(building, "draft-pr-opened", "Build completed and draft PR prepared"),
     buildResult: result,
     draftPullRequest: {
       ...createPullRequestDraft(building, result),
-      openedAt: building.updatedAt
-    }
+      openedAt: building.updatedAt,
+    },
   };
 }
 
 export async function executeVerification(
   run: WorkflowRun,
   verifier: Verifier,
-  now: TimestampFactory = nowIso
+  now: TimestampFactory = nowIso,
 ): Promise<WorkflowRun> {
   const verifying = transitionRun(run, "verifying", "Verification started", now);
   const report = await verifier.verify(verifying);
@@ -124,7 +127,7 @@ export async function executeVerification(
 export async function orchestrateIssue(
   issue: IssueRef,
   agents: WorkflowAgents,
-  options: OrchestratorOptions = {}
+  options: OrchestratorOptions = {},
 ): Promise<WorkflowRun> {
   const now = options.now ?? nowIso;
 
@@ -142,10 +145,10 @@ export async function orchestrateIssue(
       buildResult: result,
       draftPullRequest: {
         ...createPullRequestDraft(run, result),
-        openedAt: now()
-      }
+        openedAt: now(),
+      },
     },
-    options
+    options,
   );
 
   run = await persistRun(transitionRun(run, "verifying", "Verification started", now), options);
@@ -167,9 +170,16 @@ export function buildPullRequestBody(run: WorkflowRun): string {
     "## Scope",
     ...(spec?.scope ?? ["No scope recorded."]),
     "",
+    "## Changed Files",
+    ...(result?.changedFiles ?? ["No changed files recorded."]),
+    "",
+    "## Implementation Scope",
+    `Classification: ${result?.issueClassification ?? "unknown"}`,
+    `Scope Check: ${result?.scopeCheck?.summary ?? "No scope-check summary recorded."}`,
+    "",
     "## Acceptance Criteria",
     ...(spec?.acceptanceCriteria.map((criterion) => `- [ ] ${criterion.text}`) ?? [
-      "- [ ] No acceptance criteria recorded."
+      "- [ ] No acceptance criteria recorded.",
     ]),
     "",
     "## Tests",
@@ -179,7 +189,7 @@ export function buildPullRequestBody(run: WorkflowRun): string {
     ...(result?.testResults ?? ["No test results recorded."]),
     "",
     "## Verification",
-    report?.summary ?? "Verification pending."
+    report?.summary ?? "Verification pending.",
   ].join("\n");
 }
 

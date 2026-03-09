@@ -34,7 +34,7 @@ describe("openclawCodeRunCommand", () => {
     mocks.runIssueWorkflow.mockResolvedValue(createRun());
   });
 
-  it("prints changedFiles as a stable top-level JSON field", async () => {
+  it("prints workflow scope signals as stable top-level JSON fields", async () => {
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     expect(runtime.log).toHaveBeenCalledTimes(1);
@@ -44,15 +44,25 @@ describe("openclawCodeRunCommand", () => {
       "src/openclawcode/contracts/types.ts",
     ]);
     expect(payload.buildResult.changedFiles).toEqual(payload.changedFiles);
+    expect(payload.issueClassification).toBe("command-layer");
+    expect(payload.scopeCheck).toEqual({
+      ok: true,
+      blockedFiles: [],
+      summary: "Scope check passed for command-layer issue.",
+    });
+    expect(payload.buildResult.issueClassification).toBe(payload.issueClassification);
+    expect(payload.buildResult.scopeCheck).toEqual(payload.scopeCheck);
   });
 
-  it("prints an empty changedFiles array when the build result is missing", async () => {
+  it("prints empty top-level scope fields when the build result is missing", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(createRun({ buildResult: undefined }));
 
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.changedFiles).toEqual([]);
+    expect(payload.issueClassification).toBeNull();
+    expect(payload.scopeCheck).toBeNull();
   });
 });
 
@@ -86,6 +96,12 @@ function createRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
       branchName: "openclawcode/issue-2",
       summary: "Updated JSON output",
       changedFiles: ["src/openclawcode/app/run-issue.ts", "src/openclawcode/contracts/types.ts"],
+      issueClassification: "command-layer",
+      scopeCheck: {
+        ok: true,
+        blockedFiles: [],
+        summary: "Scope check passed for command-layer issue.",
+      },
       testCommands: ["vitest run"],
       testResults: ["passed"],
       notes: [],

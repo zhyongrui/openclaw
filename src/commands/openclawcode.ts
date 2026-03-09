@@ -44,6 +44,8 @@ function toWorkflowRunJson(run: WorkflowRun) {
   return {
     ...run,
     changedFiles: run.buildResult?.changedFiles ?? [],
+    issueClassification: run.buildResult?.issueClassification ?? null,
+    scopeCheck: run.buildResult?.scopeCheck ?? null,
   };
 }
 
