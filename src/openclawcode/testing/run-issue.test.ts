@@ -1,0 +1,214 @@
+import { describe, expect, it } from "vitest";
+
+import type {
+  GitHubIssueClient,
+  PullRequestRef,
+  RepoRef
+} from "../github/index.js";
+import { FileSystemWorkflowRunStore } from "../persistence/index.js";
+import type { Planner, Builder, Verifier } from "../roles/index.js";
+import { HeuristicPlanner } from "../roles/index.js";
+import type { ShellRunner } from "../runtime/index.js";
+import { runIssueWorkflow, type PullRequestMerger, type PullRequestPublisher } from "../app/index.js";
+import type { WorkflowWorkspaceManager } from "../worktree/index.js";
+import type { BuildResult, IssueRef, VerificationReport, WorkflowRun, WorkflowWorkspace } from "../contracts/index.js";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+function createSequenceNow(startAt = Date.UTC(2026, 2, 9, 13, 0, 0)): () => string {
+  let tick = 0;
+  return () => new Date(startAt + tick++ * 1_000).toISOString();
+}
+
+class FakeGitHubClient implements GitHubIssueClient {
+  published: PullRequestRef[] = [];
+  merged: number[] = [];
+
+  async fetchIssue(ref: RepoRef & { issueNumber: number }): Promise<IssueRef> {
+    return {
+      owner: ref.owner,
+      repo: ref.repo,
+      number: ref.issueNumber,
+      title: "Implement workflow CLI",
+      body: "Add an executable code workflow entrypoint.",
+      labels: ["automation"]
+    };
+  }
+
+  async createDraftPullRequest(): Promise<PullRequestRef> {
+    const value = { number: 99, url: "https://github.com/example/repo/pull/99" };
+    this.published.push(value);
+    return value;
+  }
+
+  async mergePullRequest(request: { pullNumber: number }): Promise<void> {
+    this.merged.push(request.pullNumber);
+  }
+}
+
+class FakeWorkspaceManager implements WorkflowWorkspaceManager {
+  constructor(private readonly workspace: WorkflowWorkspace, private readonly changedFiles: string[]) {}
+
+  async prepare(): Promise<WorkflowWorkspace> {
+    return this.workspace;
+  }
+
+  async collectChangedFiles(): Promise<string[]> {
+    return this.changedFiles;
+  }
+
+  async cleanup(): Promise<void> {}
+}
+
+class FakeBuilder implements Builder {
+  async build(run: WorkflowRun): Promise<BuildResult> {
+    return {
+      branchName: run.workspace?.branchName ?? "openclawcode/issue-1",
+      summary: "Builder updated the CLI implementation.",
+      changedFiles: ["src/commands/openclawcode.ts"],
+      testCommands: ["pnpm test"],
+      testResults: ["PASS pnpm test"],
+      notes: []
+    };
+  }
+}
+
+class FakeVerifier implements Verifier {
+  constructor(private readonly report: VerificationReport) {}
+
+  async verify(): Promise<VerificationReport> {
+    return this.report;
+  }
+}
+
+class NoopShellRunner implements ShellRunner {
+  commands: string[] = [];
+
+  async run(request: { cwd: string; command: string }) {
+    this.commands.push(`${request.cwd}:${request.command}`);
+    return {
+      command: request.command,
+      code: 0,
+      stdout: "",
+      stderr: ""
+    };
+  }
+}
+
+class FakePublisher implements PullRequestPublisher {
+  constructor(private readonly value: PullRequestRef) {}
+
+  async publish(): Promise<PullRequestRef> {
+    return this.value;
+  }
+}
+
+class FakeMerger implements PullRequestMerger {
+  merged = 0;
+
+  async merge(): Promise<void> {
+    this.merged += 1;
+  }
+}
+
+describe("runIssueWorkflow", () => {
+  it("publishes and merges when verification approves and merge is enabled", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-55",
+        worktreePath: "/repo/.openclawcode/worktrees/run-55",
+        preparedAt: "2026-03-09T13:00:00.000Z"
+      };
+      const merger = new FakeMerger();
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 55,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          openPullRequest: true,
+          mergeOnApprove: true
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder(),
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: []
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          publisher: new FakePublisher({
+            number: 99,
+            url: "https://github.com/zhyongrui/openclawcode/pull/99"
+          }),
+          merger,
+          now: createSequenceNow()
+        }
+      );
+
+      expect(run.stage).toBe("merged");
+      expect(run.draftPullRequest?.url).toBe("https://github.com/zhyongrui/openclawcode/pull/99");
+      expect(merger.merged).toBe(1);
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("stops at changes-requested when verification fails", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-56",
+        worktreePath: "/repo/.openclawcode/worktrees/run-56",
+        preparedAt: "2026-03-09T13:00:00.000Z"
+      };
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 56,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main"
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder(),
+          verifier: new FakeVerifier({
+            decision: "request-changes",
+            summary: "Needs more tests.",
+            findings: ["Missing regression coverage"],
+            missingCoverage: ["Add regression test"],
+            followUps: ["Implement missing test"]
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow()
+        }
+      );
+
+      expect(run.stage).toBe("changes-requested");
+      expect(run.verificationReport?.findings).toContain("Missing regression coverage");
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+});

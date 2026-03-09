@@ -1,0 +1,157 @@
+import { execFileUtf8 } from "../../daemon/exec-file.js";
+import type { IssueRef } from "../contracts/index.js";
+
+export interface RepoRef {
+  owner: string;
+  repo: string;
+}
+
+export interface PullRequestRef {
+  number: number;
+  url: string;
+}
+
+export interface DraftPullRequestRequest extends RepoRef {
+  title: string;
+  body: string;
+  head: string;
+  base: string;
+}
+
+export interface MergePullRequestRequest extends RepoRef {
+  pullNumber: number;
+  mergeMethod?: "merge" | "squash" | "rebase";
+}
+
+export interface GitHubIssueClient {
+  fetchIssue(ref: RepoRef & { issueNumber: number }): Promise<IssueRef>;
+  createDraftPullRequest(request: DraftPullRequestRequest): Promise<PullRequestRef>;
+  mergePullRequest(request: MergePullRequestRequest): Promise<void>;
+}
+
+type GitHubIssueResponse = {
+  number: number;
+  title: string;
+  body?: string | null;
+  labels?: { nodes?: Array<{ name?: string | null } | null> | null } | Array<{ name?: string }>;
+};
+
+function resolveToken(env: NodeJS.ProcessEnv): string | undefined {
+  const token = env.GITHUB_TOKEN ?? env.GH_TOKEN;
+  return token?.trim() || undefined;
+}
+
+function normalizeLabels(raw: GitHubIssueResponse["labels"]): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((label) => label.name).filter((name): name is string => typeof name === "string");
+  }
+  return (
+    raw?.nodes
+      ?.map((label) => (typeof label?.name === "string" ? label.name : undefined))
+      .filter((name): name is string => typeof name === "string") ?? []
+  );
+}
+
+async function parseJsonResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`GitHub API request failed: ${response.status} ${response.statusText} ${body}`);
+  }
+  return (await response.json()) as T;
+}
+
+export function resolveGitHubRepoFromRemoteUrl(remote: string): RepoRef {
+  const normalized = remote.trim().replace(/\.git$/, "");
+  if (normalized.startsWith("git@github.com:")) {
+    const slug = normalized.replace("git@github.com:", "");
+    const [owner, repo] = slug.split("/");
+    if (owner && repo) {
+      return { owner, repo };
+    }
+  }
+  if (normalized.startsWith("https://github.com/")) {
+    const slug = normalized.replace("https://github.com/", "");
+    const [owner, repo] = slug.split("/");
+    if (owner && repo) {
+      return { owner, repo };
+    }
+  }
+  throw new Error(`Unsupported GitHub remote: ${remote}`);
+}
+
+export async function resolveGitHubRepoFromGit(repoRoot: string): Promise<RepoRef> {
+  const result = await execFileUtf8("git", ["-C", repoRoot, "config", "--get", "remote.origin.url"]);
+  if (result.code !== 0 || !result.stdout.trim()) {
+    throw new Error("Unable to determine GitHub repository from git remote.origin.url");
+  }
+  return resolveGitHubRepoFromRemoteUrl(result.stdout.trim());
+}
+
+export class GitHubRestClient implements GitHubIssueClient {
+  constructor(
+    private readonly token: string | undefined = resolveToken(process.env),
+    private readonly fetchFn: typeof fetch = fetch
+  ) {}
+
+  private async request<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await this.fetchFn(`https://api.github.com${path}`, {
+      ...init,
+      headers: {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+        ...(init?.headers ?? {})
+      }
+    });
+    return await parseJsonResponse<T>(response);
+  }
+
+  async fetchIssue(ref: RepoRef & { issueNumber: number }): Promise<IssueRef> {
+    const issue = await this.request<GitHubIssueResponse>(
+      `/repos/${ref.owner}/${ref.repo}/issues/${ref.issueNumber}`
+    );
+    return {
+      owner: ref.owner,
+      repo: ref.repo,
+      number: issue.number,
+      title: issue.title,
+      body: issue.body ?? undefined,
+      labels: normalizeLabels(issue.labels)
+    };
+  }
+
+  async createDraftPullRequest(request: DraftPullRequestRequest): Promise<PullRequestRef> {
+    if (!this.token) {
+      throw new Error("GitHub token missing. Set GITHUB_TOKEN or GH_TOKEN to open draft PRs.");
+    }
+    const response = await this.request<{ number: number; html_url: string }>(
+      `/repos/${request.owner}/${request.repo}/pulls`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          title: request.title,
+          body: request.body,
+          head: request.head,
+          base: request.base,
+          draft: true
+        })
+      }
+    );
+    return {
+      number: response.number,
+      url: response.html_url
+    };
+  }
+
+  async mergePullRequest(request: MergePullRequestRequest): Promise<void> {
+    if (!this.token) {
+      throw new Error("GitHub token missing. Set GITHUB_TOKEN or GH_TOKEN to merge pull requests.");
+    }
+    await this.request(`/repos/${request.owner}/${request.repo}/pulls/${request.pullNumber}/merge`, {
+      method: "PUT",
+      body: JSON.stringify({
+        merge_method: request.mergeMethod ?? "squash"
+      })
+    });
+  }
+}

@@ -1,0 +1,200 @@
+import path from "node:path";
+
+import type { WorkflowRun } from "../contracts/index.js";
+import type { GitHubIssueClient, PullRequestRef, RepoRef } from "../github/index.js";
+import { buildPullRequestBody, createRun, executeBuild, executePlanning, executeVerification } from "../orchestrator/index.js";
+import type { WorkflowRunStore } from "../persistence/index.js";
+import type { Builder, Planner, Verifier } from "../roles/index.js";
+import type { ShellRunner } from "../runtime/index.js";
+import type { WorkflowWorkspaceManager } from "../worktree/index.js";
+import { transitionRun, type TimestampFactory } from "../workflow/index.js";
+
+export interface IssueWorkflowRequest extends RepoRef {
+  issueNumber: number;
+  repoRoot: string;
+  stateDir: string;
+  baseBranch: string;
+  branchName?: string;
+  openPullRequest?: boolean;
+  mergeOnApprove?: boolean;
+}
+
+export interface PullRequestPublisher {
+  publish(params: {
+    run: WorkflowRun;
+    repo: RepoRef;
+  }): Promise<PullRequestRef>;
+}
+
+export interface PullRequestMerger {
+  merge(params: {
+    run: WorkflowRun;
+    repo: RepoRef;
+    pullRequest: PullRequestRef;
+  }): Promise<void>;
+}
+
+export interface IssueWorkflowDeps {
+  github: GitHubIssueClient;
+  planner: Planner;
+  builder: Builder;
+  verifier: Verifier;
+  store: WorkflowRunStore;
+  worktreeManager: WorkflowWorkspaceManager;
+  shellRunner: ShellRunner;
+  publisher?: PullRequestPublisher;
+  merger?: PullRequestMerger;
+  now?: TimestampFactory;
+}
+
+function noteRun(run: WorkflowRun, note: string, now: TimestampFactory): WorkflowRun {
+  return {
+    ...run,
+    updatedAt: now(),
+    history: [...run.history, note]
+  };
+}
+
+function defaultBranchName(issueNumber: number): string {
+  return `openclawcode/issue-${issueNumber}`;
+}
+
+export class GitHubPullRequestPublisher implements PullRequestPublisher {
+  constructor(
+    private readonly github: GitHubIssueClient,
+    private readonly shellRunner: ShellRunner
+  ) {}
+
+  async publish(params: { run: WorkflowRun; repo: RepoRef }): Promise<PullRequestRef> {
+    if (!params.run.workspace || !params.run.draftPullRequest) {
+      throw new Error("Run workspace and draft pull request are required before publishing.");
+    }
+
+    const push = await this.shellRunner.run({
+      cwd: params.run.workspace.worktreePath,
+      command: `git push -u origin ${params.run.workspace.branchName}`
+    });
+    if (push.code !== 0) {
+      throw new Error(push.stderr || "Failed to push branch to origin");
+    }
+
+    return await this.github.createDraftPullRequest({
+      owner: params.repo.owner,
+      repo: params.repo.repo,
+      title: params.run.draftPullRequest.title,
+      body: params.run.draftPullRequest.body,
+      head: params.run.workspace.branchName,
+      base: params.run.draftPullRequest.baseBranch
+    });
+  }
+}
+
+export class GitHubPullRequestMerger implements PullRequestMerger {
+  constructor(private readonly github: GitHubIssueClient) {}
+
+  async merge(params: {
+    run: WorkflowRun;
+    repo: RepoRef;
+    pullRequest: PullRequestRef;
+  }): Promise<void> {
+    await this.github.mergePullRequest({
+      owner: params.repo.owner,
+      repo: params.repo.repo,
+      pullNumber: params.pullRequest.number
+    });
+  }
+}
+
+export async function runIssueWorkflow(
+  request: IssueWorkflowRequest,
+  deps: IssueWorkflowDeps
+): Promise<WorkflowRun> {
+  const now = deps.now ?? (() => new Date().toISOString());
+  const issue = await deps.github.fetchIssue({
+    owner: request.owner,
+    repo: request.repo,
+    issueNumber: request.issueNumber
+  });
+
+  let run = createRun(issue, now);
+  await deps.store.save(run);
+
+  run = await executePlanning(run, deps.planner, now);
+  await deps.store.save(run);
+
+  const workspace = await deps.worktreeManager.prepare({
+    repoRoot: request.repoRoot,
+    worktreeRoot: path.join(request.stateDir, "worktrees"),
+    branchName: request.branchName ?? defaultBranchName(request.issueNumber),
+    baseBranch: request.baseBranch,
+    runId: run.id
+  });
+  run = noteRun(
+    {
+      ...run,
+      workspace
+    },
+    `Workspace prepared at ${workspace.worktreePath}`,
+    now
+  );
+  await deps.store.save(run);
+
+  run = await executeBuild(run, deps.builder);
+  await deps.store.save(run);
+
+  let publishedPullRequest: PullRequestRef | undefined;
+  if (request.openPullRequest && deps.publisher) {
+    publishedPullRequest = await deps.publisher.publish({
+      run,
+      repo: {
+        owner: request.owner,
+        repo: request.repo
+      }
+    });
+    run = noteRun(
+      {
+        ...run,
+        draftPullRequest: {
+          ...run.draftPullRequest!,
+          url: publishedPullRequest.url,
+          openedAt: now()
+        }
+      },
+      `Draft PR opened: ${publishedPullRequest.url}`,
+      now
+    );
+    await deps.store.save(run);
+  } else if (run.draftPullRequest) {
+    run = {
+      ...run,
+      draftPullRequest: {
+        ...run.draftPullRequest,
+        body: buildPullRequestBody(run)
+      }
+    };
+    await deps.store.save(run);
+  }
+
+  run = await executeVerification(run, deps.verifier, now);
+  await deps.store.save(run);
+
+  if (
+    request.mergeOnApprove &&
+    publishedPullRequest &&
+    run.stage === "ready-for-human-review" &&
+    deps.merger
+  ) {
+    await deps.merger.merge({
+      run,
+      repo: {
+        owner: request.owner,
+        repo: request.repo
+      },
+      pullRequest: publishedPullRequest
+    });
+    run = transitionRun(run, "merged", "Pull request merged automatically", now);
+    await deps.store.save(run);
+  }
+
+  return run;
+}

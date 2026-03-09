@@ -98,7 +98,18 @@ export class GitWorktreeManager implements WorkflowWorkspaceManager {
   }
 
   async collectChangedFiles(workspace: WorkflowWorkspace): Promise<string[]> {
-    const tracked = await runGit(workspace.worktreePath, ["diff", "--name-only", "--relative", "HEAD"]);
+    const trackedFromBase = await runGit(workspace.worktreePath, [
+      "diff",
+      "--name-only",
+      "--relative",
+      `${workspace.baseBranch}...HEAD`
+    ]);
+    const trackedFromWorktree = await runGit(workspace.worktreePath, [
+      "diff",
+      "--name-only",
+      "--relative",
+      "HEAD"
+    ]);
     const untracked = await runGit(workspace.worktreePath, [
       "ls-files",
       "--others",
@@ -107,7 +118,9 @@ export class GitWorktreeManager implements WorkflowWorkspaceManager {
 
     return Array.from(
       new Set(
-        [...tracked.split("\n"), ...untracked.split("\n")].map((entry) => entry.trim()).filter(Boolean)
+        [...trackedFromBase.split("\n"), ...trackedFromWorktree.split("\n"), ...untracked.split("\n")]
+          .map((entry) => entry.trim())
+          .filter(Boolean)
       )
     ).sort();
   }
