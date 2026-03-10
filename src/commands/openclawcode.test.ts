@@ -34,7 +34,7 @@ describe("openclawCodeRunCommand", () => {
     mocks.runIssueWorkflow.mockResolvedValue(createRun());
   });
 
-  it("prints stable top-level JSON fields for workflow scope, draft pr metadata, review, and merge policy", async () => {
+  it("prints stable top-level JSON fields for workflow scope, pr metadata, review, and merge policy", async () => {
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     expect(runtime.log).toHaveBeenCalledTimes(1);
@@ -60,6 +60,8 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.draftPullRequest.baseBranch).toBe(payload.draftPullRequestBaseBranch);
     expect(payload.draftPullRequest.number).toBe(payload.draftPullRequestNumber);
     expect(payload.draftPullRequest.url).toBe(payload.draftPullRequestUrl);
+    expect(payload.pullRequestPublished).toBe(true);
+    expect(payload.publishedPullRequestOpenedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(payload.verificationDecision).toBe("approve-for-human-review");
     expect(payload.verificationSummary).toBe(
       "Verification completed and the run is ready for human review.",
@@ -92,12 +94,36 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.draftPullRequestBaseBranch).toBeNull();
     expect(payload.draftPullRequestNumber).toBeNull();
     expect(payload.draftPullRequestUrl).toBeNull();
+    expect(payload.pullRequestPublished).toBe(false);
+    expect(payload.publishedPullRequestOpenedAt).toBeNull();
     expect(payload.verificationDecision).toBeNull();
     expect(payload.verificationSummary).toBeNull();
     expect(payload.autoMergePolicyEligible).toBe(false);
     expect(payload.autoMergePolicyReason).toBe(
       "Not eligible for auto-merge: verification has not approved the run.",
     );
+  });
+
+  it("keeps unpublished local draft metadata separate from published pr fields", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        draftPullRequest: {
+          ...createRun().draftPullRequest!,
+          number: undefined,
+          url: undefined,
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.draftPullRequestBranchName).toBe("openclawcode/issue-2");
+    expect(payload.draftPullRequestBaseBranch).toBe("main");
+    expect(payload.draftPullRequestNumber).toBeNull();
+    expect(payload.draftPullRequestUrl).toBeNull();
+    expect(payload.pullRequestPublished).toBe(false);
+    expect(payload.publishedPullRequestOpenedAt).toBeNull();
   });
 
   it("blocks auto-merge when the build result is outside command-layer scope", async () => {
