@@ -165,6 +165,38 @@ describe("OpenClawCodeChatopsStore", () => {
     }
   });
 
+  it("ignores stale finishCurrent writes after a newer workflow status was recorded", async () => {
+    const fixture = await createStore();
+
+    try {
+      const queued = createQueuedRun(1020);
+      const successStatus = "Ready for human review.";
+      const staleFailure = "Failed.\nstale worker failure";
+      await fixture.store.enqueue(queued);
+
+      const started = await fixture.store.startNext();
+      expect(started?.issueKey).toBe(queued.issueKey);
+
+      await fixture.store.finishCurrent(queued.issueKey, successStatus);
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({ issueNumber: 1020 }),
+        successStatus,
+      );
+
+      await fixture.store.finishCurrent(queued.issueKey, staleFailure);
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.currentRun).toBeUndefined();
+      expect(snapshot.statusByIssue[queued.issueKey]).toBe(successStatus);
+      expect(snapshot.statusSnapshotsByIssue[queued.issueKey]?.status).toBe(successStatus);
+      expect(snapshot.statusSnapshotsByIssue[queued.issueKey]?.stage).toBe(
+        "ready-for-human-review",
+      );
+    } finally {
+      await fs.rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
   it("recovers interrupted runs by requeueing them at the front", async () => {
     const fixture = await createStore();
 

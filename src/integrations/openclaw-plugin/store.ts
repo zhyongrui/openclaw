@@ -489,9 +489,10 @@ export class OpenClawCodeChatopsStore {
 
   async finishCurrent(issueKey: string, status: string): Promise<void> {
     await this.mutateState((state) => {
-      if (state.currentRun?.issueKey === issueKey) {
-        state.currentRun = undefined;
+      if (state.currentRun?.issueKey !== issueKey) {
+        return;
       }
+      state.currentRun = undefined;
       state.statusByIssue[issueKey] = status;
     });
   }
