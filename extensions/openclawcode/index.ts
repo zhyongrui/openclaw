@@ -187,17 +187,28 @@ async function handleGithubWebhook(
     issue: decision.issue,
     config: matchingRepo,
   });
+  const issueKey = formatIssueKey(decision.issue);
+  const accepted = await store.addPendingApproval({
+    issueKey,
+    notifyChannel: matchingRepo.notifyChannel,
+    notifyTarget: matchingRepo.notifyTarget,
+  });
+  if (!accepted) {
+    res.statusCode = 202;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(JSON.stringify({ accepted: false, reason: "already-tracked", issue: issueKey }));
+    return true;
+  }
   await sendText({
     api,
     channel: matchingRepo.notifyChannel,
     target: matchingRepo.notifyTarget,
     text: approvalMessage,
   });
-  await store.setStatus(formatIssueKey(decision.issue), "Awaiting chat approval.");
 
   res.statusCode = 202;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.end(JSON.stringify({ accepted: true, issue: formatIssueKey(decision.issue) }));
+  res.end(JSON.stringify({ accepted: true, issue: issueKey }));
   return true;
 }
 
@@ -320,6 +331,7 @@ export default {
           number: command.issue.number,
         });
         const currentStatus = await store.getStatus(issueKey);
+        const pendingApproval = await store.getPendingApproval(issueKey);
         if (await store.isQueuedOrRunning(issueKey)) {
           return { text: `${issueKey} is already in progress.\n${currentStatus ?? "Queued."}` };
         }
@@ -328,13 +340,23 @@ export default {
           command,
           config: repoConfig,
         });
-        const notifyTarget = ctx.from?.trim() || ctx.senderId?.trim() || repoConfig.notifyTarget;
-        const enqueued = await store.enqueue({
-          request,
-          issueKey,
-          notifyChannel: repoConfig.notifyChannel,
-          notifyTarget,
-        });
+        const notifyTarget =
+          ctx.from?.trim() ||
+          ctx.senderId?.trim() ||
+          pendingApproval?.notifyTarget ||
+          repoConfig.notifyTarget;
+        if (pendingApproval) {
+          await store.consumePendingApproval(issueKey);
+        }
+        const enqueued = await store.enqueue(
+          {
+            request,
+            issueKey,
+            notifyChannel: pendingApproval?.notifyChannel ?? repoConfig.notifyChannel,
+            notifyTarget,
+          },
+          pendingApproval ? "Approved in chat and queued." : "Queued.",
+        );
         if (!enqueued) {
           return { text: `${issueKey} is already queued or running.` };
         }
@@ -367,6 +389,11 @@ export default {
           repo: command.issue.repo,
           number: command.issue.number,
         });
+        if (await store.isPendingApproval(issueKey)) {
+          return {
+            text: (await store.getStatus(issueKey)) ?? `Awaiting chat approval for ${issueKey}.`,
+          };
+        }
         return {
           text:
             (await store.getStatus(issueKey)) ??
@@ -399,9 +426,12 @@ export default {
           repo: command.issue.repo,
           number: command.issue.number,
         });
+        if (await store.removePendingApproval(issueKey)) {
+          return { text: `Skipped pending approval for ${issueKey}.` };
+        }
         return (await store.removeQueued(issueKey))
           ? { text: `Skipped queued run for ${issueKey}.` }
-          : { text: `No queued run found for ${issueKey}.` };
+          : { text: `No pending or queued run found for ${issueKey}.` };
       },
     });
 

@@ -9,8 +9,15 @@ export interface OpenClawCodeQueuedRun {
   issueKey: string;
 }
 
+export interface OpenClawCodePendingApproval {
+  issueKey: string;
+  notifyChannel: string;
+  notifyTarget: string;
+}
+
 interface OpenClawCodeQueueState {
   version: 1;
+  pendingApprovals: OpenClawCodePendingApproval[];
   queue: OpenClawCodeQueuedRun[];
   currentRun?: OpenClawCodeQueuedRun;
   statusByIssue: Record<string, string>;
@@ -19,6 +26,7 @@ interface OpenClawCodeQueueState {
 function cloneDefaultState(): OpenClawCodeQueueState {
   return {
     version: 1,
+    pendingApprovals: [],
     queue: [],
     statusByIssue: {},
   };
@@ -31,6 +39,7 @@ function normalizeState(raw: unknown): OpenClawCodeQueueState {
   const candidate = raw as Partial<OpenClawCodeQueueState>;
   return {
     version: 1,
+    pendingApprovals: Array.isArray(candidate.pendingApprovals) ? candidate.pendingApprovals : [],
     queue: Array.isArray(candidate.queue) ? candidate.queue : [],
     currentRun:
       candidate.currentRun && typeof candidate.currentRun === "object"
@@ -76,10 +85,64 @@ export class OpenClawCodeChatopsStore {
     return state.statusByIssue[issueKey];
   }
 
+  async getPendingApproval(issueKey: string): Promise<OpenClawCodePendingApproval | undefined> {
+    const state = await this.loadState();
+    return state.pendingApprovals.find((entry) => entry.issueKey === issueKey);
+  }
+
   async setStatus(issueKey: string, status: string): Promise<void> {
     const state = await this.loadState();
     state.statusByIssue[issueKey] = status;
     await this.saveState(state);
+  }
+
+  async addPendingApproval(
+    pending: OpenClawCodePendingApproval,
+    status = "Awaiting chat approval.",
+  ): Promise<boolean> {
+    const state = await this.loadState();
+    if (
+      state.pendingApprovals.some((entry) => entry.issueKey === pending.issueKey) ||
+      state.currentRun?.issueKey === pending.issueKey ||
+      state.queue.some((entry) => entry.issueKey === pending.issueKey)
+    ) {
+      return false;
+    }
+    state.pendingApprovals.push(pending);
+    state.statusByIssue[pending.issueKey] = status;
+    await this.saveState(state);
+    return true;
+  }
+
+  async consumePendingApproval(issueKey: string): Promise<OpenClawCodePendingApproval | undefined> {
+    const state = await this.loadState();
+    const index = state.pendingApprovals.findIndex((entry) => entry.issueKey === issueKey);
+    if (index < 0) {
+      return undefined;
+    }
+    const [pending] = state.pendingApprovals.splice(index, 1);
+    await this.saveState(state);
+    return pending;
+  }
+
+  async removePendingApproval(
+    issueKey: string,
+    status = "Skipped before execution.",
+  ): Promise<boolean> {
+    const state = await this.loadState();
+    const index = state.pendingApprovals.findIndex((entry) => entry.issueKey === issueKey);
+    if (index < 0) {
+      return false;
+    }
+    state.pendingApprovals.splice(index, 1);
+    state.statusByIssue[issueKey] = status;
+    await this.saveState(state);
+    return true;
+  }
+
+  async isPendingApproval(issueKey: string): Promise<boolean> {
+    const state = await this.loadState();
+    return state.pendingApprovals.some((entry) => entry.issueKey === issueKey);
   }
 
   async isQueuedOrRunning(issueKey: string): Promise<boolean> {
@@ -93,6 +156,7 @@ export class OpenClawCodeChatopsStore {
   async enqueue(run: OpenClawCodeQueuedRun, status = "Queued."): Promise<boolean> {
     const state = await this.loadState();
     if (
+      state.pendingApprovals.some((entry) => entry.issueKey === run.issueKey) ||
       state.currentRun?.issueKey === run.issueKey ||
       state.queue.some((entry) => entry.issueKey === run.issueKey)
     ) {

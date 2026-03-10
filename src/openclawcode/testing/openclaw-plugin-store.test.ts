@@ -37,6 +37,27 @@ function createQueuedRun(issueNumber: number) {
 }
 
 describe("OpenClawCodeChatopsStore", () => {
+  it("persists pending approvals and consumes them when approved", async () => {
+    const fixture = await createStore();
+
+    try {
+      const pending = {
+        issueKey: "zhyongrui/openclawcode#100",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:123",
+      };
+      expect(await fixture.store.addPendingApproval(pending)).toBe(true);
+      expect(await fixture.store.isPendingApproval(pending.issueKey)).toBe(true);
+
+      const secondStore = OpenClawCodeChatopsStore.fromStateDir(fixture.rootDir);
+      expect(await secondStore.getPendingApproval(pending.issueKey)).toEqual(pending);
+      expect(await secondStore.consumePendingApproval(pending.issueKey)).toEqual(pending);
+      expect(await secondStore.isPendingApproval(pending.issueKey)).toBe(false);
+    } finally {
+      await fs.rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
   it("persists queue entries and statuses across store instances", async () => {
     const fixture = await createStore();
 
@@ -116,6 +137,25 @@ describe("OpenClawCodeChatopsStore", () => {
       expect(await fixture.store.removeQueued(firstRun.issueKey)).toBe(true);
       expect(await fixture.store.removeQueued(firstRun.issueKey)).toBe(false);
       expect(await fixture.store.getStatus(firstRun.issueKey)).toBe("Skipped before execution.");
+    } finally {
+      await fs.rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("skips pending approvals before they enter the queue", async () => {
+    const fixture = await createStore();
+
+    try {
+      const pending = {
+        issueKey: "zhyongrui/openclawcode#106",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:123",
+      };
+      await fixture.store.addPendingApproval(pending);
+
+      expect(await fixture.store.removePendingApproval(pending.issueKey)).toBe(true);
+      expect(await fixture.store.removePendingApproval(pending.issueKey)).toBe(false);
+      expect(await fixture.store.getStatus(pending.issueKey)).toBe("Skipped before execution.");
     } finally {
       await fs.rm(fixture.rootDir, { recursive: true, force: true });
     }

@@ -197,12 +197,17 @@ The bundled extension now persists queue and status state on disk.
 
 Current behavior:
 
+- pending approvals survive gateway restarts
 - queued runs survive gateway restarts
 - current in-flight runs are recovered back to the queue on restart
 - latest per-issue status survives restart
 
-The next hardening step is broader persisted approval state plus reconciliation
-against GitHub and local run records.
+`/occode-start` now promotes a persisted pending approval into the durable run
+queue, and `/occode-skip` can cancel either a pending approval or a queued run.
+
+The next hardening step is reconciliation against GitHub and local run records,
+so state can heal even if the process dies mid-command or the remote issue/PR
+state changes externally.
 
 ## Release Model
 
