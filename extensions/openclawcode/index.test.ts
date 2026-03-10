@@ -494,4 +494,70 @@ describe("openclawcode extension", () => {
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
     }
   });
+
+  it("reconciles local runs and GitHub snapshots through /occode-sync", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await writeLocalRun({
+        repoRoot: fixture.repoRoot,
+        issueNumber: 208,
+        stage: "ready-for-human-review",
+        prUrl: "https://github.com/zhyongrui/openclawcode/pull/308",
+      });
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#208",
+        status: "openclawcode status for zhyongrui/openclawcode#208\nStage: Ready For Human Review",
+        stage: "ready-for-human-review",
+        runId: "run-208",
+        updatedAt: "2026-03-10T09:20:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 208,
+        branchName: "openclawcode/issue-208",
+        pullRequestNumber: 308,
+        pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/308",
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              number: 308,
+              html_url: "https://github.com/zhyongrui/openclawcode/pull/308",
+              state: "closed",
+              draft: false,
+              merged: true,
+              merged_at: "2026-03-10T09:25:00.000Z",
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      const result = await fixture.commands.get("occode-sync")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-sync",
+        args: "",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "openclawcode sync complete.",
+          "Tracked snapshots checked: 1",
+          "Statuses healed: 1",
+          "GitHub sync failures: 0",
+        ].join("\n"),
+      });
+      const snapshot = await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#208");
+      expect(snapshot?.stage).toBe("merged");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
 });

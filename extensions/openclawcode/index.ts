@@ -72,6 +72,33 @@ async function reconcileLocalRunStatuses(params: {
   await params.store.reconcileWorkflowRunStatuses(records);
 }
 
+async function syncSnapshotsFromGitHub(store: OpenClawCodeChatopsStore): Promise<{
+  checked: number;
+  changed: number;
+  failed: number;
+}> {
+  const snapshotState = await store.snapshot();
+  let checked = 0;
+  let changed = 0;
+  let failed = 0;
+
+  for (const snapshot of Object.values(snapshotState.statusSnapshotsByIssue)) {
+    checked += 1;
+    try {
+      const synced = await syncIssueSnapshotFromGitHub({ snapshot });
+      if (!synced.changed) {
+        continue;
+      }
+      await store.setStatusSnapshot(synced.snapshot);
+      changed += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+
+  return { checked, changed, failed };
+}
+
 async function sendText(params: {
   api: OpenClawPluginApi;
   channel: string;
@@ -515,6 +542,30 @@ export default {
         return (await store.removeQueued(issueKey))
           ? { text: `Skipped queued run for ${issueKey}.` }
           : { text: `No pending or queued run found for ${issueKey}.` };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-sync",
+      description: "Reconcile local run records and GitHub status for tracked issues.",
+      acceptsArgs: false,
+      handler: async () => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        await reconcileLocalRunStatuses({
+          store,
+          repoConfigs: pluginConfig.repos,
+        });
+        const result = await syncSnapshotsFromGitHub(store);
+        return {
+          text: [
+            "openclawcode sync complete.",
+            `Tracked snapshots checked: ${result.checked}`,
+            `Statuses healed: ${result.changed}`,
+            result.failed > 0
+              ? `GitHub sync failures: ${result.failed}`
+              : "GitHub sync failures: 0",
+          ].join("\n"),
+        };
       },
     });
 

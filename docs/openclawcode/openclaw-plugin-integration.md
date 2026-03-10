@@ -238,6 +238,16 @@ This keeps the first remote sync path demand-driven and cheap while still
 fixing the most important stale-status case: a human merges the PR outside the
 local workflow process.
 
+There is now also a manual operator recovery command:
+
+- `/occode-sync`
+
+It performs one explicit reconciliation pass across:
+
+- local `.openclawcode/runs` records
+- persisted issue snapshots
+- GitHub merged-PR status for tracked pull requests
+
 The bundled extension now also has direct plugin-behavior tests in:
 
 - `extensions/openclawcode/index.test.ts`
