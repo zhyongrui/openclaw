@@ -218,6 +218,13 @@ The next hardening step is reconciliation against GitHub and local run records,
 so state can heal even if the process dies mid-command or the remote issue/PR
 state changes externally.
 
+The bundled extension now also has direct plugin-behavior tests in:
+
+- `extensions/openclawcode/index.test.ts`
+
+Those tests cover real registered route/command behavior for the first webhook
+and chat-command flows.
+
 ## Release Model
 
 The release model should be:
