@@ -18,6 +18,7 @@ export interface WorkflowWorkspaceManager {
 }
 
 const RUNTIME_ARTIFACT_RULES = [".openclaw/", "HEARTBEAT.md", "SOUL.md", "TOOLS.md"];
+const SHARED_INSTALL_ARTIFACTS = ["node_modules"];
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -88,9 +89,21 @@ async function listGitWorktrees(repoRoot: string): Promise<GitWorktreeEntry[]> {
 }
 
 function shouldIgnoreChangedFile(file: string): boolean {
-  return RUNTIME_ARTIFACT_RULES.some((rule) =>
-    rule.endsWith("/") ? file.startsWith(rule) : file === rule,
-  );
+  const ignoredRules = [...RUNTIME_ARTIFACT_RULES, ...SHARED_INSTALL_ARTIFACTS];
+  return ignoredRules.some((rule) => (rule.endsWith("/") ? file.startsWith(rule) : file === rule));
+}
+
+async function ensureSharedInstallArtifacts(repoRoot: string, worktreePath: string): Promise<void> {
+  for (const relativePath of SHARED_INSTALL_ARTIFACTS) {
+    const sourcePath = path.join(repoRoot, relativePath);
+    const targetPath = path.join(worktreePath, relativePath);
+
+    if (!(await pathExists(sourcePath)) || (await pathExists(targetPath))) {
+      continue;
+    }
+
+    await fs.symlink(sourcePath, targetPath, "dir");
+  }
 }
 
 export class GitWorktreeManager implements WorkflowWorkspaceManager {
@@ -113,6 +126,7 @@ export class GitWorktreeManager implements WorkflowWorkspaceManager {
         (entry) => entry.branch === branchRef,
       );
       if (existingBranchWorktree && (await pathExists(existingBranchWorktree.path))) {
+        await ensureSharedInstallArtifacts(params.repoRoot, existingBranchWorktree.path);
         return {
           repoRoot: params.repoRoot,
           baseBranch: params.baseBranch,
@@ -152,6 +166,8 @@ export class GitWorktreeManager implements WorkflowWorkspaceManager {
         throw new Error(result.stderr || `Failed to prepare worktree at ${worktreePath}`);
       }
     }
+
+    await ensureSharedInstallArtifacts(params.repoRoot, worktreePath);
 
     return {
       repoRoot: params.repoRoot,

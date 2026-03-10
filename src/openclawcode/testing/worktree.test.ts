@@ -26,6 +26,9 @@ async function createTempRepo(): Promise<{ rootDir: string; worktreeRoot: string
   await runGit(rootDir, ["commit", "-m", "init"]);
   await runGit(rootDir, ["branch", "-M", "main"]);
 
+  await fs.mkdir(path.join(rootDir, "node_modules", ".bin"), { recursive: true });
+  await fs.writeFile(path.join(rootDir, "node_modules", ".bin", "vitest"), "#!/bin/sh\n", "utf8");
+
   return { rootDir, worktreeRoot };
 }
 
@@ -80,6 +83,35 @@ describe("GitWorktreeManager", () => {
       });
 
       expect(second.worktreePath).toBe(first.worktreePath);
+    } finally {
+      await fs.rm(repo.rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("links shared install artifacts into the worktree", async () => {
+    const repo = await createTempRepo();
+    const manager = new GitWorktreeManager(() => "2026-03-09T12:00:00.000Z");
+
+    try {
+      const workspace = await manager.prepare({
+        repoRoot: repo.rootDir,
+        worktreeRoot: repo.worktreeRoot,
+        branchName: "openclawcode/issue-46",
+        baseBranch: "main",
+        runId: "issue-46",
+      });
+
+      const nodeModulesStat = await fs.lstat(path.join(workspace.worktreePath, "node_modules"));
+      expect(nodeModulesStat.isSymbolicLink()).toBe(true);
+      expect(await fs.readlink(path.join(workspace.worktreePath, "node_modules"))).toBe(
+        path.join(repo.rootDir, "node_modules"),
+      );
+      expect(
+        await fs.readFile(
+          path.join(workspace.worktreePath, "node_modules", ".bin", "vitest"),
+          "utf8",
+        ),
+      ).toContain("#!/bin/sh");
     } finally {
       await fs.rm(repo.rootDir, { recursive: true, force: true });
     }
