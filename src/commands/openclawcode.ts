@@ -79,6 +79,46 @@ function resolveAutoMergePolicy(run: WorkflowRun): {
   };
 }
 
+function resolveAutoMergeDisposition(run: WorkflowRun): {
+  autoMergeDisposition: "merged" | "skipped" | "failed" | null;
+  autoMergeDispositionReason: string | null;
+} {
+  const note = [...run.history]
+    .toReversed()
+    .find(
+      (entry) =>
+        entry === "Pull request merged automatically" ||
+        entry.startsWith("Auto-merge skipped:") ||
+        entry.startsWith("Auto-merge failed:"),
+    );
+
+  if (note === "Pull request merged automatically" || run.stage === "merged") {
+    return {
+      autoMergeDisposition: "merged",
+      autoMergeDispositionReason: note ?? "Pull request merged automatically",
+    };
+  }
+
+  if (note?.startsWith("Auto-merge skipped:")) {
+    return {
+      autoMergeDisposition: "skipped",
+      autoMergeDispositionReason: note,
+    };
+  }
+
+  if (note?.startsWith("Auto-merge failed:")) {
+    return {
+      autoMergeDisposition: "failed",
+      autoMergeDispositionReason: note,
+    };
+  }
+
+  return {
+    autoMergeDisposition: null,
+    autoMergeDispositionReason: null,
+  };
+}
+
 function resolvePublishedPullRequest(run: WorkflowRun): {
   pullRequestPublished: boolean;
   publishedPullRequestOpenedAt: string | null;
@@ -128,6 +168,7 @@ function resolveRunSummary(run: WorkflowRun): string {
 
 function toWorkflowRunJson(run: WorkflowRun) {
   const autoMergePolicy = resolveAutoMergePolicy(run);
+  const autoMergeDisposition = resolveAutoMergeDisposition(run);
   const publishedPullRequest = resolvePublishedPullRequest(run);
   const mergedPullRequest = resolveMergedPullRequest(run);
   return {
@@ -147,6 +188,8 @@ function toWorkflowRunJson(run: WorkflowRun) {
     verificationDecision: run.verificationReport?.decision ?? null,
     verificationSummary: run.verificationReport?.summary ?? null,
     runSummary: resolveRunSummary(run),
+    autoMergeDisposition: autoMergeDisposition.autoMergeDisposition,
+    autoMergeDispositionReason: autoMergeDisposition.autoMergeDispositionReason,
     autoMergePolicyEligible: autoMergePolicy.autoMergePolicyEligible,
     autoMergePolicyReason: autoMergePolicy.autoMergePolicyReason,
   };

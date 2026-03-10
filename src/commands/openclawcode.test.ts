@@ -71,6 +71,8 @@ describe("openclawCodeRunCommand", () => {
       "Verification completed and the run is ready for human review.",
     );
     expect(payload.runSummary).toBe(payload.verificationSummary);
+    expect(payload.autoMergeDisposition).toBeNull();
+    expect(payload.autoMergeDispositionReason).toBeNull();
     expect(payload.verificationReport.decision).toBe(payload.verificationDecision);
     expect(payload.verificationReport.summary).toBe(payload.verificationSummary);
     expect(payload.autoMergePolicyEligible).toBe(true);
@@ -107,6 +109,8 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.verificationDecision).toBeNull();
     expect(payload.verificationSummary).toBeNull();
     expect(payload.runSummary).toBe("Run is at the draft-pr-opened stage.");
+    expect(payload.autoMergeDisposition).toBeNull();
+    expect(payload.autoMergeDispositionReason).toBeNull();
     expect(payload.autoMergePolicyEligible).toBe(false);
     expect(payload.autoMergePolicyReason).toBe(
       "Not eligible for auto-merge: verification has not approved the run.",
@@ -147,6 +151,8 @@ describe("openclawCodeRunCommand", () => {
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.autoMergeDisposition).toBeNull();
+    expect(payload.autoMergeDispositionReason).toBeNull();
     expect(payload.verificationSummary).toBeNull();
     expect(payload.runSummary).toBe("Updated JSON output");
   });
@@ -158,12 +164,20 @@ describe("openclawCodeRunCommand", () => {
           ...createRun().buildResult!,
           issueClassification: "workflow-core",
         },
+        history: [
+          "Verification approved for human review",
+          "Auto-merge skipped: policy requires human review for non-command-layer or failed-scope runs",
+        ],
       }),
     );
 
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.autoMergeDisposition).toBe("skipped");
+    expect(payload.autoMergeDispositionReason).toBe(
+      "Auto-merge skipped: policy requires human review for non-command-layer or failed-scope runs",
+    );
     expect(payload.autoMergePolicyEligible).toBe(false);
     expect(payload.autoMergePolicyReason).toBe(
       "Not eligible for auto-merge: the run is not classified as command-layer.",
@@ -193,10 +207,30 @@ describe("openclawCodeRunCommand", () => {
     );
   });
 
+  it("prints failed auto-merge disposition when merge execution fails", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        history: [
+          "Verification approved for human review",
+          "Auto-merge failed: GitHub token cannot merge pull requests.",
+        ],
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.autoMergeDisposition).toBe("failed");
+    expect(payload.autoMergeDispositionReason).toBe(
+      "Auto-merge failed: GitHub token cannot merge pull requests.",
+    );
+  });
+
   it("prints merged pr fields when the workflow reaches the merged stage", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
         stage: "merged",
+        history: ["Pull request merged automatically"],
         updatedAt: "2026-01-02T03:04:05.000Z",
       }),
     );
@@ -207,6 +241,8 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.stageLabel).toBe("Merged");
     expect(payload.pullRequestMerged).toBe(true);
     expect(payload.mergedPullRequestMergedAt).toBe("2026-01-02T03:04:05.000Z");
+    expect(payload.autoMergeDisposition).toBe("merged");
+    expect(payload.autoMergeDispositionReason).toBe("Pull request merged automatically");
   });
 });
 
