@@ -140,6 +140,7 @@ Example direction:
             repo: "openclawcode",
             repoRoot: "/home/zyr/pros/openclawcode",
             baseBranch: "main",
+            triggerMode: "approve",
             notifyChannel: "telegram",
             notifyTarget: "chat:123456",
             builderAgent: "main",
@@ -156,6 +157,13 @@ Example direction:
   },
 }
 ```
+
+`triggerMode` currently supports:
+
+- `approve`
+  - webhook notifies chat and waits for `/occode-start`
+- `auto`
+  - webhook immediately queues the issue run and sends a status notification
 
 ## Implemented So Far
 

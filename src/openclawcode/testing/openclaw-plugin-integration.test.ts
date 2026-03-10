@@ -222,12 +222,18 @@ describe("openclaw plugin integration helpers", () => {
     const pluginConfig = resolveOpenClawCodePluginConfig({
       githubWebhookSecretEnv: "OPENCLAWCODE_GITHUB_WEBHOOK_SECRET",
       pollIntervalMs: 5000,
-      repos: [repoConfig],
+      repos: [
+        {
+          ...repoConfig,
+          triggerMode: "auto",
+        },
+      ],
     });
 
     expect(pluginConfig.githubWebhookSecretEnv).toBe("OPENCLAWCODE_GITHUB_WEBHOOK_SECRET");
     expect(pluginConfig.pollIntervalMs).toBe(5000);
     expect(pluginConfig.repos).toHaveLength(1);
+    expect(pluginConfig.repos[0]?.triggerMode).toBe("auto");
 
     const argv = buildOpenClawCodeRunArgv({
       owner: "zhyongrui",

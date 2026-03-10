@@ -23,6 +23,10 @@
             "repo": { "type": "string" },
             "repoRoot": { "type": "string" },
             "baseBranch": { "type": "string" },
+            "triggerMode": {
+              "type": "string",
+              "enum": ["approve", "auto"]
+            },
             "notifyChannel": { "type": "string" },
             "notifyTarget": { "type": "string" },
             "builderAgent": { "type": "string" },

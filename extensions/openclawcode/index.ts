@@ -183,28 +183,68 @@ async function handleGithubWebhook(
     return true;
   }
 
-  const approvalMessage = buildIssueApprovalMessage({
-    issue: decision.issue,
-    config: matchingRepo,
-  });
   const issueKey = formatIssueKey(decision.issue);
-  const accepted = await store.addPendingApproval({
-    issueKey,
-    notifyChannel: matchingRepo.notifyChannel,
-    notifyTarget: matchingRepo.notifyTarget,
-  });
-  if (!accepted) {
-    res.statusCode = 202;
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.end(JSON.stringify({ accepted: false, reason: "already-tracked", issue: issueKey }));
-    return true;
+  if (matchingRepo.triggerMode === "auto") {
+    const enqueued = await store.enqueue(
+      {
+        issueKey,
+        notifyChannel: matchingRepo.notifyChannel,
+        notifyTarget: matchingRepo.notifyTarget,
+        request: buildRunRequestFromCommand({
+          command: {
+            action: "start",
+            issue: {
+              owner: decision.issue.owner,
+              repo: decision.issue.repo,
+              number: decision.issue.number,
+            },
+          },
+          config: matchingRepo,
+        }),
+      },
+      "Auto-started from issue webhook.",
+    );
+    if (!enqueued) {
+      res.statusCode = 202;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ accepted: false, reason: "already-tracked", issue: issueKey }));
+      return true;
+    }
+    await sendText({
+      api,
+      channel: matchingRepo.notifyChannel,
+      target: matchingRepo.notifyTarget,
+      text: [
+        "openclawcode auto-started a new GitHub issue.",
+        `Issue: ${issueKey}`,
+        `Title: ${decision.issue.title}`,
+        "Mode: auto",
+        "Status: queued for execution",
+      ].join("\n"),
+    });
+  } else {
+    const approvalMessage = buildIssueApprovalMessage({
+      issue: decision.issue,
+      config: matchingRepo,
+    });
+    const accepted = await store.addPendingApproval({
+      issueKey,
+      notifyChannel: matchingRepo.notifyChannel,
+      notifyTarget: matchingRepo.notifyTarget,
+    });
+    if (!accepted) {
+      res.statusCode = 202;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ accepted: false, reason: "already-tracked", issue: issueKey }));
+      return true;
+    }
+    await sendText({
+      api,
+      channel: matchingRepo.notifyChannel,
+      target: matchingRepo.notifyTarget,
+      text: approvalMessage,
+    });
   }
-  await sendText({
-    api,
-    channel: matchingRepo.notifyChannel,
-    target: matchingRepo.notifyTarget,
-    text: approvalMessage,
-  });
 
   res.statusCode = 202;
   res.setHeader("Content-Type", "application/json; charset=utf-8");

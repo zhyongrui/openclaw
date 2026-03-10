@@ -27,6 +27,7 @@ export interface OpenClawCodeChatopsRepoConfig {
   repo: string;
   repoRoot: string;
   baseBranch: string;
+  triggerMode?: "approve" | "auto";
   notifyChannel: string;
   notifyTarget: string;
   builderAgent: string;
@@ -98,6 +99,14 @@ function readPositiveInteger(value: unknown): number | undefined {
   }
   const rounded = Math.floor(value);
   return rounded > 0 ? rounded : undefined;
+}
+
+function readTriggerMode(value: unknown): "approve" | "auto" | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === "auto" || normalized === "approve" ? normalized : undefined;
 }
 
 function collectIssueLabels(labels: Array<{ name: string }> | undefined): string[] {
@@ -187,6 +196,7 @@ export function resolveOpenClawCodePluginConfig(
       repo,
       repoRoot,
       baseBranch,
+      triggerMode: readTriggerMode(candidate.triggerMode) ?? "approve",
       notifyChannel,
       notifyTarget,
       builderAgent,
