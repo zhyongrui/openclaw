@@ -22,16 +22,19 @@ OpenClaw runtime base.
 
 The intended loop is:
 
-1. ingest a GitHub issue
-2. decide whether the issue is suitable for autonomous work
-3. plan the implementation
-4. create an isolated worktree and branch
-5. implement the change
-6. run targeted validation
-7. open a draft PR
-8. run an independent review and verification pass
-9. either escalate, request changes, or mark ready for human review
-10. optionally support guarded merge automation later
+1. ingest a GitHub issue or issue event
+2. notify the configured chat surface for the target repository
+3. let a human approve, skip, or defer the run from chat
+4. decide whether the issue is suitable for autonomous work
+5. plan the implementation
+6. create an isolated worktree and branch
+7. implement the change
+8. run targeted validation
+9. open a draft PR
+10. run an independent review and verification pass
+11. either escalate, request changes, or mark ready for human review
+12. optionally support guarded merge automation later
+13. notify humans of the final outcome in chat
 
 The key constraint is that `openclawcode` is not just a prompt wrapper.
 It needs durable workflow state, explicit policy, reproducible isolation, and
@@ -39,7 +42,8 @@ observable artifacts.
 
 ## Current Baseline
 
-As of 2026-03-09, the repository already has a meaningful MVP slice:
+As of 2026-03-10, the repository already has a working issue-driven core plus a
+real bundled OpenClaw chatops adapter:
 
 - workflow contracts and stage transitions
 - persisted workflow runs
@@ -50,28 +54,46 @@ As of 2026-03-09, the repository already has a meaningful MVP slice:
 - draft PR publishing hooks
 - optional merge hook plumbing
 - real-run validation against this repository
+- bundled OpenClaw plugin command surface:
+  - `/occode-start`
+  - `/occode-status`
+  - `/occode-skip`
+  - `/occode-sync`
+- repository notification bindings for chat delivery
+- persisted plugin queue state with structured workflow status snapshots
+- local-run and GitHub-side status reconciliation for operator recovery
+- background issue execution through the built CLI entrypoint
+
+The repository has already proven several real production-style checkpoints:
+
+- real GitHub issues can drive code changes in this repository
+- real draft PRs can be opened from workflow runs
+- chatops-triggered background execution can complete and persist results
+- operator-facing recovery commands can heal local state after interruptions
 
 The current bottleneck is no longer basic execution. The current bottleneck is
-control quality:
+closing the operational loop cleanly:
 
-- issue classification is still too weak
-- builder scope drift is still possible on small CLI issues
-- verification policy is still shallow
-- run persistence is present, but not yet rich enough for retries, resumption,
-  and operator visibility
+- webhook-to-chat intake still needs broader real-world validation
+- review and merge state are not yet reconciled deeply enough from GitHub
+- request-changes and retry continuity are still shallow
+- packaging and installation still feel like a development environment, not a
+  clean product setup
+- notification policy is present, but not yet polished for daily unattended use
 
 ## Next Iteration Plan
 
-As of 2026-03-10, the immediate next stage is no longer workflow bring-up.
-The next stage is making the current issue-driven loop usable for day-to-day
-repository work in this fork.
+As of 2026-03-10, the immediate next stage is no longer workflow bring-up or
+single-command validation. The next stage is making the issue-to-chat-to-PR
+loop usable for day-to-day repository work in this fork.
 
 The short-term objective is:
 
 - keep using real GitHub issues as the driver
 - keep validating each slice end-to-end against this repository
-- move from "observable workflow state" toward "usable PR and review
+- move from "observable workflow state" toward "usable unattended repository
   automation"
+- make chat the normal operator entrypoint instead of a side-channel demo
 
 ### Current Checkpoint
 
@@ -80,96 +102,132 @@ The current repository state already supports:
 - persisted run records
 - isolated worktrees
 - builder/verifier execution
-- stable top-level JSON fields for:
+- real draft PR publication in this repository
+- webhook-backed chatops intake plumbing
+- queue persistence and background execution
+- chat-visible operator commands and recovery commands
+- structured status snapshots for workflow runs and tracked PRs
+- stable top-level JSON fields for downstream automation, including:
   - changed files
   - issue classification
-  - scope-check status
-  - draft PR number and URL
-  - draft PR branch and base branch
-  - verification decision and summary
-  - auto-merge policy eligibility and reason
+  - scope-check status and blocked files
+  - draft PR metadata and disposition
+  - published PR and merged PR status
+  - verification decision, summary, and counts
+  - auto-merge policy eligibility and disposition
 
-This means the next iteration can shift from output surfacing to workflow
-closure.
+This means the next iteration can shift from output surfacing to full loop
+closure and operator trust.
 
 ### Near-Term Delivery Streams
 
-The next iteration should run across three delivery streams in parallel.
+The next iteration should run across four delivery streams in parallel.
 
-#### Stream 1: Output Contract Completion
+#### Stream 1: GitHub Intake and Chat Routing
 
 Objective:
 
-- finish the top-level JSON contract so downstream automation does not need to
-  keep parsing nested workflow objects
+- make issue events arrive at the right chat target with the right amount of
+  operator context and without duplicate execution
 
 Priority backlog:
 
-1. expose published PR metadata as stable top-level fields
-2. expose merge-decision and merge-disposition fields as stable top-level fields
-3. add a concise top-level run summary that is readable by both humans and
-   scripts
+1. validate repository binding behavior against more than one issue source event
+2. deduplicate repeated GitHub deliveries for the same issue action
+3. improve chat notification copy for approval, running, failure, and success
+4. bind issue, PR, and review events back to the same conversation target
+5. document the operator setup path clearly enough that the repo can be used
+   without reverse-engineering local state files
 
 Validation rule:
 
-- every new output field must be covered by command-layer tests and then
-  validated through a real GitHub issue run
+- every intake rule must be exercised by replayed webhook payload tests and at
+  least one real issue event or chat-triggered run in this repository
 
-#### Stream 2: Real PR Lifecycle Validation
+#### Stream 2: Workflow Lifecycle and State Consistency
 
 Objective:
 
-- prove that `openclawcode` can move from issue execution to real PR handling
-  in this repository, not just simulated local state
+- make repeated runs, retries, restarts, and background execution behave like a
+  durable service rather than an optimistic prototype
 
 Priority backlog:
 
-1. run a real issue with `--open-pr`
-2. verify branch push, draft PR creation, and run-record backfill
-3. verify that real PR metadata is preserved in the final JSON output
-4. trial guarded `--merge-on-approve` only after `--open-pr` is stable
-5. confirm that auto-merge remains restricted to the intended command-layer
-   policy
+1. harden issue state transitions around retries and request-changes loops
+2. add reconciliation for review outcomes, merge outcomes, and closed-without-merge PRs
+3. add explicit idempotency rules for stale worker completions and duplicate
+   queue promotions
+4. improve run-record linking between workflow runs, plugin state, and PR state
+5. expose a compact operator-facing run ledger for recent activity
 
 Validation rule:
 
-- do not broaden merge automation until draft PR publication is reliable under
-  repeated real runs
+- every state-healing or retry rule must get a regression test that proves the
+  latest known good state cannot be clobbered by stale data
 
-#### Stream 3: Review and Checkpoint Hardening
+#### Stream 3: Review, Request-Changes, and Merge Control
 
 Objective:
 
-- make the verifier useful as an actual reviewer instead of only a summary step
+- make the reviewer/approver path usable as a real control loop instead of only
+  a terminal summary
 
 Priority backlog:
 
-1. structure verifier findings by category
-2. distinguish scope violations, test failures, and review objections
-3. define explicit human checkpoint rules
-4. improve the request-changes loop so follow-up runs preserve continuity
+1. reconcile GitHub PR reviews back into local workflow state
+2. support request-changes follow-up runs that preserve issue and branch
+   continuity intentionally
+3. define explicit merge gates based on issue class, verifier outcome, and test
+   status
+4. notify chat when human action is required, when review changed the state,
+   and when merge completed or failed
+5. keep auto-merge narrow and policy-driven instead of broadening it by prompt
 
 Validation rule:
 
 - verifier outputs must be specific enough to drive a retry without manual
   interpretation of raw transcripts
+- merge policy changes must be proven first on low-risk real issues in this
+  repository
+
+#### Stream 4: Packaging, Install, and Operator Experience
+
+Objective:
+
+- make `openclawcode` installable and operable as a product, not only as a
+  development checkout
+
+Priority backlog:
+
+1. define the supported install path and required GitHub/OpenClaw config
+2. add one-command or low-friction setup documentation for repo mapping,
+   webhook secret, and chat binding
+3. separate runtime artifacts from committed project files more cleanly
+4. document a repeatable upgrade and upstream-sync workflow
+5. add an operator runbook for day-to-day use, recovery, and rollback
+
+Validation rule:
+
+- a fresh operator should be able to configure the repository and trigger a
+  full issue run using docs only
 
 ### Recommended Issue Sequence
 
 The next concrete issue order should be:
 
-1. published PR top-level fields
-2. merge decision and disposition top-level fields
-3. real `--open-pr` workflow validation
-4. real `--merge-on-approve` workflow validation
-5. structured verifier findings
+1. webhook intake idempotency and duplicate-delivery protection
+2. review-state reconciliation from GitHub PR reviews
+3. request-changes rerun continuity
+4. merge-state reconciliation and final chat notification
+5. installation and operator setup hardening
+6. guarded real merge validation on a low-risk issue
 
 This order is deliberate:
 
-- first complete the machine-readable contract
-- then validate real PR publication
-- only then test real merge behavior
-- finally harden review quality once the surrounding control loop is stable
+- first make intake trustworthy
+- then make review and rerun loops coherent
+- then close the merge and notification loop
+- finally harden product packaging once the behavior is stable
 
 ### Execution Rules For The Next Iteration
 
@@ -185,19 +243,26 @@ Keep the current working pattern:
 
 Additional rules:
 
-- prefer command-layer slices until the PR lifecycle path is proven stable
+- prefer slices that close real operational gaps over adding more output fields
 - treat real issue runs as the primary acceptance test
 - sync `upstream/main` only at clean checkpoints, not mid-slice
 - keep `openclawcode` workflow logic isolated from broad upstream runtime edits
+- do not trust plugin-state text alone when a structured snapshot exists;
+  always reconcile toward the newest structured state
+- every real failure mode found in chatops must become either:
+  - a regression test
+  - a reconciliation rule
+  - an operator-facing recovery command
 
 ### Exit Criteria For This Iteration
 
 This iteration is complete when:
 
-- the JSON output is rich enough for downstream automation to consume directly
-- a real draft PR can be opened from an issue run in this repository
-- guarded merge automation has been trialed on a real issue
-- verifier output is structured enough to support repeatable review loops
+- a new GitHub issue can notify the configured chat target automatically
+- a human can approve the run from chat without touching the terminal
+- the workflow can open a draft PR, survive retries, and keep state consistent
+- review changes and merge outcomes are reflected back into chat-visible status
+- guarded merge automation has been trialed on a real low-risk issue
 - the repository can continue issue-driven development after an upstream sync
   without rework
 
@@ -420,102 +485,107 @@ Exit criteria:
 
 This is the concrete backlog that should be worked next, in order.
 
-### Slice A: Issue #3 Scope Guardrails
+### Slice A: Webhook Intake Idempotency
 
 Deliverables:
 
-- issue classification helper
-- command-layer prompt guardrails
-- changed-file scope checker
-- regression coverage for classification and blocked-file detection
-- real rerun of issue `#2` after the guardrail lands
+- normalize GitHub issue-event identity for deduplication
+- ignore repeated deliveries that should not create a second pending approval
+- persist enough event metadata to explain why an event was accepted or ignored
+- regression coverage for duplicate webhook deliveries and repeated approvals
+- real validation with a GitHub issue event against this repository
 
 Why this first:
 
-- it addresses the main failure mode observed in real runs
-- it improves completion quality without expanding the architecture much
+- duplicate intake is the fastest way to make automation noisy and untrusted
+- it protects every downstream stage without requiring broad architectural work
 
-### Slice B: Persist Richer Run Metadata
-
-Deliverables:
-
-- persist issue classification in workflow run output
-- persist scope-check findings and reasons
-- improve run notes for operator debugging
-
-Why next:
-
-- once scope policy exists, its decisions need to be visible in stored runs and
-  JSON output
-
-### Slice C: Verifier Upgrade
+### Slice B: Review-State Reconciliation
 
 Deliverables:
 
-- acceptance-criteria-aware verification prompt
-- scope-drift findings in verifier context
-- missing-coverage findings tied to changed files
+- persist PR review state in plugin snapshots
+- reconcile approved / changes-requested review outcomes from GitHub
+- reflect review outcomes in `/occode-status` and chat notifications
+- regression coverage for review-sync transitions and stale review data
 
 Why next:
 
-- the verifier should confirm the builder stayed within policy, not just review
-  code generally
+- review is the next real external signal after PR creation
+- without review sync, the chat and plugin state will drift from GitHub quickly
 
-### Slice D: Human-in-the-Loop Checkpoints
+### Slice C: Request-Changes Continuity
 
 Deliverables:
 
-- explicit stage for human approval when issue class is risky or mixed
-- optional pause before PR publication or before merge
-- clear operator messaging in run output
+- define how a request-changes rerun links to the prior run and PR
+- preserve branch continuity when rerunning the same issue intentionally
+- store the follow-up reason and latest review findings in run artifacts
+- regression coverage for safe rerun semantics
 
 Why next:
 
-- this turns the system from a raw pipeline into a controllable assistant
+- request-changes is the core loop that turns this from one-shot automation
+  into a usable coding assistant
 
-### Slice E: PR Draft Quality
+### Slice D: Merge-State Reconciliation and Final Notifications
 
 Deliverables:
 
-- stronger PR summary
-- acceptance checklist
-- change summary grouped by behavior
-- explicit unresolved concerns section
+- reconcile merged, closed-without-merge, and merge-failed PR outcomes
+- send final chat notifications for merged, blocked, and abandoned states
+- record final disposition in workflow snapshots and operator status output
+- regression coverage for merge-state healing
 
 Why next:
 
-- even a technically correct run is weak if the PR is hard to review
+- the user-facing promise is not just "opened a PR" but "finished the issue
+  loop and told me what happened"
 
-### Slice F: Resume and Retry Semantics
+### Slice E: Operator Install and Setup Hardening
 
 Deliverables:
 
-- retry metadata per stage
-- rerun support that preserves the right worktree and branch continuity
-- operator guidance when a rerun is safe vs unsafe
+- document the supported install path as a first-class workflow
+- document repo binding, webhook setup, chat target setup, and required tokens
+- reduce manual state-file editing in favor of documented commands or config
+- add a setup verification checklist
 
 Why next:
 
-- real usage will involve retries; the system needs first-class rerun behavior
+- once the loop works, setup friction becomes the next blocker to real use
+
+### Slice F: Guarded Real Merge Validation
+
+Deliverables:
+
+- choose one low-risk issue in this repository
+- validate the merge gate path end-to-end with the current token policy
+- document the exact required GitHub permissions and failure handling
+- keep the merge policy narrow and reversible
+
+Why next:
+
+- merge is the highest-risk action and should only be exercised once intake,
+  review, rerun, and notifications are already coherent
 
 ## Detailed Plan for the Immediate Next Slice
 
 The next implementation slice should follow this order:
 
-1. add an issue scope module that classifies a run as `command-layer`,
-   `workflow-core`, or `mixed`
-2. move prompt logic in the builder to use that classification instead of ad hoc
-   keyword checks
-3. add a post-build scope checker that inspects changed files before tests and
-   before auto-commit
-4. fail command-layer builds when they edit blocked workflow-core areas such as
-   contracts, orchestrator, persistence, or workflow internals without explicit
-   issue justification
-5. expose classification and scope-check notes in build output
-6. add focused tests for classification, prompt generation, and builder failure
-   behavior
-7. rerun the real issue flow against issue `#2`
-8. inspect run artifacts and update the dev log
+1. inspect the current GitHub webhook handler and identify which event fields
+   are stable enough to build a delivery idempotency key
+2. add a persisted webhook-delivery ledger or equivalent dedupe mechanism inside
+   the plugin state layer
+3. reject duplicate issue events that would otherwise recreate the same pending
+   approval or queue entry
+4. expose the dedupe decision in logs or operator-visible state so ignored
+   events are explainable
+5. add focused tests for duplicate webhook deliveries and duplicate approval
+   attempts
+6. replay a realistic webhook payload locally against the plugin route
+7. validate against a real GitHub issue event in this repository if practical
+8. update the dev log with the observed failure mode and final behavior
 9. commit the slice only after targeted tests pass
 
 ## Test Strategy
@@ -584,10 +654,12 @@ Purpose:
 Targets:
 
 - real `openclaw code run --issue ...` execution against this repository
+- real plugin-route execution when a slice changes webhook or chatops behavior
 - prompt targeting quality
 - sandbox and worktree behavior
 - changed-file output
 - run artifact correctness
+- plugin-state and chat-status reconciliation
 
 Expected cadence:
 
@@ -607,6 +679,9 @@ Known regression classes to keep covering:
 - builder hanging on full test commands inside sandbox
 - command-layer issues drifting into workflow-core files
 - JSON output shape regressions
+- stale worker writes clobbering newer persisted status
+- duplicate webhook deliveries creating duplicate queued work
+- GitHub review/merge state drifting away from local plugin snapshots
 
 ## Test Commands
 
@@ -616,6 +691,7 @@ targeted:
 - `pnpm exec vitest run --config vitest.openclawcode.config.mjs`
 - focused single-file tests for modules under active change
 - real `openclaw code run ... --json` reruns for workflow validation
+- local plugin-route replay when the slice changes chatops or webhook behavior
 
 Whole-repo validation should be postponed unless a slice clearly touches shared
 OpenClaw surfaces beyond `openclawcode`.
@@ -628,7 +704,9 @@ Each completed slice should follow this order:
 2. add or update tests
 3. run targeted validation
 4. update `docs/openclawcode/dev-log/2026-03-09.md`
-5. commit with one clear message for one coherent slice
+5. update `docs/openclawcode/dev-log/2026-03-10.md` when the work lands on the
+   current day
+6. commit with one clear message for one coherent slice
 
 Commits should stay narrow. A guardrail feature, a persistence feature, and a
 PR-draft feature should not be collapsed into one commit unless they are
@@ -654,12 +732,16 @@ decision.
 when all of the following are true:
 
 - it can reject unsuitable issues
+- it can ingest a new issue event and notify chat automatically
+- it can let a human approve from chat
 - it can complete a narrow accepted issue in an isolated worktree
 - it can run targeted tests and record them
 - it can open a readable draft PR
 - it can run an independent verification pass
 - it can preserve run history and operator-visible artifacts
 - it can survive reruns without manual cleanup
+- it can reconcile review and merge outcomes back into its own state
+- it can notify humans of final outcomes without terminal intervention
 - it keeps small issues scoped to small diffs
 
 Until then, the right approach is controlled real-world testing against this
