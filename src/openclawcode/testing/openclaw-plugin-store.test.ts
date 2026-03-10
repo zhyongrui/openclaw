@@ -316,4 +316,39 @@ describe("OpenClawCodeChatopsStore", () => {
       await fs.rm(fixture.rootDir, { recursive: true, force: true });
     }
   });
+
+  it("serializes concurrent workflow status writes without dropping snapshots", async () => {
+    const fixture = await createStore();
+
+    try {
+      await Promise.all(
+        Array.from({ length: 12 }, (_, index) => {
+          const issueNumber = 200 + index;
+          return fixture.store.recordWorkflowRunStatus(
+            createWorkflowRun({
+              issueNumber,
+              stage: index % 2 === 0 ? "ready-for-human-review" : "merged",
+              updatedAt: `2026-03-10T08:${String(index).padStart(2, "0")}:00.000Z`,
+              prNumber: 500 + index,
+              prUrl: `https://github.com/zhyongrui/openclawcode/pull/${500 + index}`,
+            }),
+            `status-${issueNumber}`,
+          );
+        }),
+      );
+
+      const snapshot = await fixture.store.snapshot();
+      expect(Object.keys(snapshot.statusSnapshotsByIssue)).toHaveLength(12);
+
+      for (let issueNumber = 200; issueNumber < 212; issueNumber += 1) {
+        const issueKey = `zhyongrui/openclawcode#${issueNumber}`;
+        expect(snapshot.statusByIssue[issueKey]).toBe(`status-${issueNumber}`);
+        expect(snapshot.statusSnapshotsByIssue[issueKey]?.pullRequestNumber).toBe(
+          500 + (issueNumber - 200),
+        );
+      }
+    } finally {
+      await fs.rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
 });

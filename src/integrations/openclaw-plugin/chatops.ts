@@ -434,7 +434,7 @@ export function buildRunRequestFromCommand(params: {
 export function buildOpenClawCodeRunArgv(request: OpenClawCodeChatopsRunRequest): string[] {
   const argv = [
     process.execPath,
-    path.join(request.repoRoot, "scripts/run-node.mjs"),
+    path.join(request.repoRoot, "dist", "index.js"),
     "code",
     "run",
     "--issue",

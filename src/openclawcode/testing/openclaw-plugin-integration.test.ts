@@ -249,7 +249,7 @@ describe("openclaw plugin integration helpers", () => {
       mergeOnApprove: true,
     });
 
-    expect(argv[1]).toContain("scripts/run-node.mjs");
+    expect(argv[1]).toContain("dist/index.js");
     expect(argv).toContain("--issue");
     expect(argv).toContain("47");
     expect(argv).toContain("--merge-on-approve");

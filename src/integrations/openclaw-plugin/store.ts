@@ -177,6 +177,8 @@ function normalizeState(raw: unknown): OpenClawCodeQueueState {
 }
 
 export class OpenClawCodeChatopsStore {
+  private mutationQueue: Promise<void> = Promise.resolve();
+
   constructor(private readonly statePath: string) {}
 
   static fromStateDir(stateDir: string): OpenClawCodeChatopsStore {
@@ -197,59 +199,88 @@ export class OpenClawCodeChatopsStore {
     }
   }
 
+  private async flushMutations(): Promise<void> {
+    await this.mutationQueue;
+  }
+
+  private async withMutationLock<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.mutationQueue.catch(() => undefined);
+    const next = pending.then(operation);
+    this.mutationQueue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return await next;
+  }
+
+  private async mutateState<T>(
+    mutator: (state: OpenClawCodeQueueState) => Promise<T> | T,
+  ): Promise<T> {
+    return await this.withMutationLock(async () => {
+      const state = await this.loadState();
+      const result = await mutator(state);
+      await this.saveState(state);
+      return result;
+    });
+  }
+
   private async saveState(state: OpenClawCodeQueueState): Promise<void> {
     await fs.mkdir(path.dirname(this.statePath), { recursive: true });
-    const tempPath = `${this.statePath}.tmp`;
+    const tempPath = `${this.statePath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
     await fs.writeFile(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
     await fs.rename(tempPath, this.statePath);
   }
 
   async getStatus(issueKey: string): Promise<string | undefined> {
+    await this.flushMutations();
     const state = await this.loadState();
     return state.statusByIssue[issueKey];
   }
 
   async getPendingApproval(issueKey: string): Promise<OpenClawCodePendingApproval | undefined> {
+    await this.flushMutations();
     const state = await this.loadState();
     return state.pendingApprovals.find((entry) => entry.issueKey === issueKey);
   }
 
   async getStatusSnapshot(issueKey: string): Promise<OpenClawCodeIssueStatusSnapshot | undefined> {
+    await this.flushMutations();
     const state = await this.loadState();
     return state.statusSnapshotsByIssue[issueKey];
   }
 
   async getRepoBinding(repoKey: string): Promise<OpenClawCodeRepoNotificationBinding | undefined> {
+    await this.flushMutations();
     const state = await this.loadState();
     return state.repoBindingsByRepo[repoKey];
   }
 
   async setStatus(issueKey: string, status: string): Promise<void> {
-    const state = await this.loadState();
-    state.statusByIssue[issueKey] = status;
-    const currentSnapshot = state.statusSnapshotsByIssue[issueKey];
-    if (currentSnapshot) {
-      state.statusSnapshotsByIssue[issueKey] = {
-        ...currentSnapshot,
-        status,
-      };
-    }
-    await this.saveState(state);
+    await this.mutateState((state) => {
+      state.statusByIssue[issueKey] = status;
+      const currentSnapshot = state.statusSnapshotsByIssue[issueKey];
+      if (currentSnapshot) {
+        state.statusSnapshotsByIssue[issueKey] = {
+          ...currentSnapshot,
+          status,
+        };
+      }
+    });
   }
 
   async recordWorkflowRunStatus(run: WorkflowRun, status: string): Promise<void> {
-    const state = await this.loadState();
-    const snapshot = buildStatusSnapshot({ run, status });
-    state.statusByIssue[snapshot.issueKey] = status;
-    state.statusSnapshotsByIssue[snapshot.issueKey] = snapshot;
-    await this.saveState(state);
+    await this.mutateState((state) => {
+      const snapshot = buildStatusSnapshot({ run, status });
+      state.statusByIssue[snapshot.issueKey] = status;
+      state.statusSnapshotsByIssue[snapshot.issueKey] = snapshot;
+    });
   }
 
   async setStatusSnapshot(snapshot: OpenClawCodeIssueStatusSnapshot): Promise<void> {
-    const state = await this.loadState();
-    state.statusByIssue[snapshot.issueKey] = snapshot.status;
-    state.statusSnapshotsByIssue[snapshot.issueKey] = snapshot;
-    await this.saveState(state);
+    await this.mutateState((state) => {
+      state.statusByIssue[snapshot.issueKey] = snapshot.status;
+      state.statusSnapshotsByIssue[snapshot.issueKey] = snapshot;
+    });
   }
 
   async setRepoBinding(params: {
@@ -257,41 +288,41 @@ export class OpenClawCodeChatopsStore {
     notifyChannel: string;
     notifyTarget: string;
   }): Promise<OpenClawCodeRepoNotificationBinding> {
-    const state = await this.loadState();
-    const binding: OpenClawCodeRepoNotificationBinding = {
-      repoKey: params.repoKey,
-      notifyChannel: params.notifyChannel,
-      notifyTarget: params.notifyTarget,
-      updatedAt: new Date().toISOString(),
-    };
-    state.repoBindingsByRepo[params.repoKey] = binding;
-    await this.saveState(state);
-    return binding;
+    return await this.mutateState((state) => {
+      const binding: OpenClawCodeRepoNotificationBinding = {
+        repoKey: params.repoKey,
+        notifyChannel: params.notifyChannel,
+        notifyTarget: params.notifyTarget,
+        updatedAt: new Date().toISOString(),
+      };
+      state.repoBindingsByRepo[params.repoKey] = binding;
+      return binding;
+    });
   }
 
   async removeRepoBinding(repoKey: string): Promise<boolean> {
-    const state = await this.loadState();
-    if (!state.repoBindingsByRepo[repoKey]) {
-      return false;
-    }
-    delete state.repoBindingsByRepo[repoKey];
-    await this.saveState(state);
-    return true;
+    return await this.mutateState((state) => {
+      if (!state.repoBindingsByRepo[repoKey]) {
+        return false;
+      }
+      delete state.repoBindingsByRepo[repoKey];
+      return true;
+    });
   }
 
   async reconcileStatuses(statuses: Record<string, string>): Promise<void> {
-    const state = await this.loadState();
-    for (const [issueKey, status] of Object.entries(statuses)) {
-      const isActive =
-        state.pendingApprovals.some((entry) => entry.issueKey === issueKey) ||
-        state.currentRun?.issueKey === issueKey ||
-        state.queue.some((entry) => entry.issueKey === issueKey);
-      if (isActive) {
-        continue;
+    await this.mutateState((state) => {
+      for (const [issueKey, status] of Object.entries(statuses)) {
+        const isActive =
+          state.pendingApprovals.some((entry) => entry.issueKey === issueKey) ||
+          state.currentRun?.issueKey === issueKey ||
+          state.queue.some((entry) => entry.issueKey === issueKey);
+        if (isActive) {
+          continue;
+        }
+        state.statusByIssue[issueKey] = status;
       }
-      state.statusByIssue[issueKey] = status;
-    }
-    await this.saveState(state);
+    });
   }
 
   async reconcileWorkflowRunStatuses(
@@ -301,75 +332,77 @@ export class OpenClawCodeChatopsStore {
       run: WorkflowRun;
     }>,
   ): Promise<void> {
-    const state = await this.loadState();
-    for (const record of records) {
-      const isActive =
-        state.pendingApprovals.some((entry) => entry.issueKey === record.issueKey) ||
-        state.currentRun?.issueKey === record.issueKey ||
-        state.queue.some((entry) => entry.issueKey === record.issueKey);
-      if (isActive) {
-        continue;
+    await this.mutateState((state) => {
+      for (const record of records) {
+        const isActive =
+          state.pendingApprovals.some((entry) => entry.issueKey === record.issueKey) ||
+          state.currentRun?.issueKey === record.issueKey ||
+          state.queue.some((entry) => entry.issueKey === record.issueKey);
+        if (isActive) {
+          continue;
+        }
+        const currentSnapshot = state.statusSnapshotsByIssue[record.issueKey];
+        if (currentSnapshot && currentSnapshot.updatedAt > record.run.updatedAt) {
+          continue;
+        }
+        state.statusByIssue[record.issueKey] = record.status;
+        state.statusSnapshotsByIssue[record.issueKey] = buildStatusSnapshot(record);
       }
-      const currentSnapshot = state.statusSnapshotsByIssue[record.issueKey];
-      if (currentSnapshot && currentSnapshot.updatedAt > record.run.updatedAt) {
-        continue;
-      }
-      state.statusByIssue[record.issueKey] = record.status;
-      state.statusSnapshotsByIssue[record.issueKey] = buildStatusSnapshot(record);
-    }
-    await this.saveState(state);
+    });
   }
 
   async addPendingApproval(
     pending: OpenClawCodePendingApproval,
     status = "Awaiting chat approval.",
   ): Promise<boolean> {
-    const state = await this.loadState();
-    if (
-      state.pendingApprovals.some((entry) => entry.issueKey === pending.issueKey) ||
-      state.currentRun?.issueKey === pending.issueKey ||
-      state.queue.some((entry) => entry.issueKey === pending.issueKey)
-    ) {
-      return false;
-    }
-    state.pendingApprovals.push(pending);
-    state.statusByIssue[pending.issueKey] = status;
-    await this.saveState(state);
-    return true;
+    return await this.mutateState((state) => {
+      if (
+        state.pendingApprovals.some((entry) => entry.issueKey === pending.issueKey) ||
+        state.currentRun?.issueKey === pending.issueKey ||
+        state.queue.some((entry) => entry.issueKey === pending.issueKey)
+      ) {
+        return false;
+      }
+      state.pendingApprovals.push(pending);
+      state.statusByIssue[pending.issueKey] = status;
+      return true;
+    });
   }
 
   async consumePendingApproval(issueKey: string): Promise<OpenClawCodePendingApproval | undefined> {
-    const state = await this.loadState();
-    const index = state.pendingApprovals.findIndex((entry) => entry.issueKey === issueKey);
-    if (index < 0) {
-      return undefined;
-    }
-    const [pending] = state.pendingApprovals.splice(index, 1);
-    await this.saveState(state);
-    return pending;
+    return await this.mutateState((state) => {
+      const index = state.pendingApprovals.findIndex((entry) => entry.issueKey === issueKey);
+      if (index < 0) {
+        return undefined;
+      }
+      const [pending] = state.pendingApprovals.splice(index, 1);
+      return pending;
+    });
   }
 
   async removePendingApproval(
     issueKey: string,
     status = "Skipped before execution.",
   ): Promise<boolean> {
-    const state = await this.loadState();
-    const index = state.pendingApprovals.findIndex((entry) => entry.issueKey === issueKey);
-    if (index < 0) {
-      return false;
-    }
-    state.pendingApprovals.splice(index, 1);
-    state.statusByIssue[issueKey] = status;
-    await this.saveState(state);
-    return true;
+    return await this.mutateState((state) => {
+      const index = state.pendingApprovals.findIndex((entry) => entry.issueKey === issueKey);
+      if (index < 0) {
+        return false;
+      }
+      state.pendingApprovals.splice(index, 1);
+      state.statusByIssue[issueKey] = status;
+      return true;
+    });
   }
 
   async isPendingApproval(issueKey: string): Promise<boolean> {
+    await this.flushMutations();
     const state = await this.loadState();
     return state.pendingApprovals.some((entry) => entry.issueKey === issueKey);
   }
 
   async isQueuedOrRunning(issueKey: string): Promise<boolean> {
+    await this.flushMutations();
     const state = await this.loadState();
     return (
       state.currentRun?.issueKey === issueKey ||
@@ -378,18 +411,18 @@ export class OpenClawCodeChatopsStore {
   }
 
   async enqueue(run: OpenClawCodeQueuedRun, status = "Queued."): Promise<boolean> {
-    const state = await this.loadState();
-    if (
-      state.pendingApprovals.some((entry) => entry.issueKey === run.issueKey) ||
-      state.currentRun?.issueKey === run.issueKey ||
-      state.queue.some((entry) => entry.issueKey === run.issueKey)
-    ) {
-      return false;
-    }
-    state.queue.push(run);
-    state.statusByIssue[run.issueKey] = status;
-    await this.saveState(state);
-    return true;
+    return await this.mutateState((state) => {
+      if (
+        state.pendingApprovals.some((entry) => entry.issueKey === run.issueKey) ||
+        state.currentRun?.issueKey === run.issueKey ||
+        state.queue.some((entry) => entry.issueKey === run.issueKey)
+      ) {
+        return false;
+      }
+      state.queue.push(run);
+      state.statusByIssue[run.issueKey] = status;
+      return true;
+    });
   }
 
   async promotePendingApprovalToQueue(params: {
@@ -399,88 +432,89 @@ export class OpenClawCodeChatopsStore {
     fallbackNotifyTarget: string;
     status?: string;
   }): Promise<OpenClawCodeQueuedRun | undefined> {
-    const state = await this.loadState();
-    if (
-      state.currentRun?.issueKey === params.issueKey ||
-      state.queue.some((entry) => entry.issueKey === params.issueKey)
-    ) {
-      return undefined;
-    }
+    return await this.mutateState((state) => {
+      if (
+        state.currentRun?.issueKey === params.issueKey ||
+        state.queue.some((entry) => entry.issueKey === params.issueKey)
+      ) {
+        return undefined;
+      }
 
-    const pendingIndex = state.pendingApprovals.findIndex(
-      (entry) => entry.issueKey === params.issueKey,
-    );
-    const pending = pendingIndex >= 0 ? state.pendingApprovals[pendingIndex] : undefined;
-    if (pendingIndex >= 0) {
-      state.pendingApprovals.splice(pendingIndex, 1);
-    }
+      const pendingIndex = state.pendingApprovals.findIndex(
+        (entry) => entry.issueKey === params.issueKey,
+      );
+      const pending = pendingIndex >= 0 ? state.pendingApprovals[pendingIndex] : undefined;
+      if (pendingIndex >= 0) {
+        state.pendingApprovals.splice(pendingIndex, 1);
+      }
 
-    const queuedRun: OpenClawCodeQueuedRun = {
-      issueKey: params.issueKey,
-      request: params.request,
-      notifyChannel: pending?.notifyChannel ?? params.fallbackNotifyChannel,
-      notifyTarget: pending?.notifyTarget ?? params.fallbackNotifyTarget,
-    };
-    state.queue.push(queuedRun);
-    state.statusByIssue[params.issueKey] = params.status ?? "Queued.";
-    await this.saveState(state);
-    return queuedRun;
+      const queuedRun: OpenClawCodeQueuedRun = {
+        issueKey: params.issueKey,
+        request: params.request,
+        notifyChannel: pending?.notifyChannel ?? params.fallbackNotifyChannel,
+        notifyTarget: pending?.notifyTarget ?? params.fallbackNotifyTarget,
+      };
+      state.queue.push(queuedRun);
+      state.statusByIssue[params.issueKey] = params.status ?? "Queued.";
+      return queuedRun;
+    });
   }
 
   async removeQueued(issueKey: string, status = "Skipped before execution."): Promise<boolean> {
-    const state = await this.loadState();
-    const index = state.queue.findIndex((entry) => entry.issueKey === issueKey);
-    if (index < 0) {
-      return false;
-    }
-    state.queue.splice(index, 1);
-    state.statusByIssue[issueKey] = status;
-    await this.saveState(state);
-    return true;
+    return await this.mutateState((state) => {
+      const index = state.queue.findIndex((entry) => entry.issueKey === issueKey);
+      if (index < 0) {
+        return false;
+      }
+      state.queue.splice(index, 1);
+      state.statusByIssue[issueKey] = status;
+      return true;
+    });
   }
 
   async startNext(status = "Running."): Promise<OpenClawCodeQueuedRun | undefined> {
-    const state = await this.loadState();
-    if (state.currentRun) {
-      return undefined;
-    }
-    const next = state.queue.shift();
-    if (!next) {
-      return undefined;
-    }
-    state.currentRun = next;
-    state.statusByIssue[next.issueKey] = status;
-    await this.saveState(state);
-    return next;
+    return await this.mutateState((state) => {
+      if (state.currentRun) {
+        return undefined;
+      }
+      const next = state.queue.shift();
+      if (!next) {
+        return undefined;
+      }
+      state.currentRun = next;
+      state.statusByIssue[next.issueKey] = status;
+      return next;
+    });
   }
 
   async finishCurrent(issueKey: string, status: string): Promise<void> {
-    const state = await this.loadState();
-    if (state.currentRun?.issueKey === issueKey) {
-      state.currentRun = undefined;
-    }
-    state.statusByIssue[issueKey] = status;
-    await this.saveState(state);
+    await this.mutateState((state) => {
+      if (state.currentRun?.issueKey === issueKey) {
+        state.currentRun = undefined;
+      }
+      state.statusByIssue[issueKey] = status;
+    });
   }
 
   async recoverInterruptedRun(
     status = "Recovered after restart; waiting to resume.",
   ): Promise<OpenClawCodeQueuedRun | undefined> {
-    const state = await this.loadState();
-    const current = state.currentRun;
-    if (!current) {
-      return undefined;
-    }
-    state.currentRun = undefined;
-    if (!state.queue.some((entry) => entry.issueKey === current.issueKey)) {
-      state.queue.unshift(current);
-    }
-    state.statusByIssue[current.issueKey] = status;
-    await this.saveState(state);
-    return current;
+    return await this.mutateState((state) => {
+      const current = state.currentRun;
+      if (!current) {
+        return undefined;
+      }
+      state.currentRun = undefined;
+      if (!state.queue.some((entry) => entry.issueKey === current.issueKey)) {
+        state.queue.unshift(current);
+      }
+      state.statusByIssue[current.issueKey] = status;
+      return current;
+    });
   }
 
   async snapshot(): Promise<OpenClawCodeQueueState> {
+    await this.flushMutations();
     return await this.loadState();
   }
 }

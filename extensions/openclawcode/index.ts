@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { readRequestBodyWithLimit } from "../../src/infra/http-body.js";
-import { runMessageAction } from "../../src/infra/outbound/message-action-runner.js";
 import {
   OpenClawCodeChatopsStore,
   buildIssueApprovalMessage,
@@ -115,6 +114,7 @@ async function sendText(params: {
   target: string;
   text: string;
 }): Promise<void> {
+  const { runMessageAction } = await import("../../src/infra/outbound/message-action-runner.js");
   await runMessageAction({
     cfg: params.api.config,
     action: "send",
