@@ -23,9 +23,14 @@ export interface MergePullRequestRequest extends RepoRef {
   mergeMethod?: "merge" | "squash" | "rebase";
 }
 
+export interface ReadyForReviewRequest extends RepoRef {
+  pullNumber: number;
+}
+
 export interface GitHubIssueClient {
   fetchIssue(ref: RepoRef & { issueNumber: number }): Promise<IssueRef>;
   createDraftPullRequest(request: DraftPullRequestRequest): Promise<PullRequestRef>;
+  markPullRequestReadyForReview(request: ReadyForReviewRequest): Promise<void>;
   mergePullRequest(request: MergePullRequestRequest): Promise<void>;
 }
 
@@ -141,6 +146,20 @@ export class GitHubRestClient implements GitHubIssueClient {
       number: response.number,
       url: response.html_url
     };
+  }
+
+  async markPullRequestReadyForReview(request: ReadyForReviewRequest): Promise<void> {
+    if (!this.token) {
+      throw new Error(
+        "GitHub token missing. Set GITHUB_TOKEN or GH_TOKEN to update pull requests.",
+      );
+    }
+    await this.request(
+      `/repos/${request.owner}/${request.repo}/pulls/${request.pullNumber}/ready_for_review`,
+      {
+        method: "POST"
+      }
+    );
   }
 
   async mergePullRequest(request: MergePullRequestRequest): Promise<void> {

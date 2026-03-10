@@ -90,6 +90,18 @@ function formatAutoMergeFailure(error: unknown): string {
   return `Auto-merge failed: ${message}`;
 }
 
+function formatReadyForReviewFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("Resource not accessible by personal access token")) {
+    return [
+      "Ready-for-review failed: GitHub token cannot update pull requests.",
+      "Ensure GH_TOKEN/GITHUB_TOKEN has pull request write access.",
+      `Original error: ${message}`,
+    ].join(" ");
+  }
+  return `Ready-for-review failed: ${message}`;
+}
+
 export class GitHubPullRequestPublisher implements PullRequestPublisher {
   constructor(
     private readonly github: GitHubIssueClient,
@@ -228,6 +240,20 @@ export async function runIssueWorkflow(
     deps.merger
   ) {
     if (shouldAutoMerge(run)) {
+      try {
+        await deps.github.markPullRequestReadyForReview({
+          owner: request.owner,
+          repo: request.repo,
+          pullNumber: publishedPullRequest.number,
+        });
+        run = noteRun(run, "Draft PR marked ready for review", now);
+        await deps.store.save(run);
+      } catch (error) {
+        run = noteRun(run, formatReadyForReviewFailure(error), now);
+        await deps.store.save(run);
+        return run;
+      }
+
       try {
         await deps.merger.merge({
           run,
