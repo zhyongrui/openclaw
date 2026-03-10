@@ -30,6 +30,7 @@ class FakeGitHubClient implements GitHubIssueClient {
   published: PullRequestRef[] = [];
   promoted: number[] = [];
   merged: number[] = [];
+  closedIssues: number[] = [];
 
   async fetchIssue(ref: RepoRef & { issueNumber: number }): Promise<IssueRef> {
     return {
@@ -54,6 +55,10 @@ class FakeGitHubClient implements GitHubIssueClient {
 
   async mergePullRequest(request: { pullNumber: number }): Promise<void> {
     this.merged.push(request.pullNumber);
+  }
+
+  async closeIssue(request: { issueNumber: number }): Promise<void> {
+    this.closedIssues.push(request.issueNumber);
   }
 }
 
@@ -149,6 +154,14 @@ class FailingMerger implements PullRequestMerger {
   }
 }
 
+class FailingIssueCloseGitHubClient extends FakeGitHubClient {
+  override async closeIssue(): Promise<void> {
+    throw new Error(
+      'GitHub API request failed: 403 Forbidden {"message":"Resource not accessible by personal access token"}',
+    );
+  }
+}
+
 class NoCommitPublisher implements PullRequestPublisher {
   async publish(): Promise<PullRequestRef> {
     throw new Error(
@@ -218,9 +231,11 @@ describe("runIssueWorkflow", () => {
       expect(run.history).toContain(
         "Pull request opened: https://github.com/zhyongrui/openclawcode/pull/99",
       );
+      expect(run.history).toContain("Issue #55 closed automatically after merge.");
       expect(merger.merged).toBe(1);
       expect(github.promoted).toEqual([]);
       expect(publisher.drafts).toEqual([false]);
+      expect(github.closedIssues).toEqual([55]);
 
       const savedRun = JSON.parse(
         await fs.readFile(path.join(stateDir, "runs", `${run.id}.json`), "utf8"),
@@ -232,6 +247,75 @@ describe("runIssueWorkflow", () => {
       expect(savedRun.buildResult?.issueClassification).toBe("command-layer");
       expect(savedRun.buildResult?.scopeCheck?.summary).toBe(
         "Scope check passed for command-layer issue.",
+      );
+      expect(savedRun.history).toContain("Issue #55 closed automatically after merge.");
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps merged runs usable when issue close fails after auto-merge", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-63",
+        worktreePath: "/repo/.openclawcode/worktrees/run-63",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const merger = new FakeMerger();
+      const github = new FailingIssueCloseGitHubClient();
+      const publisher = new FakePublisher({
+        number: 105,
+        url: "https://github.com/zhyongrui/openclawcode/pull/105",
+      });
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 63,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          openPullRequest: true,
+          mergeOnApprove: true,
+        },
+        {
+          github,
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder(),
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          publisher,
+          merger,
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.stage).toBe("merged");
+      expect(run.history).toContain("Pull request merged automatically");
+      expect(run.history.at(-1)).toContain(
+        "Issue close failed for #63: GitHub token cannot update issues.",
+      );
+      expect(run.history.at(-1)).toContain("Ensure GH_TOKEN/GITHUB_TOKEN has issues write access.");
+      expect(merger.merged).toBe(1);
+
+      const savedRun = JSON.parse(
+        await fs.readFile(path.join(stateDir, "runs", `${run.id}.json`), "utf8"),
+      ) as typeof run;
+      expect(savedRun.stage).toBe("merged");
+      expect(savedRun.history.at(-1)).toContain(
+        "Issue close failed for #63: GitHub token cannot update issues.",
       );
     } finally {
       await fs.rm(stateDir, { recursive: true, force: true });

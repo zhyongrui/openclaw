@@ -24,6 +24,10 @@ export interface MergePullRequestRequest extends RepoRef {
   mergeMethod?: "merge" | "squash" | "rebase";
 }
 
+export interface CloseIssueRequest extends RepoRef {
+  issueNumber: number;
+}
+
 export interface ReadyForReviewRequest extends RepoRef {
   pullNumber: number;
 }
@@ -33,6 +37,7 @@ export interface GitHubIssueClient {
   createDraftPullRequest(request: DraftPullRequestRequest): Promise<PullRequestRef>;
   markPullRequestReadyForReview(request: ReadyForReviewRequest): Promise<void>;
   mergePullRequest(request: MergePullRequestRequest): Promise<void>;
+  closeIssue(request: CloseIssueRequest): Promise<void>;
 }
 
 type GitHubIssueResponse = {
@@ -185,5 +190,17 @@ export class GitHubRestClient implements GitHubIssueClient {
         }),
       },
     );
+  }
+
+  async closeIssue(request: CloseIssueRequest): Promise<void> {
+    if (!this.token) {
+      throw new Error("GitHub token missing. Set GITHUB_TOKEN or GH_TOKEN to close issues.");
+    }
+    await this.request(`/repos/${request.owner}/${request.repo}/issues/${request.issueNumber}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        state: "closed",
+      }),
+    });
   }
 }

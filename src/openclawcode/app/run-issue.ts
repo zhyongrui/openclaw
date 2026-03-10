@@ -90,6 +90,22 @@ function formatAutoMergeFailure(error: unknown): string {
   return `Auto-merge failed: ${message}`;
 }
 
+function formatIssueClosedNote(issueNumber: number): string {
+  return `Issue #${issueNumber} closed automatically after merge.`;
+}
+
+function formatIssueCloseFailure(issueNumber: number, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("Resource not accessible by personal access token")) {
+    return [
+      `Issue close failed for #${issueNumber}: GitHub token cannot update issues.`,
+      "Ensure GH_TOKEN/GITHUB_TOKEN has issues write access.",
+      `Original error: ${message}`,
+    ].join(" ");
+  }
+  return `Issue close failed for #${issueNumber}: ${message}`;
+}
+
 export class GitHubPullRequestPublisher implements PullRequestPublisher {
   constructor(
     private readonly github: GitHubIssueClient,
@@ -245,6 +261,17 @@ export async function runIssueWorkflow(
           pullRequest: publishedPullRequest,
         });
         run = transitionRun(run, "merged", "Pull request merged automatically", now);
+        await deps.store.save(run);
+        try {
+          await deps.github.closeIssue({
+            owner: request.owner,
+            repo: request.repo,
+            issueNumber: request.issueNumber,
+          });
+          run = noteRun(run, formatIssueClosedNote(request.issueNumber), now);
+        } catch (error) {
+          run = noteRun(run, formatIssueCloseFailure(request.issueNumber, error), now);
+        }
       } catch (error) {
         run = noteRun(run, formatAutoMergeFailure(error), now);
       }
