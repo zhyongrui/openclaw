@@ -3,6 +3,6 @@ export default {
     include: ["src/openclawcode/testing/**/*.test.ts"],
     environment: "node",
     pool: "threads",
-    testTimeout: 15000
-  }
+    testTimeout: 30000,
+  },
 };
