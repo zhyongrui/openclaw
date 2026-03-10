@@ -3,25 +3,93 @@
 ## Purpose
 
 `openclawcode` remains the main repository.
-The OpenClaw adapter lives in this repository as an integration layer.
+The OpenClaw adapter also lives in this repository, but it stays as a thin
+integration layer instead of becoming a second workflow core.
 
-This is intentionally not a third repository.
-It is also intentionally not the main place for product logic.
+This is intentionally not a third repository, and it should not depend on
+upstream `openclaw` accepting custom product logic.
+
+## What The Existing OpenClaw Code Already Gives Us
+
+After reading the current codebase, the important seams are already present:
+
+- plugin HTTP routes:
+  - `src/plugins/types.ts`
+  - `src/gateway/server/plugins-http.ts`
+- plugin startup services:
+  - `src/plugins/types.ts`
+  - `src/plugins/services.ts`
+- plugin commands that bypass the LLM:
+  - `src/plugins/commands.ts`
+  - `src/auto-reply/reply/commands-plugin.ts`
+- plugin subagent runtime for controlled agent execution:
+  - `src/gateway/server-plugins.ts`
+  - `src/plugins/runtime/types.ts`
+- system events / heartbeat wakeups:
+  - `src/plugins/runtime/runtime-system.ts`
+
+This means the desired product loop does not require broad `openclaw` core
+rewrites.
 
 ## Recommended Boundary
 
-- `src/`: workflow core, orchestrator, persistence, policy, worktree
+- `src/openclawcode/`: workflow core, orchestrator, persistence, policy, worktree
 - `src/integrations/openclaw-plugin/`: OpenClaw-facing adapter code
 
-This keeps one product repository while still avoiding uncontrolled spreading
-of OpenClaw-specific wiring into the workflow core.
+That boundary keeps product rules in one place while allowing chat-driven
+operation from the forked OpenClaw runtime.
+
+## Minimal-Core-Change Architecture
+
+The recommended implementation path is:
+
+1. GitHub sends an issue webhook to a plugin HTTP route
+2. the plugin validates repo/action/labels and creates a pending approval item
+3. the plugin notifies the user in the configured chat channel
+4. the user replies with an explicit command such as:
+   - `/occode-start owner/repo#123`
+   - `/occode-skip owner/repo#123`
+   - `/occode-status owner/repo#123`
+5. the plugin converts `/occode-start` into an `openclawcode` run request
+6. the workflow core executes the issue run in an isolated worktree
+7. the plugin posts status back to chat:
+   - started
+   - changes requested
+   - ready for review
+   - merged
+   - failed
+
+This deliberately avoids the first version depending on per-channel interactive
+buttons. Plain commands are more portable across Telegram, Discord, Slack,
+Signal, WhatsApp, and future channels.
+
+## Why This Matches The Product Goal
+
+The user-facing product stays the same:
+
+- GitHub issue appears
+- user gets a chat notification
+- user decides whether to start now
+- `openclawcode` implements the issue
+- tests run
+- PR is opened
+- review/verifier runs
+- merge happens under policy
+- chat gets the final notification
+
+The only adjustment is implementation strategy:
+
+- `openclawcode` remains the execution engine
+- the OpenClaw plugin provides the webhook, command, notification, and approval shell
 
 ## What Lives In The Plugin Adapter
 
-- queue ingress from `openclaw code ...`
-- queue persistence and lifecycle transitions
-- background queue drain service
-- plugin definition and manifest template
+- GitHub webhook ingress
+- repo-to-chat routing config
+- pending approval records
+- plugin commands for approve / skip / status
+- queue or background service for long-running execution
+- chat notification formatting
 
 ## What Does Not Live In The Plugin Adapter
 
@@ -29,8 +97,81 @@ of OpenClaw-specific wiring into the workflow core.
 - build / verify domain model
 - merge policy
 - worktree orchestration logic
+- PR drafting rules
+- issue-to-stage state machine
 
-Those stay in the core `openclawcode` modules.
+Those stay in `src/openclawcode/`.
+
+## First Concrete Adapter Slice
+
+The first adapter slice should be small and deterministic:
+
+1. define repo config for one repository
+2. accept GitHub `issues` webhooks for:
+   - `opened`
+   - `reopened`
+   - `labeled`
+3. filter by trigger labels and skip labels
+4. send a plain-text approval prompt into chat
+5. accept `/occode-start`, `/occode-skip`, and `/occode-status`
+6. translate `/occode-start` into a stable workflow launch request
+
+This is enough to prove the complete chat approval loop without committing yet
+to channel-specific button UIs.
+
+## Suggested Config Shape
+
+The adapter config should stay plugin-scoped and repo-scoped.
+
+Example direction:
+
+```json5
+{
+  plugins: {
+    entries: {
+      openclawcode: {
+        enabled: true,
+        github: {
+          webhookSecretEnv: "OPENCLAWCODE_GITHUB_WEBHOOK_SECRET",
+        },
+        repos: [
+          {
+            owner: "zhyongrui",
+            repo: "openclawcode",
+            repoRoot: "/home/zyr/pros/openclawcode",
+            baseBranch: "main",
+            notifyChannel: "telegram",
+            notifyTarget: "chat:123456",
+            builderAgent: "main",
+            verifierAgent: "main",
+            testCommands: ["pnpm exec vitest run --config vitest.openclawcode.config.mjs"],
+            triggerLabels: ["openclawcode:auto"],
+            skipLabels: ["openclawcode:manual-only"],
+            openPullRequest: true,
+            mergeOnApprove: true,
+          },
+        ],
+      },
+    },
+  },
+}
+```
+
+## Planned Adapter Modules
+
+These modules are the right first landing points:
+
+- `src/integrations/openclaw-plugin/chatops.ts`
+  - webhook intake decisions
+  - chat command parsing
+  - run-request shaping
+  - status-message formatting
+- `src/integrations/openclaw-plugin/plugin.ts`
+  - future plugin registration entrypoint
+- `src/integrations/openclaw-plugin/store.ts`
+  - future pending approvals / queue records
+- `src/integrations/openclaw-plugin/github-webhook.ts`
+  - future signature verification and route handler
 
 ## Release Model
 
