@@ -1,3 +1,5 @@
+import path from "node:path";
+import process from "node:process";
 import type { IssueRef, WorkflowRun } from "../../openclawcode/contracts/index.js";
 
 const SUPPORTED_ISSUE_ACTIONS = new Set(["opened", "reopened", "labeled"]);
@@ -36,6 +38,12 @@ export interface OpenClawCodeChatopsRepoConfig {
   mergeOnApprove?: boolean;
 }
 
+export interface OpenClawCodePluginConfig {
+  githubWebhookSecretEnv?: string;
+  pollIntervalMs?: number;
+  repos: OpenClawCodeChatopsRepoConfig[];
+}
+
 export interface ChatopsIssueIntakeDecision {
   accept: boolean;
   reason: string;
@@ -67,6 +75,29 @@ export interface OpenClawCodeChatopsRunRequest {
 
 function normalizeValue(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((entry) => readString(entry)).filter((entry): entry is string => Boolean(entry));
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readPositiveInteger(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const rounded = Math.floor(value);
+  return rounded > 0 ? rounded : undefined;
 }
 
 function collectIssueLabels(labels: Array<{ name: string }> | undefined): string[] {
@@ -116,6 +147,63 @@ function hasMatchingLabel(labels: string[], filters: string[]): boolean {
 
 export function formatIssueKey(issue: Pick<IssueRef, "owner" | "repo" | "number">): string {
   return `${issue.owner}/${issue.repo}#${issue.number}`;
+}
+
+export function resolveOpenClawCodePluginConfig(
+  pluginConfig: Record<string, unknown> | undefined,
+): OpenClawCodePluginConfig {
+  const reposRaw = Array.isArray(pluginConfig?.repos) ? pluginConfig.repos : [];
+  const repos: OpenClawCodeChatopsRepoConfig[] = [];
+
+  for (const entry of reposRaw) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const candidate = entry as Record<string, unknown>;
+    const owner = readString(candidate.owner);
+    const repo = readString(candidate.repo);
+    const repoRoot = readString(candidate.repoRoot);
+    const baseBranch = readString(candidate.baseBranch) ?? "main";
+    const notifyChannel = readString(candidate.notifyChannel);
+    const notifyTarget = readString(candidate.notifyTarget);
+    const builderAgent = readString(candidate.builderAgent);
+    const verifierAgent = readString(candidate.verifierAgent);
+    const testCommands = readStringArray(candidate.testCommands);
+    if (
+      !owner ||
+      !repo ||
+      !repoRoot ||
+      !notifyChannel ||
+      !notifyTarget ||
+      !builderAgent ||
+      !verifierAgent ||
+      testCommands.length === 0
+    ) {
+      continue;
+    }
+
+    repos.push({
+      owner,
+      repo,
+      repoRoot,
+      baseBranch,
+      notifyChannel,
+      notifyTarget,
+      builderAgent,
+      verifierAgent,
+      testCommands,
+      triggerLabels: readStringArray(candidate.triggerLabels),
+      skipLabels: readStringArray(candidate.skipLabels),
+      openPullRequest: readBoolean(candidate.openPullRequest),
+      mergeOnApprove: readBoolean(candidate.mergeOnApprove),
+    });
+  }
+
+  return {
+    githubWebhookSecretEnv: readString(pluginConfig?.githubWebhookSecretEnv),
+    pollIntervalMs: readPositiveInteger(pluginConfig?.pollIntervalMs),
+    repos,
+  };
 }
 
 export function decideIssueWebhookIntake(params: {
@@ -296,6 +384,79 @@ export function buildRunRequestFromCommand(params: {
     openPullRequest: config.openPullRequest !== false,
     mergeOnApprove: config.mergeOnApprove === true,
   };
+}
+
+export function buildOpenClawCodeRunArgv(request: OpenClawCodeChatopsRunRequest): string[] {
+  const argv = [
+    process.execPath,
+    path.join(request.repoRoot, "scripts/run-node.mjs"),
+    "code",
+    "run",
+    "--issue",
+    String(request.issueNumber),
+    "--owner",
+    request.owner,
+    "--repo",
+    request.repo,
+    "--repo-root",
+    request.repoRoot,
+    "--base-branch",
+    request.baseBranch,
+    "--branch-name",
+    request.branchName,
+    "--builder-agent",
+    request.builderAgent,
+    "--verifier-agent",
+    request.verifierAgent,
+  ];
+
+  for (const command of request.testCommands) {
+    argv.push("--test", command);
+  }
+
+  if (request.openPullRequest) {
+    argv.push("--open-pr");
+  }
+  if (request.mergeOnApprove) {
+    argv.push("--merge-on-approve");
+  }
+
+  argv.push("--json");
+  return argv;
+}
+
+export function extractWorkflowRunFromCommandOutput(output: string): WorkflowRun | null {
+  const trimmed = output.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parseCandidate = (candidate: string): WorkflowRun | null => {
+    try {
+      return JSON.parse(candidate) as WorkflowRun;
+    } catch {
+      return null;
+    }
+  };
+
+  const direct = parseCandidate(trimmed);
+  if (direct) {
+    return direct;
+  }
+
+  const lines = trimmed.split("\n");
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (!lines[index]?.trim().startsWith("{")) {
+      continue;
+    }
+    const candidate = lines.slice(index).join("\n").trim();
+    const parsed = parseCandidate(candidate);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
 function formatStageLabel(stage: WorkflowRun["stage"]): string {

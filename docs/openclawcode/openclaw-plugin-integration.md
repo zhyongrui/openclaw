@@ -157,7 +157,29 @@ Example direction:
 }
 ```
 
-## Planned Adapter Modules
+## Implemented So Far
+
+The repository now includes:
+
+- `src/integrations/openclaw-plugin/chatops.ts`
+  - webhook intake decisions
+  - chat command parsing
+  - run-request shaping
+  - run-command argv generation
+  - workflow JSON extraction
+  - status-message formatting
+- `extensions/openclawcode/index.ts`
+  - bundled plugin entrypoint
+  - GitHub issue webhook route at `/plugins/openclawcode/github`
+  - `/occode-start`, `/occode-status`, `/occode-skip`
+  - sequential background runner service
+- `extensions/openclawcode/openclaw.plugin.json`
+  - plugin config schema for repo mappings
+
+This is still an early slice, but it is now runtime-facing code instead of
+only a design note.
+
+## Planned Next Modules
 
 These modules are the right first landing points:
 
@@ -166,12 +188,14 @@ These modules are the right first landing points:
   - chat command parsing
   - run-request shaping
   - status-message formatting
-- `src/integrations/openclaw-plugin/plugin.ts`
-  - future plugin registration entrypoint
 - `src/integrations/openclaw-plugin/store.ts`
   - future pending approvals / queue records
 - `src/integrations/openclaw-plugin/github-webhook.ts`
   - future signature verification and route handler
+
+The current bundled extension keeps queue and status state in memory.
+The next hardening step is persisted approval/run state so gateway restarts do
+not lose queued work or pending approvals.
 
 ## Release Model
 

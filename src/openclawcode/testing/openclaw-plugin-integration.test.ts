@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   buildIssueApprovalMessage,
+  buildOpenClawCodeRunArgv,
   buildRunRequestFromCommand,
   buildRunStatusMessage,
   decideIssueWebhookIntake,
+  extractWorkflowRunFromCommandOutput,
   parseChatopsCommand,
+  resolveOpenClawCodePluginConfig,
 } from "../../integrations/openclaw-plugin/index.js";
 import type { WorkflowRun } from "../contracts/index.js";
 
@@ -213,6 +216,48 @@ describe("openclaw plugin integration helpers", () => {
       openPullRequest: true,
       mergeOnApprove: true,
     });
+  });
+
+  it("resolves plugin config and builds the final code-run argv", () => {
+    const pluginConfig = resolveOpenClawCodePluginConfig({
+      githubWebhookSecretEnv: "OPENCLAWCODE_GITHUB_WEBHOOK_SECRET",
+      pollIntervalMs: 5000,
+      repos: [repoConfig],
+    });
+
+    expect(pluginConfig.githubWebhookSecretEnv).toBe("OPENCLAWCODE_GITHUB_WEBHOOK_SECRET");
+    expect(pluginConfig.pollIntervalMs).toBe(5000);
+    expect(pluginConfig.repos).toHaveLength(1);
+
+    const argv = buildOpenClawCodeRunArgv({
+      owner: "zhyongrui",
+      repo: "openclawcode",
+      issueNumber: 47,
+      repoRoot: "/home/zyr/pros/openclawcode",
+      baseBranch: "main",
+      branchName: "openclawcode/issue-47",
+      builderAgent: "main",
+      verifierAgent: "main",
+      testCommands: ["pnpm exec vitest run --config vitest.openclawcode.config.mjs"],
+      openPullRequest: true,
+      mergeOnApprove: true,
+    });
+
+    expect(argv[1]).toContain("scripts/run-node.mjs");
+    expect(argv).toContain("--issue");
+    expect(argv).toContain("47");
+    expect(argv).toContain("--merge-on-approve");
+    expect(argv).toContain("--json");
+  });
+
+  it("extracts workflow json even when logs appear before the payload", () => {
+    const run = createRun();
+    const parsed = extractWorkflowRunFromCommandOutput(
+      `info: starting workflow\n${JSON.stringify(run, null, 2)}`,
+    );
+
+    expect(parsed?.id).toBe(run.id);
+    expect(parsed?.draftPullRequest?.url).toBe(run.draftPullRequest?.url);
   });
 
   it("formats run status updates for chat notifications", () => {
