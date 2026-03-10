@@ -193,9 +193,16 @@ These modules are the right first landing points:
 - `src/integrations/openclaw-plugin/github-webhook.ts`
   - future signature verification and route handler
 
-The current bundled extension keeps queue and status state in memory.
-The next hardening step is persisted approval/run state so gateway restarts do
-not lose queued work or pending approvals.
+The bundled extension now persists queue and status state on disk.
+
+Current behavior:
+
+- queued runs survive gateway restarts
+- current in-flight runs are recovered back to the queue on restart
+- latest per-issue status survives restart
+
+The next hardening step is broader persisted approval state plus reconciliation
+against GitHub and local run records.
 
 ## Release Model
 

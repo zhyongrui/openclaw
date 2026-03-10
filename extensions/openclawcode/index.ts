@@ -4,6 +4,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { readRequestBodyWithLimit } from "../../src/infra/http-body.js";
 import { runMessageAction } from "../../src/infra/outbound/message-action-runner.js";
 import {
+  OpenClawCodeChatopsStore,
   buildIssueApprovalMessage,
   buildOpenClawCodeRunArgv,
   buildRunRequestFromCommand,
@@ -15,22 +16,12 @@ import {
   resolveOpenClawCodePluginConfig,
   type GitHubIssueWebhookEvent,
   type OpenClawCodeChatopsRepoConfig,
-  type OpenClawCodeChatopsRunRequest,
 } from "../../src/integrations/openclaw-plugin/index.js";
 
 const DEFAULT_POLL_INTERVAL_MS = 3_000;
 const DEFAULT_RUN_TIMEOUT_MS = 30 * 60_000;
 const DEFAULT_WEBHOOK_MAX_BYTES = 256 * 1024;
 
-type QueuedRun = {
-  request: OpenClawCodeChatopsRunRequest;
-  notifyChannel: string;
-  notifyTarget: string;
-  issueKey: string;
-};
-
-const queue: QueuedRun[] = [];
-const statusByIssue = new Map<string, string>();
 let workerActive = false;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -116,6 +107,7 @@ function verifyGithubSignature(params: {
 
 async function handleGithubWebhook(
   api: OpenClawPluginApi,
+  store: OpenClawCodeChatopsStore,
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<boolean> {
@@ -201,7 +193,7 @@ async function handleGithubWebhook(
     target: matchingRepo.notifyTarget,
     text: approvalMessage,
   });
-  statusByIssue.set(formatIssueKey(decision.issue), "Awaiting chat approval.");
+  await store.setStatus(formatIssueKey(decision.issue), "Awaiting chat approval.");
 
   res.statusCode = 202;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -209,18 +201,20 @@ async function handleGithubWebhook(
   return true;
 }
 
-async function processNextQueuedRun(api: OpenClawPluginApi): Promise<void> {
+async function processNextQueuedRun(
+  api: OpenClawPluginApi,
+  store: OpenClawCodeChatopsStore,
+): Promise<void> {
   if (workerActive) {
     return;
   }
-  const next = queue.shift();
+  const next = await store.startNext();
   if (!next) {
     return;
   }
 
   workerActive = true;
   try {
-    statusByIssue.set(next.issueKey, "Running.");
     await sendText({
       api,
       channel: next.notifyChannel,
@@ -237,7 +231,7 @@ async function processNextQueuedRun(api: OpenClawPluginApi): Promise<void> {
 
     if (result.code !== 0) {
       const failure = summarizeFailure(result.stderr, result.stdout);
-      statusByIssue.set(next.issueKey, `Failed.\n${failure}`);
+      await store.finishCurrent(next.issueKey, `Failed.\n${failure}`);
       await sendText({
         api,
         channel: next.notifyChannel,
@@ -249,7 +243,7 @@ async function processNextQueuedRun(api: OpenClawPluginApi): Promise<void> {
 
     const run = extractWorkflowRunFromCommandOutput(result.stdout);
     if (!run) {
-      statusByIssue.set(next.issueKey, "Completed, but workflow JSON could not be parsed.");
+      await store.finishCurrent(next.issueKey, "Completed, but workflow JSON could not be parsed.");
       await sendText({
         api,
         channel: next.notifyChannel,
@@ -260,7 +254,7 @@ async function processNextQueuedRun(api: OpenClawPluginApi): Promise<void> {
     }
 
     const statusMessage = buildRunStatusMessage(run);
-    statusByIssue.set(next.issueKey, statusMessage);
+    await store.finishCurrent(next.issueKey, statusMessage);
     await sendText({
       api,
       channel: next.notifyChannel,
@@ -269,7 +263,7 @@ async function processNextQueuedRun(api: OpenClawPluginApi): Promise<void> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    statusByIssue.set(next.issueKey, `Failed.\n${message}`);
+    await store.finishCurrent(next.issueKey, `Failed.\n${message}`);
     await sendText({
       api,
       channel: next.notifyChannel,
@@ -281,30 +275,17 @@ async function processNextQueuedRun(api: OpenClawPluginApi): Promise<void> {
   }
 }
 
-function enqueueRun(entry: QueuedRun): void {
-  queue.push(entry);
-  statusByIssue.set(entry.issueKey, "Queued.");
-}
-
-function removeQueuedRun(issueKey: string): boolean {
-  const index = queue.findIndex((entry) => entry.issueKey === issueKey);
-  if (index < 0) {
-    return false;
-  }
-  queue.splice(index, 1);
-  statusByIssue.set(issueKey, "Skipped before execution.");
-  return true;
-}
-
 export default {
   id: "openclawcode",
   name: "OpenClawCode",
   description: "GitHub issue chatops adapter for the openclawcode workflow.",
   register(api: OpenClawPluginApi) {
+    const store = OpenClawCodeChatopsStore.fromStateDir(api.runtime.state.resolveStateDir());
+
     api.registerHttpRoute({
       path: "/plugins/openclawcode/github",
       auth: "plugin",
-      handler: async (req, res) => await handleGithubWebhook(api, req, res),
+      handler: async (req, res) => await handleGithubWebhook(api, store, req, res),
     });
 
     api.registerCommand({
@@ -338,9 +319,9 @@ export default {
           repo: command.issue.repo,
           number: command.issue.number,
         });
-        const currentStatus = statusByIssue.get(issueKey);
-        if (currentStatus === "Queued." || currentStatus === "Running.") {
-          return { text: `${issueKey} is already in progress.\n${currentStatus}` };
+        const currentStatus = await store.getStatus(issueKey);
+        if (await store.isQueuedOrRunning(issueKey)) {
+          return { text: `${issueKey} is already in progress.\n${currentStatus ?? "Queued."}` };
         }
 
         const request = buildRunRequestFromCommand({
@@ -348,12 +329,15 @@ export default {
           config: repoConfig,
         });
         const notifyTarget = ctx.from?.trim() || ctx.senderId?.trim() || repoConfig.notifyTarget;
-        enqueueRun({
+        const enqueued = await store.enqueue({
           request,
           issueKey,
           notifyChannel: repoConfig.notifyChannel,
           notifyTarget,
         });
+        if (!enqueued) {
+          return { text: `${issueKey} is already queued or running.` };
+        }
 
         return { text: `Queued ${issueKey}. I will post status updates here.` };
       },
@@ -385,7 +369,8 @@ export default {
         });
         return {
           text:
-            statusByIssue.get(issueKey) ?? `No openclawcode status recorded yet for ${issueKey}.`,
+            (await store.getStatus(issueKey)) ??
+            `No openclawcode status recorded yet for ${issueKey}.`,
         };
       },
     });
@@ -414,7 +399,7 @@ export default {
           repo: command.issue.repo,
           number: command.issue.number,
         });
-        return removeQueuedRun(issueKey)
+        return (await store.removeQueued(issueKey))
           ? { text: `Skipped queued run for ${issueKey}.` }
           : { text: `No queued run found for ${issueKey}.` };
       },
@@ -425,8 +410,9 @@ export default {
       start: async () => {
         const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
         const intervalMs = pluginConfig.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+        await store.recoverInterruptedRun();
         pollTimer = setInterval(() => {
-          void processNextQueuedRun(api);
+          void processNextQueuedRun(api, store);
         }, intervalMs);
         pollTimer.unref?.();
       },
