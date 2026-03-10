@@ -1,5 +1,6 @@
 import path from "node:path";
-import { FileSystemWorkflowRunStore, type WorkflowRun } from "../../openclawcode/index.js";
+import type { WorkflowRun } from "../../openclawcode/contracts/index.js";
+import { FileSystemWorkflowRunStore } from "../../openclawcode/persistence/index.js";
 import type { OpenClawCodeChatopsRepoConfig } from "./chatops.js";
 import { buildRunStatusMessage, formatIssueKey } from "./chatops.js";
 

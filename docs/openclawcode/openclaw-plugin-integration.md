@@ -248,6 +248,14 @@ It performs one explicit reconciliation pass across:
 - persisted issue snapshots
 - GitHub merged-PR status for tracked pull requests
 
+One real-gateway runtime constraint is now explicit:
+
+- the plugin adapter should avoid importing the broad
+  `src/openclawcode/index.ts` barrel in production plugin paths
+- prefer direct imports from the exact workflow modules needed
+- this prevents barrel-export collisions from surfacing in the `jiti` plugin
+  loader during real gateway startup
+
 The bundled extension now also has direct plugin-behavior tests in:
 
 - `extensions/openclawcode/index.test.ts`
