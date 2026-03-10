@@ -99,6 +99,14 @@ function formatReadyForReviewFailure(error: unknown): string {
       `Original error: ${message}`,
     ].join(" ");
   }
+  if (message.includes("404 Not Found")) {
+    return [
+      "Ready-for-review failed: GitHub token may not be allowed to update pull requests.",
+      "GitHub can mask this permission failure as 404 Not Found on draft-promotion requests.",
+      "Ensure GH_TOKEN/GITHUB_TOKEN has pull request write access.",
+      `Original error: ${message}`,
+    ].join(" ");
+  }
   return `Ready-for-review failed: ${message}`;
 }
 

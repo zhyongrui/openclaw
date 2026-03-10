@@ -163,6 +163,12 @@ class FailingReadyForReviewGitHubClient extends FakeGitHubClient {
   }
 }
 
+class NotFoundReadyForReviewGitHubClient extends FakeGitHubClient {
+  override async markPullRequestReadyForReview(): Promise<void> {
+    throw new Error('GitHub API request failed: 404 Not Found {"message":"Not Found"}');
+  }
+}
+
 describe("runIssueWorkflow", () => {
   it("publishes and merges when verification approves and merge is enabled", async () => {
     const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
@@ -421,6 +427,76 @@ describe("runIssueWorkflow", () => {
       expect(savedRun.stage).toBe("ready-for-human-review");
       expect(savedRun.history.at(-1)).toContain(
         "Ready-for-review failed: GitHub token cannot update pull requests.",
+      );
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("surfaces masked 404 ready-for-review failures with token guidance", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-62",
+        worktreePath: "/repo/.openclawcode/worktrees/run-62",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const merger = new FakeMerger();
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 62,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          openPullRequest: true,
+          mergeOnApprove: true,
+        },
+        {
+          github: new NotFoundReadyForReviewGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder(),
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          publisher: new FakePublisher({
+            number: 104,
+            url: "https://github.com/zhyongrui/openclawcode/pull/104",
+          }),
+          merger,
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.stage).toBe("ready-for-human-review");
+      expect(merger.merged).toBe(0);
+      expect(run.history.at(-1)).toContain(
+        "Ready-for-review failed: GitHub token may not be allowed to update pull requests.",
+      );
+      expect(run.history.at(-1)).toContain(
+        "GitHub can mask this permission failure as 404 Not Found on draft-promotion requests.",
+      );
+      expect(run.history.at(-1)).toContain(
+        "Ensure GH_TOKEN/GITHUB_TOKEN has pull request write access.",
+      );
+
+      const savedRun = JSON.parse(
+        await fs.readFile(path.join(stateDir, "runs", `${run.id}.json`), "utf8"),
+      ) as typeof run;
+      expect(savedRun.stage).toBe("ready-for-human-review");
+      expect(savedRun.history.at(-1)).toContain(
+        "Ready-for-review failed: GitHub token may not be allowed to update pull requests.",
       );
     } finally {
       await fs.rm(stateDir, { recursive: true, force: true });
