@@ -64,6 +64,18 @@ function shouldAutoMerge(run: WorkflowRun): boolean {
   );
 }
 
+function formatAutoMergeFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("Resource not accessible by personal access token")) {
+    return [
+      "Auto-merge failed: GitHub token cannot merge pull requests.",
+      "Ensure GH_TOKEN/GITHUB_TOKEN has pull request and contents write access.",
+      `Original error: ${message}`,
+    ].join(" ");
+  }
+  return `Auto-merge failed: ${message}`;
+}
+
 export class GitHubPullRequestPublisher implements PullRequestPublisher {
   constructor(
     private readonly github: GitHubIssueClient,
@@ -191,15 +203,19 @@ export async function runIssueWorkflow(
     deps.merger
   ) {
     if (shouldAutoMerge(run)) {
-      await deps.merger.merge({
-        run,
-        repo: {
-          owner: request.owner,
-          repo: request.repo,
-        },
-        pullRequest: publishedPullRequest,
-      });
-      run = transitionRun(run, "merged", "Pull request merged automatically", now);
+      try {
+        await deps.merger.merge({
+          run,
+          repo: {
+            owner: request.owner,
+            repo: request.repo,
+          },
+          pullRequest: publishedPullRequest,
+        });
+        run = transitionRun(run, "merged", "Pull request merged automatically", now);
+      } catch (error) {
+        run = noteRun(run, formatAutoMergeFailure(error), now);
+      }
     } else {
       run = noteRun(
         run,
