@@ -40,7 +40,47 @@ function parseIssueNumber(value: string): number {
   return parsed;
 }
 
+function resolveAutoMergePolicy(run: WorkflowRun): {
+  autoMergePolicyEligible: boolean;
+  autoMergePolicyReason: string;
+} {
+  if (run.stage !== "ready-for-human-review" && run.stage !== "merged") {
+    return {
+      autoMergePolicyEligible: false,
+      autoMergePolicyReason: "Not eligible for auto-merge: verification has not approved the run.",
+    };
+  }
+
+  if (run.stage !== "merged" && run.verificationReport?.decision !== "approve-for-human-review") {
+    return {
+      autoMergePolicyEligible: false,
+      autoMergePolicyReason: "Not eligible for auto-merge: verification has not approved the run.",
+    };
+  }
+
+  if (run.buildResult?.issueClassification !== "command-layer") {
+    return {
+      autoMergePolicyEligible: false,
+      autoMergePolicyReason:
+        "Not eligible for auto-merge: the run is not classified as command-layer.",
+    };
+  }
+
+  if (run.buildResult.scopeCheck?.ok === false) {
+    return {
+      autoMergePolicyEligible: false,
+      autoMergePolicyReason: "Not eligible for auto-merge: the scope check did not pass.",
+    };
+  }
+
+  return {
+    autoMergePolicyEligible: true,
+    autoMergePolicyReason: "Eligible for auto-merge under the current command-layer policy.",
+  };
+}
+
 function toWorkflowRunJson(run: WorkflowRun) {
+  const autoMergePolicy = resolveAutoMergePolicy(run);
   return {
     ...run,
     changedFiles: run.buildResult?.changedFiles ?? [],
@@ -50,6 +90,8 @@ function toWorkflowRunJson(run: WorkflowRun) {
     draftPullRequestUrl: run.draftPullRequest?.url ?? null,
     verificationDecision: run.verificationReport?.decision ?? null,
     verificationSummary: run.verificationReport?.summary ?? null,
+    autoMergePolicyEligible: autoMergePolicy.autoMergePolicyEligible,
+    autoMergePolicyReason: autoMergePolicy.autoMergePolicyReason,
   };
 }
 

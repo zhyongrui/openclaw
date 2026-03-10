@@ -34,7 +34,7 @@ describe("openclawCodeRunCommand", () => {
     mocks.runIssueWorkflow.mockResolvedValue(createRun());
   });
 
-  it("prints workflow scope signals as stable top-level JSON fields", async () => {
+  it("prints stable top-level JSON fields for workflow scope, review, and merge policy", async () => {
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     expect(runtime.log).toHaveBeenCalledTimes(1);
@@ -62,11 +62,16 @@ describe("openclawCodeRunCommand", () => {
     );
     expect(payload.verificationReport.decision).toBe(payload.verificationDecision);
     expect(payload.verificationReport.summary).toBe(payload.verificationSummary);
+    expect(payload.autoMergePolicyEligible).toBe(true);
+    expect(payload.autoMergePolicyReason).toBe(
+      "Eligible for auto-merge under the current command-layer policy.",
+    );
   });
 
-  it("prints empty top-level scope fields when the build result is missing", async () => {
+  it("prints empty top-level scope fields and blocks auto-merge when workflow data is missing", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
+        stage: "draft-pr-opened",
         buildResult: undefined,
         draftPullRequest: undefined,
         verificationReport: undefined,
@@ -83,6 +88,52 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.draftPullRequestUrl).toBeNull();
     expect(payload.verificationDecision).toBeNull();
     expect(payload.verificationSummary).toBeNull();
+    expect(payload.autoMergePolicyEligible).toBe(false);
+    expect(payload.autoMergePolicyReason).toBe(
+      "Not eligible for auto-merge: verification has not approved the run.",
+    );
+  });
+
+  it("blocks auto-merge when the build result is outside command-layer scope", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        buildResult: {
+          ...createRun().buildResult!,
+          issueClassification: "workflow-core",
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.autoMergePolicyEligible).toBe(false);
+    expect(payload.autoMergePolicyReason).toBe(
+      "Not eligible for auto-merge: the run is not classified as command-layer.",
+    );
+  });
+
+  it("blocks auto-merge when the scope check fails", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        buildResult: {
+          ...createRun().buildResult!,
+          scopeCheck: {
+            ok: false,
+            blockedFiles: ["src/openclawcode/orchestrator/run.ts"],
+            summary: "Scope check failed for command-layer issue.",
+          },
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.autoMergePolicyEligible).toBe(false);
+    expect(payload.autoMergePolicyReason).toBe(
+      "Not eligible for auto-merge: the scope check did not pass.",
+    );
   });
 });
 
