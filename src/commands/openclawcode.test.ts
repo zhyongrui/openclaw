@@ -62,6 +62,8 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.draftPullRequest.url).toBe(payload.draftPullRequestUrl);
     expect(payload.pullRequestPublished).toBe(true);
     expect(payload.publishedPullRequestOpenedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(payload.pullRequestMerged).toBe(false);
+    expect(payload.mergedPullRequestMergedAt).toBeNull();
     expect(payload.verificationDecision).toBe("approve-for-human-review");
     expect(payload.verificationSummary).toBe(
       "Verification completed and the run is ready for human review.",
@@ -96,6 +98,8 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.draftPullRequestUrl).toBeNull();
     expect(payload.pullRequestPublished).toBe(false);
     expect(payload.publishedPullRequestOpenedAt).toBeNull();
+    expect(payload.pullRequestMerged).toBe(false);
+    expect(payload.mergedPullRequestMergedAt).toBeNull();
     expect(payload.verificationDecision).toBeNull();
     expect(payload.verificationSummary).toBeNull();
     expect(payload.autoMergePolicyEligible).toBe(false);
@@ -124,6 +128,8 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.draftPullRequestUrl).toBeNull();
     expect(payload.pullRequestPublished).toBe(false);
     expect(payload.publishedPullRequestOpenedAt).toBeNull();
+    expect(payload.pullRequestMerged).toBe(false);
+    expect(payload.mergedPullRequestMergedAt).toBeNull();
   });
 
   it("blocks auto-merge when the build result is outside command-layer scope", async () => {
@@ -166,6 +172,21 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.autoMergePolicyReason).toBe(
       "Not eligible for auto-merge: the scope check did not pass.",
     );
+  });
+
+  it("prints merged pr fields when the workflow reaches the merged stage", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        stage: "merged",
+        updatedAt: "2026-01-02T03:04:05.000Z",
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.pullRequestMerged).toBe(true);
+    expect(payload.mergedPullRequestMergedAt).toBe("2026-01-02T03:04:05.000Z");
   });
 });
 

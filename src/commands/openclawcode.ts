@@ -90,9 +90,21 @@ function resolvePublishedPullRequest(run: WorkflowRun): {
   };
 }
 
+function resolveMergedPullRequest(run: WorkflowRun): {
+  pullRequestMerged: boolean;
+  mergedPullRequestMergedAt: string | null;
+} {
+  const merged = run.stage === "merged";
+  return {
+    pullRequestMerged: merged,
+    mergedPullRequestMergedAt: merged ? run.updatedAt : null,
+  };
+}
+
 function toWorkflowRunJson(run: WorkflowRun) {
   const autoMergePolicy = resolveAutoMergePolicy(run);
   const publishedPullRequest = resolvePublishedPullRequest(run);
+  const mergedPullRequest = resolveMergedPullRequest(run);
   return {
     ...run,
     changedFiles: run.buildResult?.changedFiles ?? [],
@@ -104,6 +116,8 @@ function toWorkflowRunJson(run: WorkflowRun) {
     draftPullRequestUrl: run.draftPullRequest?.url ?? null,
     pullRequestPublished: publishedPullRequest.pullRequestPublished,
     publishedPullRequestOpenedAt: publishedPullRequest.publishedPullRequestOpenedAt,
+    pullRequestMerged: mergedPullRequest.pullRequestMerged,
+    mergedPullRequestMergedAt: mergedPullRequest.mergedPullRequestMergedAt,
     verificationDecision: run.verificationReport?.decision ?? null,
     verificationSummary: run.verificationReport?.summary ?? null,
     autoMergePolicyEligible: autoMergePolicy.autoMergePolicyEligible,
