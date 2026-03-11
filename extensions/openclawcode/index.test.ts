@@ -93,6 +93,37 @@ function issueWebhookPayload(issueNumber: number) {
   });
 }
 
+function issueWebhookPayloadWithOwnerObject(issueNumber: number) {
+  return JSON.stringify({
+    action: "opened",
+    repository: {
+      owner: {
+        login: "zhyongrui",
+      },
+      name: "openclawcode",
+    },
+    issue: {
+      number: issueNumber,
+      title: `Issue ${issueNumber}`,
+      labels: [],
+    },
+  });
+}
+
+async function waitForAssertion(assertion: () => void, attempts = 20): Promise<void> {
+  let lastError: unknown;
+  for (let index = 0; index < attempts; index += 1) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw lastError;
+}
+
 async function writeLocalRun(params: {
   repoRoot: string;
   issueNumber: number;
@@ -250,7 +281,9 @@ describe("openclawcode extension", () => {
         accepted: true,
         issue: "zhyongrui/openclawcode#201",
       });
-      expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      await waitForAssertion(() => {
+        expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      });
       expect(mocked.runMessageAction.mock.calls[0]?.[0]).toMatchObject({
         action: "send",
         params: expect.objectContaining({
@@ -269,6 +302,79 @@ describe("openclawcode extension", () => {
         },
       ]);
       expect(snapshot.queue).toEqual([]);
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts the real GitHub repository owner object shape", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      mocked.readRequestBodyWithLimit.mockResolvedValue(issueWebhookPayloadWithOwnerObject(210));
+      const res = createMockServerResponse();
+
+      const handled = await fixture.route?.handler(
+        localReq({
+          method: "POST",
+          url: "/plugins/openclawcode/github",
+          headers: {
+            "x-github-event": "issues",
+            "x-github-delivery": "delivery-210-a",
+          },
+        }),
+        res,
+      );
+
+      expect(handled).toBe(true);
+      expect(res.statusCode).toBe(202);
+      expect(JSON.parse(String(res.body))).toMatchObject({
+        accepted: true,
+        issue: "zhyongrui/openclawcode#210",
+      });
+      expect(await fixture.store.getPendingApproval("zhyongrui/openclawcode#210")).toEqual({
+        issueKey: "zhyongrui/openclawcode#210",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns webhook acceptance without waiting for chat notification delivery", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      mocked.readRequestBodyWithLimit.mockResolvedValue(issueWebhookPayload(211));
+      mocked.runMessageAction.mockImplementation(
+        () => new Promise(() => undefined) as Promise<never>,
+      );
+      const res = createMockServerResponse();
+
+      const handled = await fixture.route?.handler(
+        localReq({
+          method: "POST",
+          url: "/plugins/openclawcode/github",
+          headers: {
+            "x-github-event": "issues",
+            "x-github-delivery": "delivery-211-a",
+          },
+        }),
+        res,
+      );
+
+      expect(handled).toBe(true);
+      expect(res.statusCode).toBe(202);
+      expect(JSON.parse(String(res.body))).toMatchObject({
+        accepted: true,
+        issue: "zhyongrui/openclawcode#211",
+      });
+      expect(await fixture.store.getPendingApproval("zhyongrui/openclawcode#211")).toEqual({
+        issueKey: "zhyongrui/openclawcode#211",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+      });
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -313,7 +419,9 @@ describe("openclawcode extension", () => {
         delivery: "delivery-202-a",
         previousReason: "announced-for-approval",
       });
-      expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      await waitForAssertion(() => {
+        expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      });
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -355,7 +463,9 @@ describe("openclawcode extension", () => {
         reason: "already-tracked",
         issue: "zhyongrui/openclawcode#203",
       });
-      expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      await waitForAssertion(() => {
+        expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      });
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -492,7 +602,9 @@ describe("openclawcode extension", () => {
 
       expect(handled).toBe(true);
       expect(res.statusCode).toBe(202);
-      expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      await waitForAssertion(() => {
+        expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      });
       expect(mocked.runMessageAction.mock.calls[0]?.[0]).toMatchObject({
         action: "send",
         params: expect.objectContaining({

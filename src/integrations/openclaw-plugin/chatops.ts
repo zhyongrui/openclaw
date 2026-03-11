@@ -7,7 +7,11 @@ const SUPPORTED_ISSUE_ACTIONS = new Set(["opened", "reopened", "labeled"]);
 export interface GitHubIssueWebhookEvent {
   action: string;
   repository: {
-    owner: string;
+    owner:
+      | string
+      | {
+          login?: string;
+        };
     name: string;
   };
   issue: {
@@ -149,8 +153,12 @@ function repoMatches(
   event: GitHubIssueWebhookEvent,
   config: OpenClawCodeChatopsRepoConfig,
 ): boolean {
+  const owner = readGitHubRepositoryOwner(event.repository.owner);
+  if (!owner) {
+    return false;
+  }
   return (
-    normalizeValue(event.repository.owner) === normalizeValue(config.owner) &&
+    normalizeValue(owner) === normalizeValue(config.owner) &&
     normalizeValue(event.repository.name) === normalizeValue(config.repo)
   );
 }
@@ -165,6 +173,18 @@ export function formatIssueKey(issue: Pick<IssueRef, "owner" | "repo" | "number"
 
 export function formatRepoKey(repo: OpenClawCodeChatopsRepoRef): string {
   return `${repo.owner}/${repo.repo}`;
+}
+
+export function readGitHubRepositoryOwner(
+  owner: GitHubIssueWebhookEvent["repository"]["owner"],
+): string | undefined {
+  if (typeof owner === "string") {
+    return readString(owner);
+  }
+  if (!owner || typeof owner !== "object") {
+    return undefined;
+  }
+  return readString(owner.login);
 }
 
 export function resolveOpenClawCodePluginConfig(

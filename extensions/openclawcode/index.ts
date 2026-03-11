@@ -17,6 +17,7 @@ import {
   parseChatopsRepoReference,
   collectLatestLocalRunStatuses,
   resolveOpenClawCodePluginConfig,
+  readGitHubRepositoryOwner,
   syncIssueSnapshotFromGitHub,
   type GitHubIssueWebhookEvent,
   type OpenClawCodeChatopsRepoConfig,
@@ -123,6 +124,19 @@ async function sendText(params: {
       to: params.target,
       message: params.text,
     },
+  });
+}
+
+function scheduleNotification(params: {
+  api: OpenClawPluginApi;
+  channel: string;
+  target: string;
+  text: string;
+}): void {
+  void sendText(params).catch((error) => {
+    params.api.logger.warn(
+      `openclawcode notification failed for ${params.channel}:${params.target}: ${String(error)}`,
+    );
   });
 }
 
@@ -276,8 +290,15 @@ async function handleGithubWebhook(
   }
 
   const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+  const repositoryOwner = readGitHubRepositoryOwner(payload.repository.owner);
+  if (!repositoryOwner) {
+    return await respondJson({
+      accepted: false,
+      reason: "invalid-repository-owner",
+    });
+  }
   const matchingRepo = resolveRepoConfig(pluginConfig.repos, {
-    owner: payload.repository.owner,
+    owner: repositoryOwner,
     repo: payload.repository.name,
   });
   if (!matchingRepo) {
@@ -333,7 +354,7 @@ async function handleGithubWebhook(
         issue: issueKey,
       });
     }
-    await sendText({
+    scheduleNotification({
       api,
       channel: notifyChannel,
       target: notifyTarget,
@@ -362,7 +383,7 @@ async function handleGithubWebhook(
         issue: issueKey,
       });
     }
-    await sendText({
+    scheduleNotification({
       api,
       channel: notifyChannel,
       target: notifyTarget,
