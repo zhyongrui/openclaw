@@ -25,6 +25,7 @@ import {
   type GitHubPullRequestReviewWebhookEvent,
   type GitHubPullRequestWebhookEvent,
   type OpenClawCodeChatopsRepoConfig,
+  type OpenClawCodeGitHubDeliveryRecord,
   type OpenClawCodeIssueStatusSnapshot,
 } from "../../src/integrations/openclaw-plugin/index.js";
 
@@ -86,13 +87,108 @@ function trimToSingleLine(value: string | undefined): string | undefined {
   return singleLine && singleLine.length > 0 ? singleLine : undefined;
 }
 
-function summarizeRecentSnapshot(snapshot: OpenClawCodeIssueStatusSnapshot): string {
-  const details = [
-    formatStageLabel(snapshot.stage),
-    snapshot.pullRequestNumber ? `PR #${snapshot.pullRequestNumber}` : undefined,
-    snapshot.updatedAt,
-  ].filter(Boolean);
-  return `${snapshot.issueKey} ${details.join(" | ")}`;
+function formatDeliveryReason(record: OpenClawCodeGitHubDeliveryRecord): string {
+  switch (record.reason) {
+    case "review-approved":
+      return "review approved";
+    case "review-changes-requested":
+      return "review changes requested";
+    case "pull-request-merged":
+      return "pull request merged";
+    case "pull-request-closed-without-merge":
+      return "pull request closed without merge";
+    default:
+      return `${record.eventName}/${record.action} (${record.reason})`;
+  }
+}
+
+function collectRecentLifecycleEvents(params: {
+  state: Awaited<ReturnType<OpenClawCodeChatopsStore["snapshot"]>>;
+  issueKey: string;
+}): OpenClawCodeGitHubDeliveryRecord[] {
+  return Object.values(params.state.githubDeliveriesById)
+    .filter((record) => record.issueKey === params.issueKey)
+    .filter((record) => record.accepted)
+    .filter(
+      (record) => record.eventName === "pull_request" || record.eventName === "pull_request_review",
+    )
+    .toSorted((left, right) => right.receivedAt.localeCompare(left.receivedAt))
+    .slice(0, 2);
+}
+
+function resolveFinalDisposition(params: {
+  snapshot: OpenClawCodeIssueStatusSnapshot;
+  recentLifecycleEvents: OpenClawCodeGitHubDeliveryRecord[];
+}): string {
+  const latestReason = params.recentLifecycleEvents[0]?.reason;
+  switch (latestReason) {
+    case "pull-request-merged":
+      return "merged";
+    case "review-changes-requested":
+      return "changes requested";
+    case "review-approved":
+      return "awaiting human review";
+    case "pull-request-closed-without-merge":
+      return "closed without merge";
+    default:
+      break;
+  }
+
+  switch (params.snapshot.stage) {
+    case "merged":
+      return "merged";
+    case "changes-requested":
+      return "changes requested";
+    case "ready-for-human-review":
+      return "awaiting human review";
+    case "escalated":
+      return "escalated";
+    case "failed":
+      return "failed";
+    default:
+      return formatStageLabel(params.snapshot.stage).toLowerCase();
+  }
+}
+
+function buildRerunLedgerLines(params: {
+  priorRunId?: string;
+  priorStage?: string;
+  requestedAt?: string;
+  reason?: string;
+}): string[] {
+  if (!params.priorRunId && !params.priorStage && !params.requestedAt && !params.reason) {
+    return [];
+  }
+
+  const line = `  rerun: ${[
+    params.priorRunId ?? "prior run unknown",
+    params.priorStage ? `from ${formatStageLabel(params.priorStage)}` : "from unknown stage",
+    params.requestedAt,
+  ]
+    .filter(Boolean)
+    .join(" | ")}`;
+  const reason = trimToSingleLine(params.reason);
+  return reason ? [line, `  reason: ${reason}`] : [line];
+}
+
+function buildNotificationLedgerLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
+  if (!snapshot.lastNotificationAt && !snapshot.lastNotificationTarget) {
+    return [];
+  }
+
+  const destination =
+    snapshot.lastNotificationChannel && snapshot.lastNotificationTarget
+      ? `${snapshot.lastNotificationChannel}:${snapshot.lastNotificationTarget}`
+      : snapshot.lastNotificationTarget;
+  const line = `  notify: ${[
+    snapshot.lastNotificationStatus ?? "sent",
+    destination,
+    snapshot.lastNotificationAt,
+  ]
+    .filter(Boolean)
+    .join(" | ")}`;
+  const error = trimToSingleLine(snapshot.lastNotificationError);
+  return error ? [line, `  notify-error: ${error}`] : [line];
 }
 
 function buildInboxMessage(params: {
@@ -100,30 +196,16 @@ function buildInboxMessage(params: {
   state: Awaited<ReturnType<OpenClawCodeChatopsStore["snapshot"]>>;
 }): string {
   const repoKey = formatRepoKey(params.repo);
-  const pending = params.state.pendingApprovals
-    .filter((entry) => issueKeyMatchesRepo(entry.issueKey, params.repo))
-    .map((entry) => ({
-      issueKey: entry.issueKey,
-      summary:
-        trimToSingleLine(params.state.statusByIssue[entry.issueKey]) ?? "Awaiting chat approval.",
-    }));
+  const pending = params.state.pendingApprovals.filter((entry) =>
+    issueKeyMatchesRepo(entry.issueKey, params.repo),
+  );
   const running =
     params.state.currentRun && issueKeyMatchesRepo(params.state.currentRun.issueKey, params.repo)
-      ? [
-          {
-            issueKey: params.state.currentRun.issueKey,
-            summary:
-              trimToSingleLine(params.state.statusByIssue[params.state.currentRun.issueKey]) ??
-              "Running.",
-          },
-        ]
+      ? [params.state.currentRun]
       : [];
-  const queued = params.state.queue
-    .filter((entry) => issueKeyMatchesRepo(entry.issueKey, params.repo))
-    .map((entry) => ({
-      issueKey: entry.issueKey,
-      summary: trimToSingleLine(params.state.statusByIssue[entry.issueKey]) ?? "Queued.",
-    }));
+  const queued = params.state.queue.filter((entry) =>
+    issueKeyMatchesRepo(entry.issueKey, params.repo),
+  );
   const activeIssueKeys = new Set([
     ...pending.map((entry) => entry.issueKey),
     ...running.map((entry) => entry.issueKey),
@@ -140,7 +222,11 @@ function buildInboxMessage(params: {
   if (pending.length > 0) {
     lines.push(`Pending approvals: ${pending.length}`);
     for (const entry of pending) {
-      lines.push(`- ${entry.issueKey} | ${entry.summary}`);
+      lines.push(
+        `- ${entry.issueKey} | ${
+          trimToSingleLine(params.state.statusByIssue[entry.issueKey]) ?? "Awaiting chat approval."
+        }`,
+      );
     }
   } else {
     lines.push("Pending approvals: 0");
@@ -149,7 +235,19 @@ function buildInboxMessage(params: {
   if (running.length > 0) {
     lines.push(`Running: ${running.length}`);
     for (const entry of running) {
-      lines.push(`- ${entry.issueKey} | ${entry.summary}`);
+      lines.push(
+        `- ${entry.issueKey} | ${
+          trimToSingleLine(params.state.statusByIssue[entry.issueKey]) ?? "Running."
+        }`,
+      );
+      lines.push(
+        ...buildRerunLedgerLines({
+          priorRunId: entry.request.rerunContext?.priorRunId,
+          priorStage: entry.request.rerunContext?.priorStage,
+          requestedAt: entry.request.rerunContext?.requestedAt,
+          reason: entry.request.rerunContext?.reason,
+        }),
+      );
     }
   } else {
     lines.push("Running: 0");
@@ -158,19 +256,62 @@ function buildInboxMessage(params: {
   if (queued.length > 0) {
     lines.push(`Queued: ${queued.length}`);
     for (const entry of queued) {
-      lines.push(`- ${entry.issueKey} | ${entry.summary}`);
+      lines.push(
+        `- ${entry.issueKey} | ${trimToSingleLine(params.state.statusByIssue[entry.issueKey]) ?? "Queued."}`,
+      );
+      lines.push(
+        ...buildRerunLedgerLines({
+          priorRunId: entry.request.rerunContext?.priorRunId,
+          priorStage: entry.request.rerunContext?.priorStage,
+          requestedAt: entry.request.rerunContext?.requestedAt,
+          reason: entry.request.rerunContext?.reason,
+        }),
+      );
     }
   } else {
     lines.push("Queued: 0");
   }
 
   if (recent.length > 0) {
-    lines.push(`Recent completed: ${recent.length}`);
+    lines.push(`Recent ledger: ${recent.length}`);
     for (const entry of recent) {
-      lines.push(`- ${summarizeRecentSnapshot(entry)}`);
+      const recentLifecycleEvents = collectRecentLifecycleEvents({
+        state: params.state,
+        issueKey: entry.issueKey,
+      });
+      lines.push(
+        [
+          `- ${entry.issueKey}`,
+          formatStageLabel(entry.stage),
+          `final: ${resolveFinalDisposition({
+            snapshot: entry,
+            recentLifecycleEvents,
+          })}`,
+          entry.pullRequestNumber ? `PR #${entry.pullRequestNumber}` : undefined,
+          entry.updatedAt,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+      );
+      if (recentLifecycleEvents.length > 0) {
+        lines.push(
+          `  events: ${recentLifecycleEvents
+            .map((record) => `${formatDeliveryReason(record)} @ ${record.receivedAt}`)
+            .join("; ")}`,
+        );
+      }
+      lines.push(
+        ...buildRerunLedgerLines({
+          priorRunId: entry.rerunPriorRunId,
+          priorStage: entry.rerunPriorStage,
+          requestedAt: entry.rerunRequestedAt,
+          reason: entry.rerunReason,
+        }),
+      );
+      lines.push(...buildNotificationLedgerLines(entry));
     }
   } else {
-    lines.push("Recent completed: 0");
+    lines.push("Recent ledger: 0");
   }
 
   return lines.join("\n");
@@ -255,6 +396,52 @@ function scheduleNotification(params: {
   text: string;
 }): void {
   void sendText(params).catch((error) => {
+    params.api.logger.warn(
+      `openclawcode notification failed for ${params.channel}:${params.target}: ${String(error)}`,
+    );
+  });
+}
+
+async function sendIssueNotification(params: {
+  api: OpenClawPluginApi;
+  store: OpenClawCodeChatopsStore;
+  issueKey: string;
+  channel: string;
+  target: string;
+  text: string;
+}): Promise<void> {
+  const notifiedAt = new Date().toISOString();
+  try {
+    await sendText(params);
+    await params.store.recordSnapshotNotification({
+      issueKey: params.issueKey,
+      notifyChannel: params.channel,
+      notifyTarget: params.target,
+      notifiedAt,
+      status: "sent",
+    });
+  } catch (error) {
+    await params.store.recordSnapshotNotification({
+      issueKey: params.issueKey,
+      notifyChannel: params.channel,
+      notifyTarget: params.target,
+      notifiedAt,
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+function scheduleIssueNotification(params: {
+  api: OpenClawPluginApi;
+  store: OpenClawCodeChatopsStore;
+  issueKey: string;
+  channel: string;
+  target: string;
+  text: string;
+}): void {
+  void sendIssueNotification(params).catch((error) => {
     params.api.logger.warn(
       `openclawcode notification failed for ${params.channel}:${params.target}: ${String(error)}`,
     );
@@ -531,8 +718,10 @@ async function handlePullRequestWebhookEvent(params: {
     binding: params.binding,
     snapshot: applied.snapshot,
   });
-  scheduleNotification({
+  scheduleIssueNotification({
     api: params.api,
+    store: params.store,
+    issueKey: applied.snapshot.issueKey,
     channel: destination.channel,
     target: destination.target,
     text: applied.snapshot.status,
@@ -593,8 +782,10 @@ async function handlePullRequestReviewWebhookEvent(params: {
     binding: params.binding,
     snapshot: applied.snapshot,
   });
-  scheduleNotification({
+  scheduleIssueNotification({
     api: params.api,
+    store: params.store,
+    issueKey: applied.snapshot.issueKey,
     channel: destination.channel,
     target: destination.target,
     text: applied.snapshot.status,
@@ -835,12 +1026,14 @@ async function processNextQueuedRun(
       notifyChannel: next.notifyChannel,
       notifyTarget: next.notifyTarget,
     });
-    await sendText({
+    await sendIssueNotification({
       api,
+      store,
+      issueKey: next.issueKey,
       channel: next.notifyChannel,
       target: next.notifyTarget,
       text: statusMessage,
-    });
+    }).catch(() => undefined);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await store.finishCurrent(next.issueKey, `Failed.\n${message}`);

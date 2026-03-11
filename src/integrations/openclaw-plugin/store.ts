@@ -34,6 +34,15 @@ export interface OpenClawCodeIssueStatusSnapshot {
   latestReviewSubmittedAt?: string;
   latestReviewSummary?: string;
   latestReviewUrl?: string;
+  rerunReason?: string;
+  rerunRequestedAt?: string;
+  rerunPriorRunId?: string;
+  rerunPriorStage?: WorkflowStage;
+  lastNotificationChannel?: string;
+  lastNotificationTarget?: string;
+  lastNotificationAt?: string;
+  lastNotificationStatus?: "sent" | "failed";
+  lastNotificationError?: string;
 }
 
 export interface OpenClawCodeRepoNotificationBinding {
@@ -126,6 +135,31 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
       typeof candidate.latestReviewSummary === "string" ? candidate.latestReviewSummary : undefined,
     latestReviewUrl:
       typeof candidate.latestReviewUrl === "string" ? candidate.latestReviewUrl : undefined,
+    rerunReason: typeof candidate.rerunReason === "string" ? candidate.rerunReason : undefined,
+    rerunRequestedAt:
+      typeof candidate.rerunRequestedAt === "string" ? candidate.rerunRequestedAt : undefined,
+    rerunPriorRunId:
+      typeof candidate.rerunPriorRunId === "string" ? candidate.rerunPriorRunId : undefined,
+    rerunPriorStage:
+      typeof candidate.rerunPriorStage === "string" ? candidate.rerunPriorStage : undefined,
+    lastNotificationChannel:
+      typeof candidate.lastNotificationChannel === "string"
+        ? candidate.lastNotificationChannel
+        : undefined,
+    lastNotificationTarget:
+      typeof candidate.lastNotificationTarget === "string"
+        ? candidate.lastNotificationTarget
+        : undefined,
+    lastNotificationAt:
+      typeof candidate.lastNotificationAt === "string" ? candidate.lastNotificationAt : undefined,
+    lastNotificationStatus:
+      candidate.lastNotificationStatus === "sent" || candidate.lastNotificationStatus === "failed"
+        ? candidate.lastNotificationStatus
+        : undefined,
+    lastNotificationError:
+      typeof candidate.lastNotificationError === "string"
+        ? candidate.lastNotificationError
+        : undefined,
   };
 }
 
@@ -185,6 +219,7 @@ function buildStatusSnapshot(params: {
   status: string;
   notifyChannel?: string;
   notifyTarget?: string;
+  notifiedAt?: string;
 }): OpenClawCodeIssueStatusSnapshot {
   return {
     issueKey: `${params.run.issue.owner}/${params.run.issue.repo}#${params.run.issue.number}`,
@@ -204,6 +239,14 @@ function buildStatusSnapshot(params: {
     latestReviewSubmittedAt: params.run.rerunContext?.reviewSubmittedAt,
     latestReviewSummary: params.run.rerunContext?.reviewSummary,
     latestReviewUrl: params.run.rerunContext?.reviewUrl,
+    rerunReason: params.run.rerunContext?.reason,
+    rerunRequestedAt: params.run.rerunContext?.requestedAt,
+    rerunPriorRunId: params.run.rerunContext?.priorRunId,
+    rerunPriorStage: params.run.rerunContext?.priorStage,
+    lastNotificationChannel: params.notifyChannel,
+    lastNotificationTarget: params.notifyTarget,
+    lastNotificationAt: params.notifiedAt,
+    lastNotificationStatus: params.notifiedAt ? "sent" : undefined,
   };
 }
 
@@ -391,6 +434,8 @@ export class OpenClawCodeChatopsStore {
         status,
         notifyChannel: notify?.notifyChannel,
         notifyTarget: notify?.notifyTarget,
+        notifiedAt:
+          notify?.notifyChannel && notify?.notifyTarget ? new Date().toISOString() : undefined,
       });
       state.statusByIssue[snapshot.issueKey] = status;
       state.statusSnapshotsByIssue[snapshot.issueKey] = snapshot;
@@ -401,6 +446,32 @@ export class OpenClawCodeChatopsStore {
     await this.mutateState((state) => {
       state.statusByIssue[snapshot.issueKey] = snapshot.status;
       state.statusSnapshotsByIssue[snapshot.issueKey] = snapshot;
+    });
+  }
+
+  async recordSnapshotNotification(params: {
+    issueKey: string;
+    notifyChannel: string;
+    notifyTarget: string;
+    notifiedAt: string;
+    status: "sent" | "failed";
+    error?: string;
+  }): Promise<void> {
+    await this.mutateState((state) => {
+      const snapshot = state.statusSnapshotsByIssue[params.issueKey];
+      if (!snapshot) {
+        return;
+      }
+      state.statusSnapshotsByIssue[params.issueKey] = {
+        ...snapshot,
+        notifyChannel: params.notifyChannel,
+        notifyTarget: params.notifyTarget,
+        lastNotificationChannel: params.notifyChannel,
+        lastNotificationTarget: params.notifyTarget,
+        lastNotificationAt: params.notifiedAt,
+        lastNotificationStatus: params.status,
+        lastNotificationError: params.status === "failed" ? params.error : undefined,
+      };
     });
   }
 

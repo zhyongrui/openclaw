@@ -80,13 +80,12 @@ The repository has already proven several real production-style checkpoints:
 - operator-facing recovery commands can heal local state after interruptions
 
 The current bottleneck is no longer basic execution. The current bottleneck is
-keeping the operator-visible lifecycle coherent and inspectable:
+turning the working loop into a cleanly operable product:
 
-- issue intake plus PR/review lifecycle updates now arrive through webhook
-  intake, but the operator inbox still does not summarize external events,
-  final disposition, or rerun chains compactly
-- explicit reruns now preserve issue, branch, and PR continuity, but the
-  operator-facing surfaces do not yet make rerun lineage obvious
+- issue intake, lifecycle updates, rerun control, and operator ledger visibility
+  now exist, but the install/setup path is still too manual
+- real PR/review webhook validation still needs to be replayed against the live
+  route after the newer lifecycle and ledger slices
 - packaging and installation still feel like a development environment, not a
   clean product setup
 - policy docs lag the implemented guarded auto-merge behavior and need to be
@@ -133,8 +132,8 @@ The current repository state already supports:
   - verification decision, summary, and counts
   - auto-merge policy eligibility and disposition
 
-This means the next iteration can shift from workflow bring-up to operator
-ledger quality, install hardening, and trust in the visible lifecycle state.
+This means the next iteration can shift from workflow bring-up to setup
+hardening, live validation, and trust in the visible lifecycle state.
 
 ### Near-Term Delivery Streams
 
@@ -569,6 +568,10 @@ Why next:
 
 ### Slice D: Operator Ledger and Final Disposition Visibility
 
+Status:
+
+- implemented on 2026-03-11
+
 Deliverables:
 
 - expand `/occode-inbox` into a compact ledger for recent activity
@@ -616,23 +619,20 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. extend `/occode-inbox` from a queue snapshot into a compact operator ledger
-2. include recent external lifecycle events and final disposition for each
-   tracked issue
-3. surface rerun lineage compactly:
-   - prior run id
-   - prior stage
-   - latest rerun request time
-4. record and display the last notification target and delivery timing for the
-   tracked issue snapshot
-5. keep the ledger compact enough for chat while still answering "what changed"
-   without opening the raw state file
-6. add focused tests for ledger formatting and rerun-chain visibility
-7. validate the ledger against locally persisted state with multiple completed
-   issues
-8. replay at least one realistic PR/review lifecycle path against the live
-   webhook route now that intake and rerun control exist
-9. update the dev log with the final ledger shape and operator tradeoffs
+1. consolidate the supported local setup path into one repeatable operator flow
+2. document repo binding, webhook setup, chat target setup, and required tokens
+3. document the local gateway and temporary tunnel startup path explicitly
+4. reduce manual state-file editing in favor of documented commands or config
+5. add a setup verification checklist that confirms:
+   - gateway is running
+   - webhook signatures validate
+   - repo binding is present
+   - chat notifications reach the expected target
+6. add focused tests or smoke checks for the setup-facing scripts/config helpers
+7. replay at least one realistic PR/review lifecycle path against the live
+   webhook route now that intake, rerun control, and ledger visibility exist
+8. update the dev log with the final setup path and remaining operator caveats
+9. update README/status docs so the documented install path matches reality
 10. commit the slice only after targeted tests pass
 
 ## Test Strategy

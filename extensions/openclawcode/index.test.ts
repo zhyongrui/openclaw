@@ -167,11 +167,14 @@ function pullRequestReviewWebhookPayload(params: {
   });
 }
 
-async function waitForAssertion(assertion: () => void, attempts = 20): Promise<void> {
+async function waitForAssertion(
+  assertion: () => void | Promise<void>,
+  attempts = 20,
+): Promise<void> {
   let lastError: unknown;
   for (let index = 0; index < attempts; index += 1) {
     try {
-      assertion();
+      await assertion();
       return;
     } catch (error) {
       lastError = error;
@@ -595,12 +598,20 @@ describe("openclawcode extension", () => {
         issueKey: "zhyongrui/openclawcode#212",
         pullRequestNumber: 312,
       });
-      expect(await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#212")).toMatchObject({
-        stage: "ready-for-human-review",
-        updatedAt: "2026-03-11T02:15:00.000Z",
-        notifyChannel: "telegram",
-        notifyTarget: "chat:original",
+      await waitForAssertion(async () => {
+        expect(await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#212")).toMatchObject({
+          stage: "ready-for-human-review",
+          updatedAt: "2026-03-11T02:15:00.000Z",
+          notifyChannel: "telegram",
+          notifyTarget: "chat:original",
+          lastNotificationChannel: "telegram",
+          lastNotificationTarget: "chat:original",
+          lastNotificationStatus: "sent",
+        });
       });
+      expect(
+        (await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#212"))?.lastNotificationAt,
+      ).toMatch(/^2026-03-11T/);
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -665,9 +676,16 @@ describe("openclawcode extension", () => {
           message: expect.stringContaining("Stage: Changes Requested"),
         }),
       });
-      expect(await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#213")).toMatchObject({
-        stage: "changes-requested",
-        updatedAt: "2026-03-11T02:20:00.000Z",
+      await waitForAssertion(async () => {
+        expect(await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#213")).toMatchObject({
+          stage: "changes-requested",
+          updatedAt: "2026-03-11T02:20:00.000Z",
+          notifyChannel: "feishu",
+          notifyTarget: "user:bound-chat",
+          lastNotificationChannel: "feishu",
+          lastNotificationTarget: "user:bound-chat",
+          lastNotificationStatus: "sent",
+        });
       });
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
@@ -1442,6 +1460,12 @@ describe("openclawcode extension", () => {
             testCommands: ["pnpm exec vitest run --config vitest.openclawcode.config.mjs"],
             openPullRequest: true,
             mergeOnApprove: true,
+            rerunContext: {
+              reason: "Address GitHub review feedback",
+              requestedAt: "2026-03-11T02:50:00.000Z",
+              priorRunId: "run-301",
+              priorStage: "changes-requested",
+            },
           },
         },
         "Queued.",
@@ -1459,6 +1483,10 @@ describe("openclawcode extension", () => {
         branchName: "openclawcode/issue-304",
         pullRequestNumber: 404,
         pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/404",
+        lastNotificationChannel: "telegram",
+        lastNotificationTarget: "chat:merge-target",
+        lastNotificationAt: "2026-03-11T03:01:00.000Z",
+        lastNotificationStatus: "sent",
       });
       await fixture.store.setStatusSnapshot({
         issueKey: "zhyongrui/openclawcode#305",
@@ -1470,6 +1498,33 @@ describe("openclawcode extension", () => {
         repo: "openclawcode",
         issueNumber: 305,
         branchName: "openclawcode/issue-305",
+        rerunReason: "Address GitHub review feedback",
+        rerunRequestedAt: "2026-03-11T02:40:00.000Z",
+        rerunPriorRunId: "run-300",
+        rerunPriorStage: "changes-requested",
+        lastNotificationChannel: "feishu",
+        lastNotificationTarget: "user:review-chat",
+        lastNotificationAt: "2026-03-11T02:59:00.000Z",
+        lastNotificationStatus: "sent",
+      });
+      await fixture.store.recordGitHubDelivery({
+        deliveryId: "delivery-304-merged",
+        eventName: "pull_request",
+        action: "closed",
+        accepted: true,
+        reason: "pull-request-merged",
+        receivedAt: "2026-03-11T03:00:30.000Z",
+        issueKey: "zhyongrui/openclawcode#304",
+        pullRequestNumber: 404,
+      });
+      await fixture.store.recordGitHubDelivery({
+        deliveryId: "delivery-305-approved",
+        eventName: "pull_request_review",
+        action: "submitted",
+        accepted: true,
+        reason: "review-approved",
+        receivedAt: "2026-03-11T02:58:30.000Z",
+        issueKey: "zhyongrui/openclawcode#305",
       });
 
       const result = await fixture.commands.get("occode-inbox")?.handler({
@@ -1489,9 +1544,17 @@ describe("openclawcode extension", () => {
           "- zhyongrui/openclawcode#303 | Running.",
           "Queued: 1",
           "- zhyongrui/openclawcode#302 | Queued.",
-          "Recent completed: 2",
-          "- zhyongrui/openclawcode#304 Merged | PR #404 | 2026-03-11T03:00:00.000Z",
-          "- zhyongrui/openclawcode#305 Ready For Human Review | 2026-03-11T02:58:00.000Z",
+          "  rerun: run-301 | from Changes Requested | 2026-03-11T02:50:00.000Z",
+          "  reason: Address GitHub review feedback",
+          "Recent ledger: 2",
+          "- zhyongrui/openclawcode#304 | Merged | final: merged | PR #404 | 2026-03-11T03:00:00.000Z",
+          "  events: pull request merged @ 2026-03-11T03:00:30.000Z",
+          "  notify: sent | telegram:chat:merge-target | 2026-03-11T03:01:00.000Z",
+          "- zhyongrui/openclawcode#305 | Ready For Human Review | final: awaiting human review | 2026-03-11T02:58:00.000Z",
+          "  events: review approved @ 2026-03-11T02:58:30.000Z",
+          "  rerun: run-300 | from Changes Requested | 2026-03-11T02:40:00.000Z",
+          "  reason: Address GitHub review feedback",
+          "  notify: sent | feishu:user:review-chat | 2026-03-11T02:59:00.000Z",
         ].join("\n"),
       });
     } finally {
@@ -1517,7 +1580,7 @@ describe("openclawcode extension", () => {
           "Pending approvals: 0",
           "Running: 0",
           "Queued: 0",
-          "Recent completed: 0",
+          "Recent ledger: 0",
         ].join("\n"),
       });
     } finally {

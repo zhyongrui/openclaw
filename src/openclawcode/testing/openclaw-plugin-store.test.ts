@@ -43,6 +43,7 @@ function createWorkflowRun(params: {
   updatedAt?: string;
   prNumber?: number;
   prUrl?: string;
+  rerunContext?: WorkflowRun["rerunContext"];
 }): WorkflowRun {
   const updatedAt = params.updatedAt ?? "2026-03-10T08:30:00.000Z";
   return {
@@ -99,6 +100,7 @@ function createWorkflowRun(params: {
       missingCoverage: [],
       followUps: [],
     },
+    rerunContext: params.rerunContext,
   };
 }
 
@@ -383,6 +385,16 @@ describe("OpenClawCodeChatopsStore", () => {
         stage: "merged",
         prNumber: 209,
         prUrl: "https://github.com/zhyongrui/openclawcode/pull/209",
+        rerunContext: {
+          reason: "Address GitHub review feedback",
+          requestedAt: "2026-03-10T08:25:00.000Z",
+          priorRunId: "run-108",
+          priorStage: "changes-requested",
+          reviewDecision: "changes-requested",
+          reviewSubmittedAt: "2026-03-10T08:20:00.000Z",
+          reviewSummary: "Please add a regression test for the rerun path.",
+          reviewUrl: "https://github.com/zhyongrui/openclawcode/pull/209#pullrequestreview-2",
+        },
       });
 
       await fixture.store.recordWorkflowRunStatus(
@@ -404,7 +416,19 @@ describe("OpenClawCodeChatopsStore", () => {
         pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/209",
         notifyChannel: "telegram",
         notifyTarget: "chat:primary",
+        rerunReason: "Address GitHub review feedback",
+        rerunRequestedAt: "2026-03-10T08:25:00.000Z",
+        rerunPriorRunId: "run-108",
+        rerunPriorStage: "changes-requested",
+        latestReviewDecision: "changes-requested",
+        latestReviewSubmittedAt: "2026-03-10T08:20:00.000Z",
+        latestReviewSummary: "Please add a regression test for the rerun path.",
+        latestReviewUrl: "https://github.com/zhyongrui/openclawcode/pull/209#pullrequestreview-2",
+        lastNotificationChannel: "telegram",
+        lastNotificationTarget: "chat:primary",
+        lastNotificationStatus: "sent",
       });
+      expect(snapshot?.lastNotificationAt).toMatch(/^2026-03-1\dT/);
       expect(
         await fixture.store.findStatusSnapshotByPullRequest({
           owner: "zhyongrui",
@@ -418,6 +442,44 @@ describe("OpenClawCodeChatopsStore", () => {
       expect(await fixture.store.getStatus("zhyongrui/openclawcode#109")).toBe(
         "openclawcode status for zhyongrui/openclawcode#109",
       );
+    } finally {
+      await fs.rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("records snapshot notification delivery metadata for operator ledger output", async () => {
+    const fixture = await createStore();
+
+    try {
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#110",
+        status: "openclawcode status for zhyongrui/openclawcode#110",
+        stage: "ready-for-human-review",
+        runId: "run-110",
+        updatedAt: "2026-03-10T09:00:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 110,
+      });
+
+      await fixture.store.recordSnapshotNotification({
+        issueKey: "zhyongrui/openclawcode#110",
+        notifyChannel: "feishu",
+        notifyTarget: "user:bound-chat",
+        notifiedAt: "2026-03-10T09:05:00.000Z",
+        status: "failed",
+        error: "send failed",
+      });
+
+      expect(await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#110")).toMatchObject({
+        notifyChannel: "feishu",
+        notifyTarget: "user:bound-chat",
+        lastNotificationChannel: "feishu",
+        lastNotificationTarget: "user:bound-chat",
+        lastNotificationAt: "2026-03-10T09:05:00.000Z",
+        lastNotificationStatus: "failed",
+        lastNotificationError: "send failed",
+      });
     } finally {
       await fs.rm(fixture.rootDir, { recursive: true, force: true });
     }

@@ -47,11 +47,12 @@ loop with:
   outcomes
 - explicit request-changes rerun control with rerun artifacts, review context,
   and existing-PR continuity
+- a compact `/occode-inbox` operator ledger for recent lifecycle events, final
+  disposition, rerun lineage, and last notification metadata
 - real end-to-end validation against this repository, including a webhook-driven
   issue run that opened, merged, and closed automatically
 
 Still pending for a fuller product loop:
 
 - stronger suitability/risk gating ahead of autonomous execution
-- richer operator ledger and notification visibility
 - broader setup, runbook, and policy-doc polish
