@@ -57,10 +57,14 @@ loop with:
   webhook event subscriptions
 - real end-to-end validation against this repository, including a webhook-driven
   issue run that opened, merged, and closed automatically
+- real live lifecycle replay against `PR #37`, covering:
+  - `pull_request_review` changes requested
+  - `pull_request_review` approved
+  - `pull_request` closed without merge
 
 Still pending for a fuller product loop:
 
 - stronger suitability/risk gating ahead of autonomous execution
-- a full live PR/review webhook replay after the lifecycle, rerun, ledger, and
-  setup slices
+- one fresh live rerun path through `/occode-rerun` plus a separate merged-PR
+  validation on a low-risk issue
 - broader policy-doc polish

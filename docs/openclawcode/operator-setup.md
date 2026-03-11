@@ -234,3 +234,12 @@ After the health check passes:
 At that point the supported setup is complete.
 The next validation target should be a real `pull_request` or `pull_request_review`
 event replay against the same route.
+
+Operator caveat for live review replay:
+
+- the author of a GitHub pull request cannot submit `Request changes` on their
+  own PR
+- to validate the `changes requested` path, use a second reviewer account or a
+  collaborator account
+- if you do not want to merge the PR, validating `closed without merge` is a
+  safer real-world `pull_request` lifecycle check than merging a nontrivial PR

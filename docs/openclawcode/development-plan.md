@@ -75,6 +75,10 @@ real bundled OpenClaw chatops adapter:
   - temporary webhook ingress
 - a repo-local setup verification script for gateway, webhook, binding, tunnel
   health, and required GitHub webhook event subscriptions
+- real live lifecycle replay for one tracked PR covering:
+  - `pull_request_review` changes requested
+  - `pull_request_review` approved
+  - `pull_request` closed without merge
 
 The repository has already proven several real production-style checkpoints:
 
@@ -88,11 +92,11 @@ The current bottleneck is no longer basic execution. The current bottleneck is
 turning the working loop into a cleanly operable product:
 
 - issue intake, lifecycle updates, rerun control, operator ledger visibility,
-  and setup verification now exist, but the newer PR/review lifecycle path still
-  needs more live replay
-- the preflight blockers found during live replay are now fixed, but full
-  PR/review webhook validation still needs to be replayed against the live
-  route after the lifecycle, rerun, ledger, and setup slices
+  and setup verification now exist, and the real review or close-without-merge
+  lifecycle path has now been replayed successfully
+- the preflight blockers found during live replay are now fixed, and a real
+  review plus closed-without-merge replay has been validated against the live
+  route; the remaining live gap is a fresh rerun plus merged-PR validation
 - packaging and installation are now documented locally, but still need more
   proof under a fresh operator environment
 - policy docs lag the implemented guarded auto-merge behavior and need to be
@@ -643,16 +647,20 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. choose one low-risk tracked issue or PR in this repository
-2. replay a real `pull_request` lifecycle event against the live webhook route
-3. replay a real `pull_request_review` lifecycle event against the same route
+1. choose one fresh low-risk issue in this repository
+2. drive it to a real draft PR and one real `changes requested` review
+3. exercise `/occode-rerun` against that tracked issue while preserving branch
+   and PR continuity
 4. verify chat notifications, snapshot updates, and `/occode-inbox` output for:
-   - changes requested
-   - approved
-   - merged or closed-without-merge
-5. if possible, exercise one request-changes rerun through `/occode-rerun`
-6. document the exact GitHub permissions, replay method, and operator caveats
-7. update the dev log and status docs with the live lifecycle validation result
+   - rerun lineage
+   - updated review context
+   - final disposition after rerun
+5. if the issue remains low-risk, validate one real merged-PR lifecycle event
+   against the live route
+6. document the exact GitHub permissions, replay method, and operator caveats,
+   including the need for a second reviewer account when the PR author cannot
+   request changes on their own pull request
+7. update the dev log and status docs with the live rerun or merge result
 8. commit the slice only after targeted validation passes
 
 ## Test Strategy
