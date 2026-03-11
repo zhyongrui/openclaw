@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { WorkflowRun } from "../contracts/index.js";
+import type { WorkflowRerunContext, WorkflowRun } from "../contracts/index.js";
 import type { GitHubIssueClient, PullRequestRef, RepoRef } from "../github/index.js";
 import {
   buildPullRequestBody,
@@ -22,6 +22,7 @@ export interface IssueWorkflowRequest extends RepoRef {
   branchName?: string;
   openPullRequest?: boolean;
   mergeOnApprove?: boolean;
+  rerunContext?: WorkflowRerunContext;
 }
 
 export interface PullRequestPublisher {
@@ -50,6 +51,60 @@ function noteRun(run: WorkflowRun, note: string, now: TimestampFactory): Workflo
     ...run,
     updatedAt: now(),
     history: [...run.history, note],
+  };
+}
+
+function trimSingleLine(value: string | undefined): string | undefined {
+  const singleLine = value
+    ?.split("\n")
+    .map((line) => line.trim())
+    .find(Boolean);
+  return singleLine && singleLine.length > 0 ? singleLine : undefined;
+}
+
+function attachRerunContext(
+  run: WorkflowRun,
+  rerunContext: WorkflowRerunContext,
+  now: TimestampFactory,
+): WorkflowRun {
+  const normalizedReason = rerunContext.reason.trim() || "Manual rerun requested.";
+  const normalizedContext: WorkflowRerunContext = {
+    ...rerunContext,
+    reason: normalizedReason,
+    reviewSummary: rerunContext.reviewSummary?.trim() || undefined,
+    reviewUrl: rerunContext.reviewUrl?.trim() || undefined,
+  };
+
+  const notes = [
+    `Rerun requested: ${trimSingleLine(normalizedReason) ?? "Manual rerun requested."}`,
+  ];
+
+  if (normalizedContext.priorRunId || normalizedContext.priorStage) {
+    notes.push(
+      `Rerun context: prior run ${normalizedContext.priorRunId ?? "unknown"} from stage ${normalizedContext.priorStage ?? "unknown"}.`,
+    );
+  }
+
+  if (normalizedContext.reviewDecision || normalizedContext.reviewSubmittedAt) {
+    notes.push(
+      `Latest review context: ${normalizedContext.reviewDecision ?? "unknown"} at ${normalizedContext.reviewSubmittedAt ?? "unknown"}.`,
+    );
+  }
+
+  const reviewSummary = trimSingleLine(normalizedContext.reviewSummary);
+  if (reviewSummary) {
+    notes.push(`Latest review summary: ${reviewSummary}`);
+  }
+
+  if (normalizedContext.reviewUrl) {
+    notes.push(`Latest review URL: ${normalizedContext.reviewUrl}`);
+  }
+
+  return {
+    ...run,
+    updatedAt: now(),
+    rerunContext: normalizedContext,
+    history: [...run.history, ...notes],
   };
 }
 
@@ -173,6 +228,9 @@ export async function runIssueWorkflow(
   });
 
   let run = createRun(issue, now);
+  if (request.rerunContext) {
+    run = attachRerunContext(run, request.rerunContext, now);
+  }
   await deps.store.save(run);
 
   run = await executePlanning(run, deps.planner, now);

@@ -143,6 +143,69 @@ describe("openclawCodeRunCommand", () => {
     );
   });
 
+  it("forwards rerun flags into the workflow request and prints stable rerun JSON fields", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        rerunContext: {
+          reason: "Address GitHub review feedback",
+          requestedAt: "2026-01-02T00:00:00.000Z",
+          priorRunId: "run_122",
+          priorStage: "changes-requested",
+          reviewDecision: "changes-requested",
+          reviewSubmittedAt: "2026-01-01T23:59:00.000Z",
+          reviewSummary: "Please add a regression test for the rerun path.",
+          reviewUrl: "https://github.com/openclaw/openclaw/pull/42#pullrequestreview-9",
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand(
+      {
+        issue: "2",
+        repoRoot: "/repo",
+        json: true,
+        rerunPriorRunId: "run_122",
+        rerunPriorStage: "changes-requested",
+        rerunReason: "Address GitHub review feedback",
+        rerunRequestedAt: "2026-01-02T00:00:00.000Z",
+        rerunReviewDecision: "changes-requested",
+        rerunReviewSubmittedAt: "2026-01-01T23:59:00.000Z",
+        rerunReviewSummary: "Please add a regression test for the rerun path.",
+        rerunReviewUrl: "https://github.com/openclaw/openclaw/pull/42#pullrequestreview-9",
+      },
+      runtime,
+    );
+
+    expect(mocks.runIssueWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rerunContext: {
+          reason: "Address GitHub review feedback",
+          requestedAt: "2026-01-02T00:00:00.000Z",
+          priorRunId: "run_122",
+          priorStage: "changes-requested",
+          reviewDecision: "changes-requested",
+          reviewSubmittedAt: "2026-01-01T23:59:00.000Z",
+          reviewSummary: "Please add a regression test for the rerun path.",
+          reviewUrl: "https://github.com/openclaw/openclaw/pull/42#pullrequestreview-9",
+        },
+      }),
+      expect.any(Object),
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.rerunRequested).toBe(true);
+    expect(payload.rerunReason).toBe("Address GitHub review feedback");
+    expect(payload.rerunRequestedAt).toBe("2026-01-02T00:00:00.000Z");
+    expect(payload.rerunPriorRunId).toBe("run_122");
+    expect(payload.rerunPriorStage).toBe("changes-requested");
+    expect(payload.rerunReviewDecision).toBe("changes-requested");
+    expect(payload.rerunReviewSubmittedAt).toBe("2026-01-01T23:59:00.000Z");
+    expect(payload.rerunReviewSummary).toBe("Please add a regression test for the rerun path.");
+    expect(payload.rerunReviewUrl).toBe(
+      "https://github.com/openclaw/openclaw/pull/42#pullrequestreview-9",
+    );
+  });
+
   it("keeps unpublished local draft metadata separate from published pr fields", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({

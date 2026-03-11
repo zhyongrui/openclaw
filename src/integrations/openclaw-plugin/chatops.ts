@@ -1,6 +1,10 @@
 import path from "node:path";
 import process from "node:process";
-import type { IssueRef, WorkflowRun } from "../../openclawcode/contracts/index.js";
+import type {
+  IssueRef,
+  WorkflowRerunContext,
+  WorkflowRun,
+} from "../../openclawcode/contracts/index.js";
 
 const SUPPORTED_ISSUE_ACTIONS = new Set(["opened", "reopened", "labeled"]);
 
@@ -56,7 +60,7 @@ export interface ChatopsIssueIntakeDecision {
 }
 
 export interface OpenClawCodeChatopsCommand {
-  action: "start" | "skip" | "status";
+  action: "start" | "rerun" | "skip" | "status";
   issue: {
     owner: string;
     repo: string;
@@ -81,6 +85,7 @@ export interface OpenClawCodeChatopsRunRequest {
   testCommands: string[];
   openPullRequest: boolean;
   mergeOnApprove: boolean;
+  rerunContext?: WorkflowRerunContext;
 }
 
 function normalizeValue(value: string): string {
@@ -331,7 +336,7 @@ export function buildIssueApprovalMessage(params: {
 }
 
 function parseCommandAction(input: string): OpenClawCodeChatopsCommand["action"] | null {
-  const match = /^\/occode-(start|skip|status)\b/i.exec(input.trim());
+  const match = /^\/occode-(start|rerun|skip|status)\b/i.exec(input.trim());
   if (!match) {
     return null;
   }
@@ -408,7 +413,7 @@ export function parseChatopsCommand(
     return null;
   }
 
-  const args = input.trim().replace(/^\/occode-(start|skip|status)\s*/i, "");
+  const args = input.trim().replace(/^\/occode-(start|rerun|skip|status)\s*/i, "");
   const issue = parseIssueReference(args, defaults);
   if (!issue) {
     return null;
@@ -427,6 +432,7 @@ function defaultBranchName(issueNumber: number): string {
 export function buildRunRequestFromCommand(params: {
   command: OpenClawCodeChatopsCommand;
   config: OpenClawCodeChatopsRepoConfig;
+  rerunContext?: WorkflowRerunContext;
 }): OpenClawCodeChatopsRunRequest {
   const { command, config } = params;
   if (
@@ -448,6 +454,7 @@ export function buildRunRequestFromCommand(params: {
     testCommands: [...config.testCommands],
     openPullRequest: config.openPullRequest !== false,
     mergeOnApprove: config.mergeOnApprove === true,
+    rerunContext: params.rerunContext,
   };
 }
 
@@ -484,6 +491,30 @@ export function buildOpenClawCodeRunArgv(request: OpenClawCodeChatopsRunRequest)
   }
   if (request.mergeOnApprove) {
     argv.push("--merge-on-approve");
+  }
+  if (request.rerunContext?.priorRunId) {
+    argv.push("--rerun-prior-run-id", request.rerunContext.priorRunId);
+  }
+  if (request.rerunContext?.priorStage) {
+    argv.push("--rerun-prior-stage", request.rerunContext.priorStage);
+  }
+  if (request.rerunContext?.reason) {
+    argv.push("--rerun-reason", request.rerunContext.reason);
+  }
+  if (request.rerunContext?.requestedAt) {
+    argv.push("--rerun-requested-at", request.rerunContext.requestedAt);
+  }
+  if (request.rerunContext?.reviewDecision) {
+    argv.push("--rerun-review-decision", request.rerunContext.reviewDecision);
+  }
+  if (request.rerunContext?.reviewSubmittedAt) {
+    argv.push("--rerun-review-submitted-at", request.rerunContext.reviewSubmittedAt);
+  }
+  if (request.rerunContext?.reviewSummary) {
+    argv.push("--rerun-review-summary", request.rerunContext.reviewSummary);
+  }
+  if (request.rerunContext?.reviewUrl) {
+    argv.push("--rerun-review-url", request.rerunContext.reviewUrl);
   }
 
   argv.push("--json");

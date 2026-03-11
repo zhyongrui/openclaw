@@ -30,6 +30,7 @@ loop with:
   plugin
 - chat-facing operator commands:
   - `/occode-start`
+  - `/occode-rerun`
   - `/occode-status`
   - `/occode-inbox`
   - `/occode-skip`
@@ -40,17 +41,17 @@ loop with:
   agent entrypoint
 - an `openclaw code run ...` CLI path for issue-driven execution
 - draft PR publishing and guarded merge hooks in the workflow service layer
+- event-driven `pull_request` / `pull_request_review` webhook intake with chat
+  notifications for tracked lifecycle changes
 - GitHub-side status healing for review, merged, and closed-without-merge PR
   outcomes
-- rerun continuity that reuses an existing open PR for the same issue branch
+- explicit request-changes rerun control with rerun artifacts, review context,
+  and existing-PR continuity
 - real end-to-end validation against this repository, including a webhook-driven
   issue run that opened, merged, and closed automatically
 
 Still pending for a fuller product loop:
 
-- event-driven `pull_request` / `pull_request_review` webhook intake and chat
-  push notifications
-- first-class request-changes rerun artifacts and a dedicated rerun control path
 - stronger suitability/risk gating ahead of autonomous execution
 - richer operator ledger and notification visibility
 - broader setup, runbook, and policy-doc polish

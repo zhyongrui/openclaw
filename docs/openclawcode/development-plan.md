@@ -80,14 +80,13 @@ The repository has already proven several real production-style checkpoints:
 - operator-facing recovery commands can heal local state after interruptions
 
 The current bottleneck is no longer basic execution. The current bottleneck is
-closing the GitHub lifecycle loop cleanly:
+keeping the operator-visible lifecycle coherent and inspectable:
 
-- issue intake is working, but PR and review outcomes are still refreshed
-  mostly through pull-style reconciliation instead of webhook-driven updates
-- reruns reuse the existing PR, but rerun intent and latest review findings are
-  not yet first-class workflow artifacts
-- the operator inbox exists, but it does not yet summarize external events,
-  final notification timing, or rerun chains compactly
+- issue intake plus PR/review lifecycle updates now arrive through webhook
+  intake, but the operator inbox still does not summarize external events,
+  final disposition, or rerun chains compactly
+- explicit reruns now preserve issue, branch, and PR continuity, but the
+  operator-facing surfaces do not yet make rerun lineage obvious
 - packaging and installation still feel like a development environment, not a
   clean product setup
 - policy docs lag the implemented guarded auto-merge behavior and need to be
@@ -117,12 +116,14 @@ The current repository state already supports:
 - builder/verifier execution
 - real draft PR publication in this repository
 - webhook-backed chatops intake plumbing
+- event-driven PR/review lifecycle webhook intake with chat notifications
 - queue persistence and background execution
 - chat-visible operator commands and recovery commands
 - structured status snapshots for workflow runs and tracked PRs
 - repo-to-chat binding commands for notification routing
 - on-demand GitHub healing for review, merge, and closed-without-merge states
 - reruns that reuse an already-open PR for the same issue branch
+- explicit rerun control with persisted rerun context in workflow artifacts
 - stable top-level JSON fields for downstream automation, including:
   - changed files
   - issue classification
@@ -132,8 +133,8 @@ The current repository state already supports:
   - verification decision, summary, and counts
   - auto-merge policy eligibility and disposition
 
-This means the next iteration can shift from output surfacing to event-driven
-loop closure, rerun semantics, and operator trust.
+This means the next iteration can shift from workflow bring-up to operator
+ledger quality, install hardening, and trust in the visible lifecycle state.
 
 ### Near-Term Delivery Streams
 
@@ -507,6 +508,10 @@ This is the concrete backlog that should be worked next, in order.
 
 ### Slice A: PR and Review Webhook Intake
 
+Status:
+
+- implemented on 2026-03-11
+
 Deliverables:
 
 - accept `pull_request` and `pull_request_review` webhook payloads for tracked
@@ -525,6 +530,10 @@ Why this first:
 
 ### Slice B: Event-Driven Snapshot Updates and Notifications
 
+Status:
+
+- implemented on 2026-03-11
+
 Deliverables:
 
 - update tracked issue snapshots immediately from PR and review webhook events
@@ -541,6 +550,10 @@ Why next:
   operating path
 
 ### Slice C: Request-Changes Rerun Control
+
+Status:
+
+- implemented on 2026-03-11
 
 Deliverables:
 
@@ -603,22 +616,23 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. inspect the current GitHub webhook handler and repo-binding resolution with
-   the issue-only route as the baseline
-2. extend payload parsing and routing to accept `pull_request` and
-   `pull_request_review` events for the same configured repositories
-3. define delivery-id and event-identity rules so duplicate lifecycle events do
-   not produce duplicate status transitions or duplicate chat notifications
-4. update snapshot state and notification scheduling so approved,
-   changes-requested, merged, and closed-without-merge outcomes can be applied
-   immediately from webhook events
-5. expose the accept / ignore / dedupe decision in operator-visible state or
-   logs so ignored lifecycle events are explainable
-6. add focused tests for review approval, review changes requested, merged,
-   closed-without-merge, and duplicate delivery handling
-7. replay realistic local webhook payloads against the plugin route
-8. validate with at least one real PR or review event in this repository
-9. update the dev log with the observed failure mode and final behavior
+1. extend `/occode-inbox` from a queue snapshot into a compact operator ledger
+2. include recent external lifecycle events and final disposition for each
+   tracked issue
+3. surface rerun lineage compactly:
+   - prior run id
+   - prior stage
+   - latest rerun request time
+4. record and display the last notification target and delivery timing for the
+   tracked issue snapshot
+5. keep the ledger compact enough for chat while still answering "what changed"
+   without opening the raw state file
+6. add focused tests for ledger formatting and rerun-chain visibility
+7. validate the ledger against locally persisted state with multiple completed
+   issues
+8. replay at least one realistic PR/review lifecycle path against the live
+   webhook route now that intake and rerun control exist
+9. update the dev log with the final ledger shape and operator tradeoffs
 10. commit the slice only after targeted tests pass
 
 ## Test Strategy

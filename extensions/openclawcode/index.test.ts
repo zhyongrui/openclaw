@@ -900,6 +900,155 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("queues /occode-rerun with review context and prefers the current chat target", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#215",
+        status: [
+          "openclawcode status for zhyongrui/openclawcode#215",
+          "Stage: Changes Requested",
+          "Summary: GitHub pull request review requested changes after the latest tracked workflow state.",
+        ].join("\n"),
+        stage: "changes-requested",
+        runId: "run-215",
+        updatedAt: "2026-03-11T03:10:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 215,
+        branchName: "openclawcode/issue-215",
+        pullRequestNumber: 315,
+        pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/315",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:old-thread",
+        latestReviewDecision: "changes-requested",
+        latestReviewSubmittedAt: "2026-03-11T03:09:00.000Z",
+        latestReviewSummary: [
+          "Please add a regression test for the rerun flow.",
+          "Keep the existing PR open.",
+        ].join("\n"),
+        latestReviewUrl: "https://github.com/zhyongrui/openclawcode/pull/315#pullrequestreview-11",
+      });
+
+      const result = await fixture.commands.get("occode-rerun")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-rerun #215",
+        args: "#215",
+        to: "user:rerun-chat",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: "Queued rerun for zhyongrui/openclawcode#215 from Changes Requested state. I will post status updates here.",
+      });
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.queue).toHaveLength(1);
+      expect(snapshot.queue[0]).toMatchObject({
+        issueKey: "zhyongrui/openclawcode#215",
+        notifyChannel: "feishu",
+        notifyTarget: "user:rerun-chat",
+        request: {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 215,
+          branchName: "openclawcode/issue-215",
+          openPullRequest: true,
+          mergeOnApprove: false,
+          rerunContext: {
+            reason: [
+              "Please add a regression test for the rerun flow.",
+              "Keep the existing PR open.",
+            ].join("\n"),
+            priorRunId: "run-215",
+            priorStage: "changes-requested",
+            reviewDecision: "changes-requested",
+            reviewSubmittedAt: "2026-03-11T03:09:00.000Z",
+            reviewSummary: [
+              "Please add a regression test for the rerun flow.",
+              "Keep the existing PR open.",
+            ].join("\n"),
+            reviewUrl: "https://github.com/zhyongrui/openclawcode/pull/315#pullrequestreview-11",
+          },
+        },
+      });
+      expect(snapshot.statusByIssue["zhyongrui/openclawcode#215"]).toBe(
+        "Queued rerun from Changes Requested state.",
+      );
+      expect(snapshot.queue[0]?.request.rerunContext?.requestedAt).toMatch(
+        /^2026-03-11T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      );
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the stored snapshot notification target for /occode-rerun", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#216",
+        status: "openclawcode status for zhyongrui/openclawcode#216\nStage: Ready For Human Review",
+        stage: "ready-for-human-review",
+        runId: "run-216",
+        updatedAt: "2026-03-11T03:20:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 216,
+        branchName: "openclawcode/issue-216",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:snapshot-thread",
+      });
+
+      const result = await fixture.commands.get("occode-rerun")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-rerun #216",
+        args: "#216",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: "Queued rerun for zhyongrui/openclawcode#216 from Ready For Human Review state. I will post status updates here.",
+      });
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.queue[0]).toMatchObject({
+        issueKey: "zhyongrui/openclawcode#216",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:snapshot-thread",
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("requires an existing tracked run before /occode-rerun can queue work", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      const result = await fixture.commands.get("occode-rerun")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-rerun #217",
+        args: "#217",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "No tracked openclawcode run found for zhyongrui/openclawcode#217.",
+          "Use /occode-start zhyongrui/openclawcode#217 for the first run.",
+        ].join("\n"),
+      });
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.queue).toEqual([]);
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("binds the current chat as the repo notification target through /occode-bind", async () => {
     const fixture = await registerPluginFixture();
     try {

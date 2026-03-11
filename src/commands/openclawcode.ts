@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { WorkflowRun } from "../openclawcode/index.js";
+import type { WorkflowRerunContext, WorkflowRun } from "../openclawcode/index.js";
 import {
   FileSystemWorkflowRunStore,
   GitHubPullRequestMerger,
@@ -29,6 +29,14 @@ export interface OpenClawCodeRunOpts {
   test?: string[];
   openPr?: boolean;
   mergeOnApprove?: boolean;
+  rerunPriorRunId?: string;
+  rerunPriorStage?: WorkflowRun["stage"];
+  rerunReason?: string;
+  rerunRequestedAt?: string;
+  rerunReviewDecision?: "approved" | "changes-requested";
+  rerunReviewSubmittedAt?: string;
+  rerunReviewSummary?: string;
+  rerunReviewUrl?: string;
   json?: boolean;
 }
 
@@ -237,6 +245,31 @@ function resolveVerificationApprovedForHumanReview(run: WorkflowRun): boolean | 
   return decision === "approve-for-human-review";
 }
 
+function resolveRerunContext(opts: OpenClawCodeRunOpts): WorkflowRerunContext | undefined {
+  if (
+    !opts.rerunReason &&
+    !opts.rerunPriorRunId &&
+    !opts.rerunPriorStage &&
+    !opts.rerunReviewDecision &&
+    !opts.rerunReviewSubmittedAt &&
+    !opts.rerunReviewSummary &&
+    !opts.rerunReviewUrl
+  ) {
+    return undefined;
+  }
+
+  return {
+    reason: opts.rerunReason ?? "Manual rerun requested.",
+    requestedAt: opts.rerunRequestedAt ?? new Date().toISOString(),
+    priorRunId: opts.rerunPriorRunId,
+    priorStage: opts.rerunPriorStage,
+    reviewDecision: opts.rerunReviewDecision,
+    reviewSubmittedAt: opts.rerunReviewSubmittedAt,
+    reviewSummary: opts.rerunReviewSummary,
+    reviewUrl: opts.rerunReviewUrl,
+  };
+}
+
 function toWorkflowRunJson(run: WorkflowRun) {
   const autoMergePolicy = resolveAutoMergePolicy(run);
   const autoMergeDisposition = resolveAutoMergeDisposition(run);
@@ -273,6 +306,15 @@ function toWorkflowRunJson(run: WorkflowRun) {
     verificationFindingCount: run.verificationReport?.findings.length ?? null,
     verificationMissingCoverageCount: run.verificationReport?.missingCoverage.length ?? null,
     verificationFollowUpCount: run.verificationReport?.followUps.length ?? null,
+    rerunRequested: Boolean(run.rerunContext),
+    rerunReason: run.rerunContext?.reason ?? null,
+    rerunRequestedAt: run.rerunContext?.requestedAt ?? null,
+    rerunPriorRunId: run.rerunContext?.priorRunId ?? null,
+    rerunPriorStage: run.rerunContext?.priorStage ?? null,
+    rerunReviewDecision: run.rerunContext?.reviewDecision ?? null,
+    rerunReviewSubmittedAt: run.rerunContext?.reviewSubmittedAt ?? null,
+    rerunReviewSummary: run.rerunContext?.reviewSummary ?? null,
+    rerunReviewUrl: run.rerunContext?.reviewUrl ?? null,
     runSummary: resolveRunSummary(run),
     autoMergeDisposition: autoMergeDisposition.autoMergeDisposition,
     autoMergeDispositionReason: autoMergeDisposition.autoMergeDispositionReason,
@@ -326,6 +368,7 @@ export async function openclawCodeRunCommand(
       branchName: opts.branchName,
       openPullRequest: Boolean(opts.openPr),
       mergeOnApprove: Boolean(opts.mergeOnApprove),
+      rerunContext: resolveRerunContext(opts),
     },
     {
       github,

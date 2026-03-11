@@ -555,6 +555,104 @@ describe("runIssueWorkflow", () => {
     }
   });
 
+  it("persists rerun context and latest review metadata in workflow artifacts", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-65",
+        worktreePath: "/repo/.openclawcode/worktrees/run-65",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const reviewUrl = "https://github.com/zhyongrui/openclawcode/pull/265#pullrequestreview-200";
+      const rerunReason = "Address GitHub review feedback";
+      const reviewSummary = [
+        "Please add a regression test for the rerun path.",
+        "Keep the existing PR open.",
+      ].join("\n");
+
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 65,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          rerunContext: {
+            reason: rerunReason,
+            requestedAt: "2026-03-11T03:00:00.000Z",
+            priorRunId: "run-64",
+            priorStage: "changes-requested",
+            reviewDecision: "changes-requested",
+            reviewSubmittedAt: "2026-03-11T02:55:00.000Z",
+            reviewSummary,
+            reviewUrl,
+          },
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder(),
+          verifier: new FakeVerifier({
+            decision: "request-changes",
+            summary: "Needs one more fix.",
+            findings: ["Carry the review context into the new run artifact"],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.rerunContext).toMatchObject({
+        reason: rerunReason,
+        requestedAt: "2026-03-11T03:00:00.000Z",
+        priorRunId: "run-64",
+        priorStage: "changes-requested",
+        reviewDecision: "changes-requested",
+        reviewSubmittedAt: "2026-03-11T02:55:00.000Z",
+        reviewSummary,
+        reviewUrl,
+      });
+      expect(run.history).toContain(`Rerun requested: ${rerunReason}`);
+      expect(run.history).toContain(
+        "Rerun context: prior run run-64 from stage changes-requested.",
+      );
+      expect(run.history).toContain(
+        "Latest review context: changes-requested at 2026-03-11T02:55:00.000Z.",
+      );
+      expect(run.history).toContain(
+        "Latest review summary: Please add a regression test for the rerun path.",
+      );
+      expect(run.history).toContain(`Latest review URL: ${reviewUrl}`);
+
+      const savedRun = JSON.parse(
+        await fs.readFile(path.join(stateDir, "runs", `${run.id}.json`), "utf8"),
+      ) as typeof run;
+      expect(savedRun.rerunContext).toMatchObject({
+        reason: rerunReason,
+        priorRunId: "run-64",
+        priorStage: "changes-requested",
+        reviewDecision: "changes-requested",
+        reviewSubmittedAt: "2026-03-11T02:55:00.000Z",
+        reviewSummary,
+        reviewUrl,
+      });
+      expect(savedRun.history).toContain(`Rerun requested: ${rerunReason}`);
+      expect(savedRun.history).toContain(
+        "Latest review summary: Please add a regression test for the rerun path.",
+      );
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("still opens draft pull requests when merge-on-approve is disabled", async () => {
     const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
 

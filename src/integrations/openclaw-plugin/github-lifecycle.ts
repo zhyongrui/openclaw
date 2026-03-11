@@ -114,6 +114,19 @@ function normalizeReviewDecision(
   return undefined;
 }
 
+function resolveReviewSummary(
+  event: GitHubPullRequestReviewWebhookEvent,
+  decision: "approved" | "changes-requested",
+): string {
+  const body = event.review.body?.trim();
+  if (body) {
+    return body;
+  }
+  return decision === "approved"
+    ? "GitHub review approved the pull request."
+    : "GitHub review requested changes on the pull request.";
+}
+
 function shouldApplyLifecycleUpdate(params: {
   snapshot: OpenClawCodeIssueStatusSnapshot;
   stage: OpenClawCodeIssueStatusSnapshot["stage"];
@@ -244,6 +257,10 @@ export function applyPullRequestReviewWebhookToSnapshot(params: {
         updatedAt,
         pullRequestNumber: snapshot.pullRequestNumber ?? event.pull_request.number,
         pullRequestUrl,
+        latestReviewDecision: "changes-requested",
+        latestReviewSubmittedAt: event.review.submitted_at ?? undefined,
+        latestReviewSummary: resolveReviewSummary(event, "changes-requested"),
+        latestReviewUrl: event.review.html_url ?? undefined,
       },
     };
   }
@@ -274,6 +291,10 @@ export function applyPullRequestReviewWebhookToSnapshot(params: {
       updatedAt,
       pullRequestNumber: snapshot.pullRequestNumber ?? event.pull_request.number,
       pullRequestUrl,
+      latestReviewDecision: "approved",
+      latestReviewSubmittedAt: event.review.submitted_at ?? undefined,
+      latestReviewSummary: resolveReviewSummary(event, "approved"),
+      latestReviewUrl: event.review.html_url ?? undefined,
     },
   };
 }

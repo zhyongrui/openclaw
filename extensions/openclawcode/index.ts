@@ -281,6 +281,59 @@ function resolveNotificationDestination(params: {
   };
 }
 
+function resolveInteractiveNotificationDestination(params: {
+  ctx: {
+    channel?: string;
+    to?: string;
+    from?: string;
+    senderId?: string;
+  };
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  binding?: Awaited<ReturnType<OpenClawCodeChatopsStore["getRepoBinding"]>>;
+  snapshot?: OpenClawCodeIssueStatusSnapshot;
+}): {
+  channel: string;
+  target: string;
+} {
+  const currentTarget = resolveCommandNotifyTarget(params.ctx);
+  if (currentTarget) {
+    return {
+      channel:
+        params.ctx.channel?.trim() ||
+        params.snapshot?.notifyChannel ||
+        params.binding?.notifyChannel ||
+        params.repoConfig.notifyChannel,
+      target: currentTarget,
+    };
+  }
+
+  return resolveNotificationDestination({
+    repoConfig: params.repoConfig,
+    binding: params.binding,
+    snapshot: params.snapshot,
+  });
+}
+
+function extractStatusSummary(status: string): string | undefined {
+  const summaryLine = status
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("Summary: "));
+  if (!summaryLine) {
+    return undefined;
+  }
+  const summary = summaryLine.slice("Summary: ".length).trim();
+  return summary.length > 0 ? summary : undefined;
+}
+
+function resolveRerunReason(snapshot: OpenClawCodeIssueStatusSnapshot): string {
+  return (
+    snapshot.latestReviewSummary ??
+    extractStatusSummary(snapshot.status) ??
+    `Manual rerun requested from ${formatStageLabel(snapshot.stage)} state.`
+  );
+}
+
 function resolveGithubSecret(
   pluginConfig: Record<string, unknown> | undefined,
 ): string | undefined {
@@ -873,6 +926,101 @@ export default {
         }
 
         return { text: `Queued ${issueKey}. I will post status updates here.` };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-rerun",
+      description: "Queue an explicit rerun for a tracked openclawcode issue.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const command = parseChatopsCommand(`/occode-rerun ${ctx.args ?? ""}`, {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!command) {
+          return {
+            text:
+              "Usage: /occode-rerun owner/repo#123\n" +
+              "Or, when exactly one repo is configured: /occode-rerun #123",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, command.issue);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${command.issue.owner}/${command.issue.repo}.`,
+          };
+        }
+
+        const issueKey = formatIssueKey({
+          owner: command.issue.owner,
+          repo: command.issue.repo,
+          number: command.issue.number,
+        });
+        const currentStatus = await store.getStatus(issueKey);
+        if (await store.isQueuedOrRunning(issueKey)) {
+          return { text: `${issueKey} is already in progress.\n${currentStatus ?? "Queued."}` };
+        }
+        if (await store.isPendingApproval(issueKey)) {
+          return {
+            text: [
+              `${issueKey} is still waiting for its initial approved run.`,
+              `Use /occode-start ${issueKey} to begin the first workflow execution.`,
+            ].join("\n"),
+          };
+        }
+
+        const snapshot = await store.getStatusSnapshot(issueKey);
+        if (!snapshot) {
+          return {
+            text: [
+              `No tracked openclawcode run found for ${issueKey}.`,
+              `Use /occode-start ${issueKey} for the first run.`,
+            ].join("\n"),
+          };
+        }
+
+        const binding = await store.getRepoBinding(formatRepoKey(command.issue));
+        const destination = resolveInteractiveNotificationDestination({
+          ctx,
+          repoConfig,
+          binding,
+          snapshot,
+        });
+        const request = buildRunRequestFromCommand({
+          command,
+          config: repoConfig,
+          rerunContext: {
+            reason: resolveRerunReason(snapshot),
+            requestedAt: new Date().toISOString(),
+            priorRunId: snapshot.runId,
+            priorStage: snapshot.stage,
+            reviewDecision: snapshot.latestReviewDecision,
+            reviewSubmittedAt: snapshot.latestReviewSubmittedAt,
+            reviewSummary: snapshot.latestReviewSummary,
+            reviewUrl: snapshot.latestReviewUrl,
+          },
+        });
+        const stageLabel = formatStageLabel(snapshot.stage);
+        const queued = await store.enqueue(
+          {
+            issueKey,
+            notifyChannel: destination.channel,
+            notifyTarget: destination.target,
+            request,
+          },
+          `Queued rerun from ${stageLabel} state.`,
+        );
+        if (!queued) {
+          return { text: `${issueKey} is already queued or running.` };
+        }
+
+        return {
+          text: `Queued rerun for ${issueKey} from ${stageLabel} state. I will post status updates here.`,
+        };
       },
     });
 

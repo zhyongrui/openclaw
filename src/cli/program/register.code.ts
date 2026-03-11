@@ -17,15 +17,18 @@ export function registerCodeCommands(program: Command) {
         `
 ${theme.heading("Examples:")}
 ${formatHelpExamples([
-  ["openclaw code run --issue 123", "Plan and run the workflow for issue #123 in the current repo."],
+  [
+    "openclaw code run --issue 123",
+    "Plan and run the workflow for issue #123 in the current repo.",
+  ],
   [
     'openclaw code run --issue 123 --test "pnpm exec vitest run --config vitest.openclawcode.config.mjs"',
-    "Run a targeted test command after the builder edits code."
+    "Run a targeted test command after the builder edits code.",
   ],
   [
     "openclaw code run --issue 123 --open-pr",
-    "Push the issue branch and open a draft PR after build."
-  ]
+    "Push the issue branch and open a draft PR after build.",
+  ],
 ])}
 
 ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code")}`,
@@ -49,6 +52,20 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .option("--test <command>", "Repeatable test command to run after build", collectOption, [])
     .option("--open-pr", "Push the issue branch and open a draft PR", false)
     .option("--merge-on-approve", "Merge automatically after verifier approval", false)
+    .option("--rerun-prior-run-id <id>", "Prior run id when this execution is an explicit rerun")
+    .option(
+      "--rerun-prior-stage <stage>",
+      "Prior workflow stage when this execution is an explicit rerun",
+    )
+    .option("--rerun-reason <text>", "Human or review reason for rerunning the issue")
+    .option("--rerun-requested-at <iso>", "ISO timestamp for when the rerun was requested")
+    .option(
+      "--rerun-review-decision <decision>",
+      "Latest GitHub review decision for the rerun context",
+    )
+    .option("--rerun-review-submitted-at <iso>", "ISO timestamp for the latest GitHub review")
+    .option("--rerun-review-summary <text>", "Latest GitHub review summary or body")
+    .option("--rerun-review-url <url>", "URL for the latest GitHub review")
     .option("--json", "Output JSON", false)
     .action(async (opts) => {
       await runCommandWithRuntime(defaultRuntime, async () => {
@@ -66,9 +83,31 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             test: Array.isArray(opts.test) ? (opts.test as string[]) : [],
             openPr: Boolean(opts.openPr),
             mergeOnApprove: Boolean(opts.mergeOnApprove),
-            json: Boolean(opts.json)
+            rerunPriorRunId: opts.rerunPriorRunId as string | undefined,
+            rerunPriorStage: opts.rerunPriorStage as
+              | "intake"
+              | "planning"
+              | "building"
+              | "draft-pr-opened"
+              | "verifying"
+              | "changes-requested"
+              | "ready-for-human-review"
+              | "merged"
+              | "escalated"
+              | "failed"
+              | undefined,
+            rerunReason: opts.rerunReason as string | undefined,
+            rerunRequestedAt: opts.rerunRequestedAt as string | undefined,
+            rerunReviewDecision: opts.rerunReviewDecision as
+              | "approved"
+              | "changes-requested"
+              | undefined,
+            rerunReviewSubmittedAt: opts.rerunReviewSubmittedAt as string | undefined,
+            rerunReviewSummary: opts.rerunReviewSummary as string | undefined,
+            rerunReviewUrl: opts.rerunReviewUrl as string | undefined,
+            json: Boolean(opts.json),
           },
-          defaultRuntime
+          defaultRuntime,
         );
       });
     });

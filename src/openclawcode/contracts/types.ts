@@ -74,6 +74,17 @@ export interface PullRequestDraft {
   openedAt?: string;
 }
 
+export interface WorkflowRerunContext {
+  reason: string;
+  requestedAt: string;
+  priorRunId?: string;
+  priorStage?: WorkflowStage;
+  reviewDecision?: "approved" | "changes-requested";
+  reviewSubmittedAt?: string;
+  reviewSummary?: string;
+  reviewUrl?: string;
+}
+
 export interface WorkflowAttemptSummary {
   total: number;
   planning: number;
@@ -109,5 +120,6 @@ export interface WorkflowRun {
   buildResult?: BuildResult;
   draftPullRequest?: PullRequestDraft;
   verificationReport?: VerificationReport;
+  rerunContext?: WorkflowRerunContext;
   history: string[];
 }

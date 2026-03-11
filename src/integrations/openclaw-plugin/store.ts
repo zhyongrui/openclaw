@@ -30,6 +30,10 @@ export interface OpenClawCodeIssueStatusSnapshot {
   pullRequestUrl?: string;
   notifyChannel?: string;
   notifyTarget?: string;
+  latestReviewDecision?: "approved" | "changes-requested";
+  latestReviewSubmittedAt?: string;
+  latestReviewSummary?: string;
+  latestReviewUrl?: string;
 }
 
 export interface OpenClawCodeRepoNotificationBinding {
@@ -109,6 +113,19 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
     notifyChannel:
       typeof candidate.notifyChannel === "string" ? candidate.notifyChannel : undefined,
     notifyTarget: typeof candidate.notifyTarget === "string" ? candidate.notifyTarget : undefined,
+    latestReviewDecision:
+      candidate.latestReviewDecision === "approved" ||
+      candidate.latestReviewDecision === "changes-requested"
+        ? candidate.latestReviewDecision
+        : undefined,
+    latestReviewSubmittedAt:
+      typeof candidate.latestReviewSubmittedAt === "string"
+        ? candidate.latestReviewSubmittedAt
+        : undefined,
+    latestReviewSummary:
+      typeof candidate.latestReviewSummary === "string" ? candidate.latestReviewSummary : undefined,
+    latestReviewUrl:
+      typeof candidate.latestReviewUrl === "string" ? candidate.latestReviewUrl : undefined,
   };
 }
 
@@ -183,6 +200,10 @@ function buildStatusSnapshot(params: {
     pullRequestUrl: params.run.draftPullRequest?.url,
     notifyChannel: params.notifyChannel,
     notifyTarget: params.notifyTarget,
+    latestReviewDecision: params.run.rerunContext?.reviewDecision,
+    latestReviewSubmittedAt: params.run.rerunContext?.reviewSubmittedAt,
+    latestReviewSummary: params.run.rerunContext?.reviewSummary,
+    latestReviewUrl: params.run.rerunContext?.reviewUrl,
   };
 }
 
