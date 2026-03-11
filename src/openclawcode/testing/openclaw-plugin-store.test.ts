@@ -388,6 +388,10 @@ describe("OpenClawCodeChatopsStore", () => {
       await fixture.store.recordWorkflowRunStatus(
         run,
         "openclawcode status for zhyongrui/openclawcode#109",
+        {
+          notifyChannel: "telegram",
+          notifyTarget: "chat:primary",
+        },
       );
 
       const snapshot = await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#109");
@@ -398,6 +402,18 @@ describe("OpenClawCodeChatopsStore", () => {
         issueNumber: 109,
         pullRequestNumber: 209,
         pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/209",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+      });
+      expect(
+        await fixture.store.findStatusSnapshotByPullRequest({
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          pullRequestNumber: 209,
+        }),
+      ).toMatchObject({
+        issueKey: "zhyongrui/openclawcode#109",
+        pullRequestNumber: 209,
       });
       expect(await fixture.store.getStatus("zhyongrui/openclawcode#109")).toBe(
         "openclawcode status for zhyongrui/openclawcode#109",

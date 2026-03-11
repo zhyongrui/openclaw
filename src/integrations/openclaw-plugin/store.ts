@@ -28,6 +28,8 @@ export interface OpenClawCodeIssueStatusSnapshot {
   branchName?: string;
   pullRequestNumber?: number;
   pullRequestUrl?: string;
+  notifyChannel?: string;
+  notifyTarget?: string;
 }
 
 export interface OpenClawCodeRepoNotificationBinding {
@@ -45,6 +47,7 @@ export interface OpenClawCodeGitHubDeliveryRecord {
   reason: string;
   receivedAt: string;
   issueKey?: string;
+  pullRequestNumber?: number;
 }
 
 interface OpenClawCodeQueueState {
@@ -103,6 +106,9 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
       typeof candidate.pullRequestNumber === "number" ? candidate.pullRequestNumber : undefined,
     pullRequestUrl:
       typeof candidate.pullRequestUrl === "string" ? candidate.pullRequestUrl : undefined,
+    notifyChannel:
+      typeof candidate.notifyChannel === "string" ? candidate.notifyChannel : undefined,
+    notifyTarget: typeof candidate.notifyTarget === "string" ? candidate.notifyTarget : undefined,
   };
 }
 
@@ -152,12 +158,16 @@ function normalizeGitHubDeliveryRecord(raw: unknown): OpenClawCodeGitHubDelivery
     reason: candidate.reason,
     receivedAt: candidate.receivedAt,
     issueKey: typeof candidate.issueKey === "string" ? candidate.issueKey : undefined,
+    pullRequestNumber:
+      typeof candidate.pullRequestNumber === "number" ? candidate.pullRequestNumber : undefined,
   };
 }
 
 function buildStatusSnapshot(params: {
   run: WorkflowRun;
   status: string;
+  notifyChannel?: string;
+  notifyTarget?: string;
 }): OpenClawCodeIssueStatusSnapshot {
   return {
     issueKey: `${params.run.issue.owner}/${params.run.issue.repo}#${params.run.issue.number}`,
@@ -171,6 +181,8 @@ function buildStatusSnapshot(params: {
     branchName: params.run.workspace?.branchName ?? params.run.buildResult?.branchName,
     pullRequestNumber: params.run.draftPullRequest?.number,
     pullRequestUrl: params.run.draftPullRequest?.url,
+    notifyChannel: params.notifyChannel,
+    notifyTarget: params.notifyTarget,
   };
 }
 
@@ -300,6 +312,23 @@ export class OpenClawCodeChatopsStore {
     return state.statusSnapshotsByIssue[issueKey];
   }
 
+  async findStatusSnapshotByPullRequest(params: {
+    owner: string;
+    repo: string;
+    pullRequestNumber: number;
+  }): Promise<OpenClawCodeIssueStatusSnapshot | undefined> {
+    await this.flushMutations();
+    const state = await this.loadState();
+    const owner = params.owner.toLowerCase();
+    const repo = params.repo.toLowerCase();
+    return Object.values(state.statusSnapshotsByIssue).find(
+      (snapshot) =>
+        snapshot.pullRequestNumber === params.pullRequestNumber &&
+        snapshot.owner.toLowerCase() === owner &&
+        snapshot.repo.toLowerCase() === repo,
+    );
+  }
+
   async getRepoBinding(repoKey: string): Promise<OpenClawCodeRepoNotificationBinding | undefined> {
     await this.flushMutations();
     const state = await this.loadState();
@@ -327,9 +356,21 @@ export class OpenClawCodeChatopsStore {
     });
   }
 
-  async recordWorkflowRunStatus(run: WorkflowRun, status: string): Promise<void> {
+  async recordWorkflowRunStatus(
+    run: WorkflowRun,
+    status: string,
+    notify?: {
+      notifyChannel?: string;
+      notifyTarget?: string;
+    },
+  ): Promise<void> {
     await this.mutateState((state) => {
-      const snapshot = buildStatusSnapshot({ run, status });
+      const snapshot = buildStatusSnapshot({
+        run,
+        status,
+        notifyChannel: notify?.notifyChannel,
+        notifyTarget: notify?.notifyTarget,
+      });
       state.statusByIssue[snapshot.issueKey] = status;
       state.statusSnapshotsByIssue[snapshot.issueKey] = snapshot;
     });

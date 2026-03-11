@@ -4,6 +4,8 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { readRequestBodyWithLimit } from "../../src/infra/http-body.js";
 import {
   OpenClawCodeChatopsStore,
+  applyPullRequestReviewWebhookToSnapshot,
+  applyPullRequestWebhookToSnapshot,
   buildIssueApprovalMessage,
   buildOpenClawCodeRunArgv,
   buildRunRequestFromCommand,
@@ -20,6 +22,8 @@ import {
   readGitHubRepositoryOwner,
   syncIssueSnapshotFromGitHub,
   type GitHubIssueWebhookEvent,
+  type GitHubPullRequestReviewWebhookEvent,
+  type GitHubPullRequestWebhookEvent,
   type OpenClawCodeChatopsRepoConfig,
   type OpenClawCodeIssueStatusSnapshot,
 } from "../../src/integrations/openclaw-plugin/index.js";
@@ -27,9 +31,15 @@ import {
 const DEFAULT_POLL_INTERVAL_MS = 3_000;
 const DEFAULT_RUN_TIMEOUT_MS = 30 * 60_000;
 const DEFAULT_WEBHOOK_MAX_BYTES = 256 * 1024;
+const SUPPORTED_GITHUB_EVENTS = new Set(["issues", "pull_request", "pull_request_review"]);
 
 let workerActive = false;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+type GitHubWebhookPayload =
+  | GitHubIssueWebhookEvent
+  | GitHubPullRequestWebhookEvent
+  | GitHubPullRequestReviewWebhookEvent;
 
 function resolveRepoConfig(
   repoConfigs: OpenClawCodeChatopsRepoConfig[],
@@ -251,6 +261,26 @@ function scheduleNotification(params: {
   });
 }
 
+function resolveNotificationDestination(params: {
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  binding?: Awaited<ReturnType<OpenClawCodeChatopsStore["getRepoBinding"]>>;
+  snapshot?: OpenClawCodeIssueStatusSnapshot;
+}): {
+  channel: string;
+  target: string;
+} {
+  return {
+    channel:
+      params.snapshot?.notifyChannel ??
+      params.binding?.notifyChannel ??
+      params.repoConfig.notifyChannel,
+    target:
+      params.snapshot?.notifyTarget ??
+      params.binding?.notifyTarget ??
+      params.repoConfig.notifyTarget,
+  };
+}
+
 function resolveGithubSecret(
   pluginConfig: Record<string, unknown> | undefined,
 ): string | undefined {
@@ -297,6 +327,233 @@ function readSingleHeaderValue(
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+async function handleIssueWebhookEvent(params: {
+  api: OpenClawPluginApi;
+  store: OpenClawCodeChatopsStore;
+  payload: GitHubIssueWebhookEvent;
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  binding?: Awaited<ReturnType<OpenClawCodeChatopsStore["getRepoBinding"]>>;
+  respondJson: (params: {
+    accepted: boolean;
+    reason: string;
+    issue?: string;
+    pullRequestNumber?: number;
+    statusCode?: number;
+    recordDelivery?: boolean;
+    extra?: Record<string, unknown>;
+  }) => Promise<boolean>;
+}): Promise<boolean> {
+  const decision = decideIssueWebhookIntake({
+    event: params.payload,
+    config: params.repoConfig,
+  });
+  if (!decision.accept || !decision.issue) {
+    return await params.respondJson({
+      accepted: false,
+      reason: decision.reason,
+    });
+  }
+
+  const issueKey = formatIssueKey(decision.issue);
+  const destination = resolveNotificationDestination({
+    repoConfig: params.repoConfig,
+    binding: params.binding,
+  });
+  if (params.repoConfig.triggerMode === "auto") {
+    const enqueued = await params.store.enqueue(
+      {
+        issueKey,
+        notifyChannel: destination.channel,
+        notifyTarget: destination.target,
+        request: buildRunRequestFromCommand({
+          command: {
+            action: "start",
+            issue: {
+              owner: decision.issue.owner,
+              repo: decision.issue.repo,
+              number: decision.issue.number,
+            },
+          },
+          config: params.repoConfig,
+        }),
+      },
+      "Auto-started from issue webhook.",
+    );
+    if (!enqueued) {
+      return await params.respondJson({
+        accepted: false,
+        reason: "already-tracked",
+        issue: issueKey,
+      });
+    }
+    scheduleNotification({
+      api: params.api,
+      channel: destination.channel,
+      target: destination.target,
+      text: [
+        "openclawcode auto-started a new GitHub issue.",
+        `Issue: ${issueKey}`,
+        `Title: ${decision.issue.title}`,
+        "Mode: auto",
+        "Status: queued for execution",
+      ].join("\n"),
+    });
+  } else {
+    const approvalMessage = buildIssueApprovalMessage({
+      issue: decision.issue,
+      config: params.repoConfig,
+    });
+    const accepted = await params.store.addPendingApproval({
+      issueKey,
+      notifyChannel: destination.channel,
+      notifyTarget: destination.target,
+    });
+    if (!accepted) {
+      return await params.respondJson({
+        accepted: false,
+        reason: "already-tracked",
+        issue: issueKey,
+      });
+    }
+    scheduleNotification({
+      api: params.api,
+      channel: destination.channel,
+      target: destination.target,
+      text: approvalMessage,
+    });
+  }
+
+  return await params.respondJson({
+    accepted: true,
+    reason: params.repoConfig.triggerMode === "auto" ? "auto-enqueued" : "announced-for-approval",
+    issue: issueKey,
+  });
+}
+
+async function handlePullRequestWebhookEvent(params: {
+  api: OpenClawPluginApi;
+  store: OpenClawCodeChatopsStore;
+  payload: GitHubPullRequestWebhookEvent;
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  binding?: Awaited<ReturnType<OpenClawCodeChatopsStore["getRepoBinding"]>>;
+  respondJson: (params: {
+    accepted: boolean;
+    reason: string;
+    issue?: string;
+    pullRequestNumber?: number;
+    statusCode?: number;
+    recordDelivery?: boolean;
+    extra?: Record<string, unknown>;
+  }) => Promise<boolean>;
+}): Promise<boolean> {
+  const snapshot = await params.store.findStatusSnapshotByPullRequest({
+    owner: params.repoConfig.owner,
+    repo: params.repoConfig.repo,
+    pullRequestNumber: params.payload.pull_request.number,
+  });
+  if (!snapshot) {
+    return await params.respondJson({
+      accepted: false,
+      reason: "untracked-pull-request",
+      pullRequestNumber: params.payload.pull_request.number,
+    });
+  }
+
+  const applied = applyPullRequestWebhookToSnapshot({
+    snapshot,
+    event: params.payload,
+  });
+  if (!applied.accepted || !applied.snapshot) {
+    return await params.respondJson({
+      accepted: false,
+      reason: applied.reason,
+      issue: snapshot.issueKey,
+      pullRequestNumber: params.payload.pull_request.number,
+    });
+  }
+
+  await params.store.setStatusSnapshot(applied.snapshot);
+  const destination = resolveNotificationDestination({
+    repoConfig: params.repoConfig,
+    binding: params.binding,
+    snapshot: applied.snapshot,
+  });
+  scheduleNotification({
+    api: params.api,
+    channel: destination.channel,
+    target: destination.target,
+    text: applied.snapshot.status,
+  });
+  return await params.respondJson({
+    accepted: true,
+    reason: applied.reason,
+    issue: applied.snapshot.issueKey,
+    pullRequestNumber: params.payload.pull_request.number,
+  });
+}
+
+async function handlePullRequestReviewWebhookEvent(params: {
+  api: OpenClawPluginApi;
+  store: OpenClawCodeChatopsStore;
+  payload: GitHubPullRequestReviewWebhookEvent;
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  binding?: Awaited<ReturnType<OpenClawCodeChatopsStore["getRepoBinding"]>>;
+  respondJson: (params: {
+    accepted: boolean;
+    reason: string;
+    issue?: string;
+    pullRequestNumber?: number;
+    statusCode?: number;
+    recordDelivery?: boolean;
+    extra?: Record<string, unknown>;
+  }) => Promise<boolean>;
+}): Promise<boolean> {
+  const snapshot = await params.store.findStatusSnapshotByPullRequest({
+    owner: params.repoConfig.owner,
+    repo: params.repoConfig.repo,
+    pullRequestNumber: params.payload.pull_request.number,
+  });
+  if (!snapshot) {
+    return await params.respondJson({
+      accepted: false,
+      reason: "untracked-pull-request",
+      pullRequestNumber: params.payload.pull_request.number,
+    });
+  }
+
+  const applied = applyPullRequestReviewWebhookToSnapshot({
+    snapshot,
+    event: params.payload,
+  });
+  if (!applied.accepted || !applied.snapshot) {
+    return await params.respondJson({
+      accepted: false,
+      reason: applied.reason,
+      issue: snapshot.issueKey,
+      pullRequestNumber: params.payload.pull_request.number,
+    });
+  }
+
+  await params.store.setStatusSnapshot(applied.snapshot);
+  const destination = resolveNotificationDestination({
+    repoConfig: params.repoConfig,
+    binding: params.binding,
+    snapshot: applied.snapshot,
+  });
+  scheduleNotification({
+    api: params.api,
+    channel: destination.channel,
+    target: destination.target,
+    text: applied.snapshot.status,
+  });
+  return await params.respondJson({
+    accepted: true,
+    reason: applied.reason,
+    issue: applied.snapshot.issueKey,
+    pullRequestNumber: params.payload.pull_request.number,
+  });
+}
+
 async function handleGithubWebhook(
   api: OpenClawPluginApi,
   store: OpenClawCodeChatopsStore,
@@ -312,7 +569,7 @@ async function handleGithubWebhook(
 
   const githubEvent = readSingleHeaderValue(req.headers, "x-github-event");
   const githubDeliveryId = readSingleHeaderValue(req.headers, "x-github-delivery");
-  if (githubEvent !== "issues") {
+  if (!githubEvent || !SUPPORTED_GITHUB_EVENTS.has(githubEvent)) {
     res.statusCode = 202;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.end(JSON.stringify({ accepted: false, reason: "ignored-event" }));
@@ -342,9 +599,9 @@ async function handleGithubWebhook(
     return true;
   }
 
-  let payload: GitHubIssueWebhookEvent;
+  let payload: GitHubWebhookPayload;
   try {
-    payload = JSON.parse(rawBody) as GitHubIssueWebhookEvent;
+    payload = JSON.parse(rawBody) as GitHubWebhookPayload;
   } catch {
     res.statusCode = 400;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -356,6 +613,7 @@ async function handleGithubWebhook(
     accepted: boolean;
     reason: string;
     issue?: string;
+    pullRequestNumber?: number;
     statusCode?: number;
     recordDelivery?: boolean;
     extra?: Record<string, unknown>;
@@ -369,6 +627,7 @@ async function handleGithubWebhook(
         reason: params.reason,
         receivedAt: new Date().toISOString(),
         issueKey: params.issue,
+        pullRequestNumber: params.pullRequestNumber,
       });
     }
     res.statusCode = params.statusCode ?? 202;
@@ -378,6 +637,7 @@ async function handleGithubWebhook(
         accepted: params.accepted,
         reason: params.reason,
         issue: params.issue,
+        pullRequest: params.pullRequestNumber,
         ...params.extra,
       }),
     );
@@ -391,6 +651,7 @@ async function handleGithubWebhook(
         accepted: false,
         reason: "duplicate-delivery",
         issue: existingDelivery.issueKey,
+        pullRequestNumber: existingDelivery.pullRequestNumber,
         recordDelivery: false,
         extra: {
           delivery: githubDeliveryId,
@@ -419,93 +680,47 @@ async function handleGithubWebhook(
     });
   }
 
-  const decision = decideIssueWebhookIntake({
-    event: payload,
-    config: matchingRepo,
-  });
-  if (!decision.accept || !decision.issue) {
-    return await respondJson({
-      accepted: false,
-      reason: decision.reason,
-    });
-  }
-
-  const issueKey = formatIssueKey(decision.issue);
   const repoKey = formatRepoKey({
     owner: matchingRepo.owner,
     repo: matchingRepo.repo,
   });
   const binding = await store.getRepoBinding(repoKey);
-  const notifyChannel = binding?.notifyChannel ?? matchingRepo.notifyChannel;
-  const notifyTarget = binding?.notifyTarget ?? matchingRepo.notifyTarget;
-  if (matchingRepo.triggerMode === "auto") {
-    const enqueued = await store.enqueue(
-      {
-        issueKey,
-        notifyChannel,
-        notifyTarget,
-        request: buildRunRequestFromCommand({
-          command: {
-            action: "start",
-            issue: {
-              owner: decision.issue.owner,
-              repo: decision.issue.repo,
-              number: decision.issue.number,
-            },
-          },
-          config: matchingRepo,
-        }),
-      },
-      "Auto-started from issue webhook.",
-    );
-    if (!enqueued) {
-      return await respondJson({
-        accepted: false,
-        reason: "already-tracked",
-        issue: issueKey,
-      });
-    }
-    scheduleNotification({
+  if (githubEvent === "issues") {
+    return await handleIssueWebhookEvent({
       api,
-      channel: notifyChannel,
-      target: notifyTarget,
-      text: [
-        "openclawcode auto-started a new GitHub issue.",
-        `Issue: ${issueKey}`,
-        `Title: ${decision.issue.title}`,
-        "Mode: auto",
-        "Status: queued for execution",
-      ].join("\n"),
+      store,
+      payload: payload as GitHubIssueWebhookEvent,
+      repoConfig: matchingRepo,
+      binding,
+      respondJson,
     });
-  } else {
-    const approvalMessage = buildIssueApprovalMessage({
-      issue: decision.issue,
-      config: matchingRepo,
-    });
-    const accepted = await store.addPendingApproval({
-      issueKey,
-      notifyChannel,
-      notifyTarget,
-    });
-    if (!accepted) {
-      return await respondJson({
-        accepted: false,
-        reason: "already-tracked",
-        issue: issueKey,
-      });
-    }
-    scheduleNotification({
+  }
+
+  if (githubEvent === "pull_request") {
+    return await handlePullRequestWebhookEvent({
       api,
-      channel: notifyChannel,
-      target: notifyTarget,
-      text: approvalMessage,
+      store,
+      payload: payload as GitHubPullRequestWebhookEvent,
+      repoConfig: matchingRepo,
+      binding,
+      respondJson,
+    });
+  }
+
+  if (githubEvent === "pull_request_review") {
+    return await handlePullRequestReviewWebhookEvent({
+      api,
+      store,
+      payload: payload as GitHubPullRequestReviewWebhookEvent,
+      repoConfig: matchingRepo,
+      binding,
+      respondJson,
     });
   }
 
   return await respondJson({
-    accepted: true,
-    reason: matchingRepo.triggerMode === "auto" ? "auto-enqueued" : "announced-for-approval",
-    issue: issueKey,
+    accepted: false,
+    reason: "ignored-event",
   });
 }
 
@@ -563,7 +778,10 @@ async function processNextQueuedRun(
 
     const statusMessage = buildRunStatusMessage(run);
     await store.finishCurrent(next.issueKey, statusMessage);
-    await store.recordWorkflowRunStatus(run, statusMessage);
+    await store.recordWorkflowRunStatus(run, statusMessage, {
+      notifyChannel: next.notifyChannel,
+      notifyTarget: next.notifyTarget,
+    });
     await sendText({
       api,
       channel: next.notifyChannel,

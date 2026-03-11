@@ -110,6 +110,63 @@ function issueWebhookPayloadWithOwnerObject(issueNumber: number) {
   });
 }
 
+function pullRequestWebhookPayload(params: {
+  pullRequestNumber: number;
+  action?: string;
+  state?: "open" | "closed";
+  merged?: boolean;
+  updatedAt?: string;
+  mergedAt?: string | null;
+  closedAt?: string | null;
+}) {
+  return JSON.stringify({
+    action: params.action ?? "closed",
+    repository: {
+      owner: "zhyongrui",
+      name: "openclawcode",
+    },
+    pull_request: {
+      number: params.pullRequestNumber,
+      html_url: `https://github.com/zhyongrui/openclawcode/pull/${params.pullRequestNumber}`,
+      state: params.state ?? "closed",
+      draft: false,
+      merged: params.merged ?? false,
+      merged_at: params.mergedAt ?? null,
+      updated_at: params.updatedAt ?? "2026-03-11T02:00:00.000Z",
+      closed_at: params.closedAt ?? params.updatedAt ?? "2026-03-11T02:00:00.000Z",
+    },
+  });
+}
+
+function pullRequestReviewWebhookPayload(params: {
+  pullRequestNumber: number;
+  reviewState: string;
+  action?: string;
+  submittedAt?: string;
+  updatedAt?: string;
+}) {
+  return JSON.stringify({
+    action: params.action ?? "submitted",
+    repository: {
+      owner: "zhyongrui",
+      name: "openclawcode",
+    },
+    pull_request: {
+      number: params.pullRequestNumber,
+      html_url: `https://github.com/zhyongrui/openclawcode/pull/${params.pullRequestNumber}`,
+      state: "open",
+      draft: false,
+      merged: false,
+      updated_at: params.updatedAt ?? params.submittedAt ?? "2026-03-11T02:00:00.000Z",
+    },
+    review: {
+      state: params.reviewState,
+      submitted_at: params.submittedAt ?? "2026-03-11T02:00:00.000Z",
+      html_url: `https://github.com/zhyongrui/openclawcode/pull/${params.pullRequestNumber}#pullrequestreview-1`,
+    },
+  });
+}
+
 async function waitForAssertion(assertion: () => void, attempts = 20): Promise<void> {
   let lastError: unknown;
   for (let index = 0; index < attempts; index += 1) {
@@ -465,6 +522,302 @@ describe("openclawcode extension", () => {
       });
       await waitForAssertion(() => {
         expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("applies approved review webhook events to tracked snapshots and notifies the original chat target", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.setRepoBinding({
+        repoKey: "zhyongrui/openclawcode",
+        notifyChannel: "feishu",
+        notifyTarget: "user:bound-chat",
+      });
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#212",
+        status: "openclawcode status for zhyongrui/openclawcode#212\nStage: Changes Requested",
+        stage: "changes-requested",
+        runId: "run-212",
+        updatedAt: "2026-03-11T01:00:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 212,
+        branchName: "openclawcode/issue-212",
+        pullRequestNumber: 312,
+        pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/312",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:original",
+      });
+      mocked.readRequestBodyWithLimit.mockResolvedValue(
+        pullRequestReviewWebhookPayload({
+          pullRequestNumber: 312,
+          reviewState: "approved",
+          submittedAt: "2026-03-11T02:15:00.000Z",
+        }),
+      );
+
+      const res = createMockServerResponse();
+      await fixture.route?.handler(
+        localReq({
+          method: "POST",
+          url: "/plugins/openclawcode/github",
+          headers: {
+            "x-github-event": "pull_request_review",
+            "x-github-delivery": "delivery-212-review-a",
+          },
+        }),
+        res,
+      );
+
+      expect(JSON.parse(String(res.body))).toMatchObject({
+        accepted: true,
+        reason: "review-approved",
+        issue: "zhyongrui/openclawcode#212",
+        pullRequest: 312,
+      });
+      await waitForAssertion(() => {
+        expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      });
+      expect(mocked.runMessageAction.mock.calls[0]?.[0]).toMatchObject({
+        params: expect.objectContaining({
+          channel: "telegram",
+          to: "chat:original",
+          message: expect.stringContaining("Stage: Ready For Human Review"),
+        }),
+      });
+      expect(await fixture.store.getGitHubDelivery("delivery-212-review-a")).toMatchObject({
+        eventName: "pull_request_review",
+        reason: "review-approved",
+        issueKey: "zhyongrui/openclawcode#212",
+        pullRequestNumber: 312,
+      });
+      expect(await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#212")).toMatchObject({
+        stage: "ready-for-human-review",
+        updatedAt: "2026-03-11T02:15:00.000Z",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:original",
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("applies changes-requested review webhook events using the repo binding when no snapshot target is stored", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.setRepoBinding({
+        repoKey: "zhyongrui/openclawcode",
+        notifyChannel: "feishu",
+        notifyTarget: "user:bound-chat",
+      });
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#213",
+        status: "openclawcode status for zhyongrui/openclawcode#213\nStage: Ready For Human Review",
+        stage: "ready-for-human-review",
+        runId: "run-213",
+        updatedAt: "2026-03-11T01:05:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 213,
+        branchName: "openclawcode/issue-213",
+        pullRequestNumber: 313,
+        pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/313",
+      });
+      mocked.readRequestBodyWithLimit.mockResolvedValue(
+        pullRequestReviewWebhookPayload({
+          pullRequestNumber: 313,
+          reviewState: "changes_requested",
+          submittedAt: "2026-03-11T02:20:00.000Z",
+        }),
+      );
+
+      const res = createMockServerResponse();
+      await fixture.route?.handler(
+        localReq({
+          method: "POST",
+          url: "/plugins/openclawcode/github",
+          headers: {
+            "x-github-event": "pull_request_review",
+            "x-github-delivery": "delivery-213-review-a",
+          },
+        }),
+        res,
+      );
+
+      expect(JSON.parse(String(res.body))).toMatchObject({
+        accepted: true,
+        reason: "review-changes-requested",
+        issue: "zhyongrui/openclawcode#213",
+        pullRequest: 313,
+      });
+      await waitForAssertion(() => {
+        expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      });
+      expect(mocked.runMessageAction.mock.calls[0]?.[0]).toMatchObject({
+        params: expect.objectContaining({
+          channel: "feishu",
+          to: "user:bound-chat",
+          message: expect.stringContaining("Stage: Changes Requested"),
+        }),
+      });
+      expect(await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#213")).toMatchObject({
+        stage: "changes-requested",
+        updatedAt: "2026-03-11T02:20:00.000Z",
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("applies merged pull request webhook events and deduplicates repeated lifecycle deliveries", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#214",
+        status: "openclawcode status for zhyongrui/openclawcode#214\nStage: Ready For Human Review",
+        stage: "ready-for-human-review",
+        runId: "run-214",
+        updatedAt: "2026-03-11T01:10:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 214,
+        branchName: "openclawcode/issue-214",
+        pullRequestNumber: 314,
+        pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/314",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:merge-target",
+      });
+      mocked.readRequestBodyWithLimit.mockResolvedValue(
+        pullRequestWebhookPayload({
+          pullRequestNumber: 314,
+          merged: true,
+          updatedAt: "2026-03-11T02:25:00.000Z",
+          mergedAt: "2026-03-11T02:25:00.000Z",
+        }),
+      );
+
+      const firstRes = createMockServerResponse();
+      await fixture.route?.handler(
+        localReq({
+          method: "POST",
+          url: "/plugins/openclawcode/github",
+          headers: {
+            "x-github-event": "pull_request",
+            "x-github-delivery": "delivery-214-pr-a",
+          },
+        }),
+        firstRes,
+      );
+
+      expect(JSON.parse(String(firstRes.body))).toMatchObject({
+        accepted: true,
+        reason: "pull-request-merged",
+        issue: "zhyongrui/openclawcode#214",
+        pullRequest: 314,
+      });
+
+      const secondRes = createMockServerResponse();
+      await fixture.route?.handler(
+        localReq({
+          method: "POST",
+          url: "/plugins/openclawcode/github",
+          headers: {
+            "x-github-event": "pull_request",
+            "x-github-delivery": "delivery-214-pr-a",
+          },
+        }),
+        secondRes,
+      );
+
+      expect(JSON.parse(String(secondRes.body))).toMatchObject({
+        accepted: false,
+        reason: "duplicate-delivery",
+        issue: "zhyongrui/openclawcode#214",
+        pullRequest: 314,
+        delivery: "delivery-214-pr-a",
+        previousReason: "pull-request-merged",
+      });
+      await waitForAssertion(() => {
+        expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      });
+      expect(mocked.runMessageAction.mock.calls[0]?.[0]).toMatchObject({
+        params: expect.objectContaining({
+          channel: "telegram",
+          to: "chat:merge-target",
+          message: expect.stringContaining("Stage: Merged"),
+        }),
+      });
+      expect(await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#214")).toMatchObject({
+        stage: "merged",
+        updatedAt: "2026-03-11T02:25:00.000Z",
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("applies closed-without-merge pull request webhook events to tracked snapshots", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#215",
+        status: "openclawcode status for zhyongrui/openclawcode#215\nStage: Ready For Human Review",
+        stage: "ready-for-human-review",
+        runId: "run-215",
+        updatedAt: "2026-03-11T01:12:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 215,
+        branchName: "openclawcode/issue-215",
+        pullRequestNumber: 315,
+        pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/315",
+      });
+      mocked.readRequestBodyWithLimit.mockResolvedValue(
+        pullRequestWebhookPayload({
+          pullRequestNumber: 315,
+          merged: false,
+          updatedAt: "2026-03-11T02:30:00.000Z",
+          closedAt: "2026-03-11T02:30:00.000Z",
+        }),
+      );
+
+      const res = createMockServerResponse();
+      await fixture.route?.handler(
+        localReq({
+          method: "POST",
+          url: "/plugins/openclawcode/github",
+          headers: {
+            "x-github-event": "pull_request",
+            "x-github-delivery": "delivery-215-pr-a",
+          },
+        }),
+        res,
+      );
+
+      expect(JSON.parse(String(res.body))).toMatchObject({
+        accepted: true,
+        reason: "pull-request-closed-without-merge",
+        issue: "zhyongrui/openclawcode#215",
+        pullRequest: 315,
+      });
+      await waitForAssertion(() => {
+        expect(mocked.runMessageAction).toHaveBeenCalledTimes(1);
+      });
+      expect(mocked.runMessageAction.mock.calls[0]?.[0]).toMatchObject({
+        params: expect.objectContaining({
+          message: expect.stringContaining("Stage: Escalated"),
+        }),
+      });
+      expect(await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#215")).toMatchObject({
+        stage: "escalated",
+        updatedAt: "2026-03-11T02:30:00.000Z",
       });
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
