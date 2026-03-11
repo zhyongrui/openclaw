@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { AgentToolResult, AgentToolUpdateCallback } from "@mariozechner/pi-agent-core";
 import type { AnyAgentTool } from "./pi-tools.types.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
@@ -34,23 +36,75 @@ function formatSuccessfulEditResult(pathParam: string): AgentToolResult<unknown>
   } as AgentToolResult<unknown>;
 }
 
-async function verifySandboxEditApplied(params: {
+function resolveSandboxHostPath(params: {
   bridge: SandboxFsBridge;
   root: string;
   pathParam: string;
+}): string {
+  return params.bridge.resolvePath({
+    filePath: params.pathParam,
+    cwd: params.root,
+  }).hostPath;
+}
+
+async function readSandboxHostFile(params: {
+  bridge: SandboxFsBridge;
+  root: string;
+  pathParam: string;
+}): Promise<string> {
+  const hostPath = resolveSandboxHostPath(params);
+  return await fs.readFile(hostPath, "utf-8");
+}
+
+async function verifySandboxEditApplied(params: {
+  pathParam: string;
   oldText?: string;
   newText?: string;
+  bridge: SandboxFsBridge;
+  root: string;
 }): Promise<boolean> {
-  const content = (
-    await params.bridge.readFile({
-      filePath: params.pathParam,
-      cwd: params.root,
-    })
-  ).toString("utf-8");
+  const content = await readSandboxHostFile(params);
   const hasNew = params.newText ? content.includes(params.newText) : true;
   const stillHasOld =
     params.oldText !== undefined && params.oldText.length > 0 && content.includes(params.oldText);
   return hasNew && !stillHasOld;
+}
+
+async function restoreSandboxFile(params: {
+  bridge: SandboxFsBridge;
+  root: string;
+  pathParam: string;
+  originalContent: Buffer;
+  signal?: AbortSignal;
+}): Promise<boolean> {
+  try {
+    await params.bridge.writeFile({
+      filePath: params.pathParam,
+      cwd: params.root,
+      data: params.originalContent,
+      mkdir: true,
+      signal: params.signal,
+    });
+  } catch {
+    // Fall through to host-path restore verification.
+  }
+
+  const hostPath = resolveSandboxHostPath(params);
+  const expected = params.originalContent.toString("utf-8");
+  const matchesAfterBridgeRestore = await fs
+    .readFile(hostPath, "utf-8")
+    .then((content) => content === expected)
+    .catch(() => false);
+  if (matchesAfterBridgeRestore) {
+    return true;
+  }
+
+  await fs.mkdir(path.dirname(hostPath), { recursive: true });
+  await fs.writeFile(hostPath, params.originalContent);
+  return await fs
+    .readFile(hostPath, "utf-8")
+    .then((content) => content === expected)
+    .catch(() => false);
 }
 
 export function wrapSandboxEditToolWithPostWriteRecovery(
@@ -99,18 +153,19 @@ export function wrapSandboxEditToolWithPostWriteRecovery(
           return result;
         }
 
-        if (pathParam && originalContent !== undefined) {
-          await params.bridge.writeFile({
-            filePath: pathParam,
-            cwd: params.root,
-            data: originalContent,
-            mkdir: true,
-            signal,
-          });
-        }
+        const restored =
+          pathParam && originalContent !== undefined
+            ? await restoreSandboxFile({
+                bridge: params.bridge,
+                root: params.root,
+                pathParam,
+                originalContent,
+                signal,
+              })
+            : false;
 
         throw new Error(
-          `Sandbox edit verification failed for ${pathParam}: file content on disk did not match the requested replacement after the tool reported success.${originalContent !== undefined ? " The original file contents were restored." : ""}`,
+          `Sandbox edit verification failed for ${pathParam}: file content on disk did not match the requested replacement after the tool reported success.${restored ? " The original file contents were restored." : ""}`,
         );
       } catch (error) {
         if (!pathParam || !newText) {

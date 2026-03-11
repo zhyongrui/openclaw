@@ -191,6 +191,14 @@ The current repository state already supports:
   - `PR #46` published, verified, auto-merged, and the issue closed
 - runner-level tool hardening that removes `edit` and `write` from live
   `openclawcode` agent sessions until the sandbox edit bridge is repaired
+- sandbox edit recovery that now:
+  - verifies the real host-side worktree file instead of trusting the bridge
+    readback alone
+  - restores the original file contents through the resolved host path when the
+    bridge write path still leaves the mounted file empty
+- a docker-gated sandbox edit e2e regression that exercises alias-style edit
+  params against a real workspace mount before the temporary runtime deny is
+  removed
 
 The last local blockers found while preparing the live replay are now closed:
 
@@ -268,8 +276,9 @@ Priority backlog:
 
 1. repair the underlying sandbox edit bridge so builder sessions no longer need
    the temporary top-level `edit`/`write` deny
-2. keep corrupt-success verification and rollback coverage for both host and
-   sandbox edit wrappers, including alias-based edit calls
+2. keep corrupt-success verification, rollback coverage, and docker-gated e2e
+   coverage for both host and sandbox edit wrappers, including alias-based edit
+   calls
 3. preserve rerun continuity after failed builder attempts without reopening
    file-corruption paths in reusable issue worktrees
 4. harden stale worker completions and duplicate queue promotions across reruns
@@ -360,12 +369,14 @@ The next concrete issue order should be:
 
 1. repair the sandbox edit bridge that still forces the temporary
    `edit`/`write` deny in live `openclawcode` runner sessions
-2. re-run one low-risk command-layer issue on the live route without that
+2. prove the bridge repair locally through the docker-gated sandbox edit path
+   before removing the live runner carveout
+3. re-run one low-risk command-layer issue on the live route without that
    carveout and confirm draft PR, verification, merge, and issue closure still
    work
-3. align README, plan, and operator docs with the exact live-tested branch,
+4. align README, plan, and operator docs with the exact live-tested branch,
    merge workflow, and builder-runtime safety rules
-4. only then resume the next product slice beyond workflow/runtime hardening
+5. only then resume the next product slice beyond workflow/runtime hardening
 
 This order is deliberate:
 
@@ -757,21 +768,24 @@ Why next:
 The next implementation slice should follow this order:
 
 1. inspect the sandbox edit bridge path that still leaves files empty on disk
-   when the upstream edit tool reports corrupt success
-2. remove the temporary runner-level `edit`/`write` deny only in code paths
-   that are proved safe by tests
-3. add or extend regression coverage around sandbox bridge recovery and any
+   when the upstream edit tool reports corrupt success, now using the
+   docker-gated workspace-mount regression as the local proving path
+2. keep the new host-path restoration fallback in place until the bridge itself
+   is repaired
+3. remove the temporary runner-level `edit`/`write` deny only in code paths
+   that are proved safe by tests and a fresh live issue run
+4. add or extend regression coverage around sandbox bridge recovery and any
    path alias handling required by the upstream edit tool
-4. rebuild and rerun one low-risk live issue on refreshed `main`
-5. confirm the run still reaches:
+5. rebuild and rerun one low-risk live issue on refreshed `main`
+6. confirm the run still reaches:
    - draft PR publication
    - verification approval
    - automatic merge and issue closure when policy allows it
-6. verify chat notifications, snapshot updates, and `/occode-inbox` output for
+7. verify chat notifications, snapshot updates, and `/occode-inbox` output for
    the final merged disposition after the bridge fix
-7. update the dev log and status docs with both the bridge fix and the new live
+8. update the dev log and status docs with both the bridge fix and the new live
    proof
-8. commit the slice only after targeted validation passes
+9. commit the slice only after targeted validation passes
 
 ## Test Strategy
 

@@ -87,9 +87,15 @@ loop with:
 - edit-recovery hardening for agent-backed builder sessions that now:
   - verifies host and sandbox edit recovery even when upstream edit calls use
     `file_path`, `old_string`, and `new_string`
+  - restores the original sandbox worktree file through the resolved host path
+    when the bridge still reports success but keeps leaving the mounted file
+    empty on disk
   - temporarily denies `edit` and `write` in `OpenClawAgentRunner` sessions so
     live issue runs stay on `read`/`exec`/`process` until the underlying
     sandbox edit bridge is repaired
+- a docker-gated sandbox edit end-to-end regression that exercises alias-style
+  edit parameters through the real workspace mount path before the runner-level
+  deny is removed
 - a fresh direct live rerun of issue `#44` on refreshed `main` that completed
   as a no-op `ready-for-human-review` run instead of reproducing the earlier
   stalled-planning corruption path

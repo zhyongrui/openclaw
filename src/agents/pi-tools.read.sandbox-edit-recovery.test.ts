@@ -45,7 +45,7 @@ vi.mock("@mariozechner/pi-coding-agent", async (importOriginal) => {
 
 const { createSandboxedEditTool } = await import("./pi-tools.read.js");
 
-function createTestBridge(root: string): SandboxFsBridge {
+function createTestBridge(root: string, options?: { corruptWrites?: boolean }): SandboxFsBridge {
   const resolveAbsolute = (filePath: string, cwd?: string) => {
     if (path.isAbsolute(filePath)) {
       return filePath;
@@ -82,6 +82,10 @@ function createTestBridge(root: string): SandboxFsBridge {
     async writeFile(params) {
       const absolutePath = resolveAbsolute(params.filePath, params.cwd);
       await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+      if (options?.corruptWrites) {
+        await fs.writeFile(absolutePath, "");
+        return;
+      }
       await fs.writeFile(absolutePath, params.data);
     },
     async mkdirp(params) {
@@ -176,6 +180,27 @@ describe("createSandboxedEditTool post-write recovery", () => {
         undefined,
       ),
     ).rejects.toThrow(/Sandbox edit verification failed/);
+    await expect(fs.readFile(filePath, "utf-8")).resolves.toBe(original);
+  });
+
+  it("falls back to host-path restoration when bridge writes keep leaving the sandbox file empty", async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-sandbox-edit-recovery-"));
+    const filePath = path.join(tmpDir, "file-host-restore.ts");
+    const original = "const value = 'old text';\n";
+    await fs.writeFile(filePath, original, "utf-8");
+    mocks.executeMode = "pass-through";
+
+    const tool = createSandboxedEditTool({
+      root: tmpDir,
+      bridge: createTestBridge(tmpDir, { corruptWrites: true }),
+    });
+    await expect(
+      tool.execute(
+        "call-1",
+        { file_path: "file-host-restore.ts", old_string: "old text", new_string: "new text" },
+        undefined,
+      ),
+    ).rejects.toThrow(/The original file contents were restored/);
     await expect(fs.readFile(filePath, "utf-8")).resolves.toBe(original);
   });
 });
