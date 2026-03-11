@@ -96,6 +96,12 @@ loop with:
   - temporarily denies `edit` and `write` in `OpenClawAgentRunner` sessions so
     live issue runs stay on `read`/`exec`/`process` until the underlying
     sandbox edit bridge is repaired
+- a staged runner re-enable switch for live validation:
+  - default behavior still denies `edit` and `write`
+  - `OPENCLAWCODE_ENABLE_FS_TOOLS=edit` removes only the runner-added `edit`
+    deny
+  - `OPENCLAWCODE_ENABLE_FS_TOOLS=edit,write` removes both runner-added fs
+    denies for controlled live validation
 - a docker-gated sandbox edit end-to-end regression that exercises alias-style
   edit parameters through the real workspace mount path before the runner-level
   deny is removed
@@ -114,8 +120,9 @@ loop with:
 
 Still pending for a fuller product loop:
 
-- fresh live validation with the deterministic sandbox edit path, followed by
-  removal of the temporary `edit`/`write` deny
+- fresh live validation with the deterministic sandbox edit path using the new
+  staged runner switch, followed by removal of the temporary `edit`/`write`
+  deny
 - stronger suitability/risk gating ahead of autonomous execution
 - proof under a fresh operator environment using docs and scripts only
 - broader policy-doc polish

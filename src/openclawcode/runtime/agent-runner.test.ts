@@ -177,4 +177,60 @@ describe("OpenClawAgentRunner", () => {
       expect.arrayContaining(["process", "edit", "write"]),
     );
   });
+
+  it("allows staged fs tool re-enable through OPENCLAWCODE_ENABLE_FS_TOOLS", async () => {
+    const { __testing } = await import("./agent-runner.js");
+
+    expect(__testing.resolveOpenClawCodeDeniedTools({})).toEqual(["edit", "write"]);
+    expect(
+      __testing.resolveOpenClawCodeDeniedTools({
+        OPENCLAWCODE_ENABLE_FS_TOOLS: "edit",
+      }),
+    ).toEqual(["write"]);
+    expect(
+      __testing.resolveOpenClawCodeDeniedTools({
+        OPENCLAWCODE_ENABLE_FS_TOOLS: "edit,write",
+      }),
+    ).toEqual([]);
+
+    const config = __testing.forceSessionScopedSandboxForAgent(
+      {
+        tools: {
+          deny: ["browser"],
+        },
+        agents: {
+          defaults: {
+            sandbox: {
+              mode: "all",
+              scope: "agent",
+              workspaceAccess: "rw",
+            },
+          },
+          list: [
+            {
+              id: "main",
+              sandbox: {
+                mode: "all",
+                scope: "agent",
+                workspaceAccess: "rw",
+              },
+            },
+          ],
+        },
+      },
+      "main",
+      {
+        env: {
+          OPENCLAWCODE_ENABLE_FS_TOOLS: "edit",
+        },
+      },
+    );
+
+    expect(config.tools?.deny).toEqual(expect.arrayContaining(["browser", "write"]));
+    expect(config.tools?.deny).not.toContain("edit");
+    expect(config.agents?.defaults?.tools?.deny).toEqual(expect.arrayContaining(["write"]));
+    expect(config.agents?.defaults?.tools?.deny).not.toContain("edit");
+    expect(config.agents?.list?.[0]?.tools?.deny).toEqual(expect.arrayContaining(["write"]));
+    expect(config.agents?.list?.[0]?.tools?.deny).not.toContain("edit");
+  });
 });

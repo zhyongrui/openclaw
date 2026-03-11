@@ -31,7 +31,21 @@ export interface AgentRunner {
   run(request: AgentRunRequest): Promise<AgentRunResult>;
 }
 
-const OPENCLAWCODE_DENIED_TOOLS = ["edit", "write"] as const;
+const OPENCLAWCODE_DEFAULT_DENIED_TOOLS = ["edit", "write"] as const;
+const OPENCLAWCODE_ENABLE_FS_TOOLS_ENV = "OPENCLAWCODE_ENABLE_FS_TOOLS";
+
+function resolveOpenClawCodeDeniedTools(env: NodeJS.ProcessEnv = process.env): string[] {
+  const enabled = new Set(
+    String(env[OPENCLAWCODE_ENABLE_FS_TOOLS_ENV] ?? "")
+      .split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(
+        (entry): entry is (typeof OPENCLAWCODE_DEFAULT_DENIED_TOOLS)[number] =>
+          entry === "edit" || entry === "write",
+      ),
+  );
+  return OPENCLAWCODE_DEFAULT_DENIED_TOOLS.filter((tool) => !enabled.has(tool));
+}
 
 function normalizeSessionToken(value: string): string {
   return (
@@ -59,13 +73,15 @@ function extractText(raw: unknown): string {
 function forceSessionScopedSandboxForAgent(
   config: OpenClawConfig,
   agentIdRaw?: string,
+  options?: { env?: NodeJS.ProcessEnv },
 ): OpenClawConfig {
   const next = structuredClone(config);
   const agentId = normalizeAgentId(agentIdRaw);
+  const deniedTools = resolveOpenClawCodeDeniedTools(options?.env);
   const appendDeniedPolicy = <T extends { deny?: string[] } | undefined>(policy: T): T => {
     const nextPolicy = {
       ...policy,
-      deny: Array.from(new Set([...(policy?.deny ?? []), ...OPENCLAWCODE_DENIED_TOOLS])),
+      deny: Array.from(new Set([...(policy?.deny ?? []), ...deniedTools])),
     };
     return nextPolicy as T;
   };
@@ -103,6 +119,7 @@ function forceSessionScopedSandboxForAgent(
 
 export const __testing = {
   forceSessionScopedSandboxForAgent,
+  resolveOpenClawCodeDeniedTools,
 };
 
 export class OpenClawAgentRunner implements AgentRunner {

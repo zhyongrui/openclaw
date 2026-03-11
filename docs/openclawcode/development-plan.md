@@ -205,6 +205,11 @@ The current repository state already supports:
 - a second docker-gated linked-worktree edit e2e regression that proves the
   rewritten sandbox edit path keeps large files visible through both
   `/workspace` and the absolute worktree mount shape used in live issue runs
+- a staged runner re-enable switch:
+  - default still denies `edit` and `write`
+  - `OPENCLAWCODE_ENABLE_FS_TOOLS=edit` allows a narrow live edit-only replay
+  - `OPENCLAWCODE_ENABLE_FS_TOOLS=edit,write` allows a fuller live fs-tool
+    replay without changing the default safe path
 
 The last local blockers found while preparing the live replay are now closed:
 
@@ -280,8 +285,8 @@ Objective:
 
 Priority backlog:
 
-1. stage a safe re-enable path for sandbox-backed builder edits now that the
-   mutation step is deterministic locally
+1. use the staged runner switch to validate sandbox-backed builder edits now
+   that the mutation step is deterministic locally
 2. keep corrupt-success verification, rollback coverage, and docker-gated e2e
    coverage for both host and sandbox edit wrappers, including alias-based edit
    calls and linked-worktree mounts
@@ -373,8 +378,8 @@ Validation rule:
 
 The next concrete issue order should be:
 
-1. stage the deterministic sandbox edit path for live validation without
-   removing the runner carveout globally in one jump
+1. use the new runner switch to stage the deterministic sandbox edit path for
+   live validation without removing the runner carveout globally in one jump
 2. prove the local repair through the docker-gated sandbox edit paths,
    including linked-worktree mounts, before removing the live runner carveout
 3. re-run one low-risk command-layer issue on the live route without that
@@ -774,7 +779,8 @@ Why next:
 The next implementation slice should follow this order:
 
 1. keep the deterministic sandbox edit path and host-path restoration fallback
-   in place while staging the next live validation
+   in place while staging the next live validation through
+   `OPENCLAWCODE_ENABLE_FS_TOOLS`
 2. add or extend regression coverage around sandbox bridge recovery and the
    linked-worktree mount shape used by live issue runs
 3. re-enable the runner-level `edit`/`write` tools only in code paths that are
