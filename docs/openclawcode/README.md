@@ -14,8 +14,9 @@ Recommended reading order:
 8. `openclaw-strategy.md`
 9. `openclaw-implementation-plan.md`
 10. `upstream-sync-policy.md`
-11. `mvp-runbook.md`
-12. `webhook-operations.md`
+11. `operator-setup.md`
+12. `mvp-runbook.md`
+13. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
@@ -49,10 +50,14 @@ loop with:
   and existing-PR continuity
 - a compact `/occode-inbox` operator ledger for recent lifecycle events, final
   disposition, rerun lineage, and last notification metadata
+- a repeatable operator setup runbook plus a repo-local setup verification
+  script for gateway, webhook, binding, and tunnel health
 - real end-to-end validation against this repository, including a webhook-driven
   issue run that opened, merged, and closed automatically
 
 Still pending for a fuller product loop:
 
 - stronger suitability/risk gating ahead of autonomous execution
-- broader setup, runbook, and policy-doc polish
+- a full live PR/review webhook replay after the lifecycle, rerun, ledger, and
+  setup slices
+- broader policy-doc polish

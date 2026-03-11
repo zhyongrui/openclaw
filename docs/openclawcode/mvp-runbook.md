@@ -3,6 +3,10 @@
 This runbook describes how to try the current `openclawcode` workflow against
 this repository.
 
+For the webhook/chatops operator path, start with `operator-setup.md`.
+This page stays focused on direct `openclaw code run ...` execution from the
+repository checkout.
+
 ## What The Current MVP Can Do
 
 The current `openclaw code run` path can:

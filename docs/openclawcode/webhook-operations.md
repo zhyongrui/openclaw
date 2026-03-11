@@ -3,6 +3,23 @@
 Use this runbook when `openclawcode` is exposed through an anonymous
 `trycloudflare` tunnel instead of a fixed public domain.
 
+Start with `operator-setup.md` first.
+This page only covers the temporary ingress helper and webhook URL rotation.
+
+## One-Time GitHub Webhook Shape
+
+The helper rewrites an existing repo webhook URL.
+It does not create the webhook for you.
+
+Create or update the GitHub repo webhook with:
+
+- content type: `application/json`
+- secret: the same value as `OPENCLAWCODE_GITHUB_WEBHOOK_SECRET`
+- events:
+  - `issues`
+  - `pull_request`
+  - `pull_request_review`
+
 ## Managed Tunnel Script
 
 The repository now includes:
@@ -85,8 +102,9 @@ When using the temporary ingress mode, start services in this order:
 
 1. start the local OpenClaw gateway
 2. run `./scripts/openclawcode-webhook-tunnel.sh start`
-3. create or redeliver a GitHub issue webhook event
-4. approve with `/occode-start #<issue>` in Feishu when running in
+3. run `./scripts/openclawcode-setup-check.sh`
+4. create or redeliver a GitHub issue, PR, or review webhook event
+5. approve with `/occode-start #<issue>` in Feishu when running in
    `triggerMode: "approve"`
 
 ## Limitation

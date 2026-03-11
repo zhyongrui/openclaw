@@ -69,7 +69,11 @@ real bundled OpenClaw chatops adapter:
   - closed-without-merge PRs
 - rerun continuity that reuses an existing open PR for the same issue branch
 - background issue execution through the built CLI entrypoint
-- operator runbooks for temporary webhook ingress and local gateway startup
+- operator runbooks for:
+  - local gateway and repo binding setup
+  - temporary webhook ingress
+- a repo-local setup verification script for gateway, webhook, binding, and
+  tunnel health
 
 The repository has already proven several real production-style checkpoints:
 
@@ -82,12 +86,13 @@ The repository has already proven several real production-style checkpoints:
 The current bottleneck is no longer basic execution. The current bottleneck is
 turning the working loop into a cleanly operable product:
 
-- issue intake, lifecycle updates, rerun control, and operator ledger visibility
-  now exist, but the install/setup path is still too manual
-- real PR/review webhook validation still needs to be replayed against the live
-  route after the newer lifecycle and ledger slices
-- packaging and installation still feel like a development environment, not a
-  clean product setup
+- issue intake, lifecycle updates, rerun control, operator ledger visibility,
+  and setup verification now exist, but the newer PR/review lifecycle path still
+  needs more live replay
+- full PR/review webhook validation still needs to be replayed against the live
+  route after the lifecycle, rerun, ledger, and setup slices
+- packaging and installation are now documented locally, but still need more
+  proof under a fresh operator environment
 - policy docs lag the implemented guarded auto-merge behavior and need to be
   brought back in sync
 
@@ -131,6 +136,9 @@ The current repository state already supports:
   - published PR and merged PR status
   - verification decision, summary, and counts
   - auto-merge policy eligibility and disposition
+- operator runbooks for local setup, repo binding, and temporary webhook ingress
+- a repo-local setup verification script for gateway, webhook, binding, and
+  tunnel health
 
 This means the next iteration can shift from workflow bring-up to setup
 hardening, live validation, and trust in the visible lifecycle state.
@@ -587,6 +595,10 @@ Why next:
 
 ### Slice E: Operator Install and Setup Hardening
 
+Status:
+
+- implemented on 2026-03-11
+
 Deliverables:
 
 - document the supported install path as a first-class workflow
@@ -619,21 +631,17 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. consolidate the supported local setup path into one repeatable operator flow
-2. document repo binding, webhook setup, chat target setup, and required tokens
-3. document the local gateway and temporary tunnel startup path explicitly
-4. reduce manual state-file editing in favor of documented commands or config
-5. add a setup verification checklist that confirms:
-   - gateway is running
-   - webhook signatures validate
-   - repo binding is present
-   - chat notifications reach the expected target
-6. add focused tests or smoke checks for the setup-facing scripts/config helpers
-7. replay at least one realistic PR/review lifecycle path against the live
-   webhook route now that intake, rerun control, and ledger visibility exist
-8. update the dev log with the final setup path and remaining operator caveats
-9. update README/status docs so the documented install path matches reality
-10. commit the slice only after targeted tests pass
+1. choose one low-risk tracked issue or PR in this repository
+2. replay a real `pull_request` lifecycle event against the live webhook route
+3. replay a real `pull_request_review` lifecycle event against the same route
+4. verify chat notifications, snapshot updates, and `/occode-inbox` output for:
+   - changes requested
+   - approved
+   - merged or closed-without-merge
+5. if possible, exercise one request-changes rerun through `/occode-rerun`
+6. document the exact GitHub permissions, replay method, and operator caveats
+7. update the dev log and status docs with the live lifecycle validation result
+8. commit the slice only after targeted validation passes
 
 ## Test Strategy
 
