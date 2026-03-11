@@ -32,6 +32,10 @@ class FakeGitHubClient implements GitHubIssueClient {
     return this.review;
   }
 
+  async findOpenPullRequestForBranch(): Promise<PullRequestRef | undefined> {
+    throw new Error("not used");
+  }
+
   async createDraftPullRequest(): Promise<PullRequestRef> {
     throw new Error("not used");
   }

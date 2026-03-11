@@ -245,6 +245,11 @@ That GitHub-side reconciliation now also covers review outcomes:
 - a newer GitHub `APPROVED` review can heal a previously
   `changes-requested` issue back to `ready-for-human-review`
 
+Workflow reruns now also preserve pull-request continuity:
+
+- if the issue branch already has an open GitHub pull request, the next
+  workflow run reuses that PR instead of trying to create another one
+
 This keeps the first remote sync path demand-driven and cheap while still
 fixing the most important stale-status case: a human merges the PR outside the
 local workflow process.

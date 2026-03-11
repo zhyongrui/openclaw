@@ -31,6 +31,7 @@ class FakeGitHubClient implements GitHubIssueClient {
   promoted: number[] = [];
   merged: number[] = [];
   closedIssues: number[] = [];
+  existingPullRequest?: PullRequestRef;
 
   async fetchIssue(ref: RepoRef & { issueNumber: number }): Promise<IssueRef> {
     return {
@@ -64,6 +65,14 @@ class FakeGitHubClient implements GitHubIssueClient {
     };
   }
 
+  async fetchLatestPullRequestReview(): Promise<undefined> {
+    return undefined;
+  }
+
+  async findOpenPullRequestForBranch(): Promise<PullRequestRef | undefined> {
+    return this.existingPullRequest;
+  }
+
   async createDraftPullRequest(): Promise<PullRequestRef> {
     const value = { number: 99, url: "https://github.com/example/repo/pull/99" };
     this.published.push(value);
@@ -80,6 +89,13 @@ class FakeGitHubClient implements GitHubIssueClient {
 
   async closeIssue(request: { issueNumber: number }): Promise<void> {
     this.closedIssues.push(request.issueNumber);
+  }
+}
+
+class ReusedPullRequestGitHubClient extends FakeGitHubClient {
+  constructor(existingPullRequest: PullRequestRef) {
+    super();
+    this.existingPullRequest = existingPullRequest;
   }
 }
 
@@ -468,6 +484,72 @@ describe("runIssueWorkflow", () => {
       );
       expect(github.promoted).toEqual([]);
       expect(publisher.drafts).toEqual([false]);
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reuses an existing open pull request for the issue branch on reruns", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-64",
+        worktreePath: "/repo/.openclawcode/worktrees/run-64",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const publisher = new FakePublisher({
+        number: 106,
+        url: "https://github.com/zhyongrui/openclawcode/pull/106",
+      });
+      const existingPullRequest = {
+        number: 206,
+        url: "https://github.com/zhyongrui/openclawcode/pull/206",
+      };
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 64,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          openPullRequest: true,
+        },
+        {
+          github: new ReusedPullRequestGitHubClient(existingPullRequest),
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder(),
+          verifier: new FakeVerifier({
+            decision: "request-changes",
+            summary: "Needs one more fix.",
+            findings: ["Carry the existing PR forward"],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          publisher,
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.stage).toBe("changes-requested");
+      expect(run.draftPullRequest?.number).toBe(206);
+      expect(run.draftPullRequest?.url).toBe(existingPullRequest.url);
+      expect(run.history).toContain(`Reusing existing pull request: ${existingPullRequest.url}`);
+      expect(publisher.published).toBe(0);
+
+      const savedRun = JSON.parse(
+        await fs.readFile(path.join(stateDir, "runs", `${run.id}.json`), "utf8"),
+      ) as typeof run;
+      expect(savedRun.draftPullRequest?.number).toBe(206);
+      expect(savedRun.history).toContain(
+        `Reusing existing pull request: ${existingPullRequest.url}`,
+      );
     } finally {
       await fs.rm(stateDir, { recursive: true, force: true });
     }

@@ -59,6 +59,9 @@ export interface GitHubIssueClient {
   fetchLatestPullRequestReview(
     ref: RepoRef & { pullNumber: number },
   ): Promise<GitHubPullRequestReviewState | undefined>;
+  findOpenPullRequestForBranch(
+    ref: RepoRef & { head: string; base?: string },
+  ): Promise<PullRequestRef | undefined>;
   createDraftPullRequest(request: DraftPullRequestRequest): Promise<PullRequestRef>;
   markPullRequestReadyForReview(request: ReadyForReviewRequest): Promise<void>;
   mergePullRequest(request: MergePullRequestRequest): Promise<void>;
@@ -234,6 +237,29 @@ export class GitHubRestClient implements GitHubIssueClient {
       })
       .toSorted((left, right) => (right.submittedAt ?? "").localeCompare(left.submittedAt ?? ""));
     return normalized[0];
+  }
+
+  async findOpenPullRequestForBranch(
+    ref: RepoRef & { head: string; base?: string },
+  ): Promise<PullRequestRef | undefined> {
+    const params = new URLSearchParams({
+      state: "open",
+      head: `${ref.owner}:${ref.head}`,
+    });
+    if (ref.base) {
+      params.set("base", ref.base);
+    }
+    const pullRequests = await this.request<GitHubPullRequestResponse[]>(
+      `/repos/${ref.owner}/${ref.repo}/pulls?${params.toString()}`,
+    );
+    const pullRequest = pullRequests[0];
+    if (!pullRequest) {
+      return undefined;
+    }
+    return {
+      number: pullRequest.number,
+      url: pullRequest.html_url,
+    };
   }
 
   async createDraftPullRequest(request: DraftPullRequestRequest): Promise<PullRequestRef> {

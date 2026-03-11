@@ -106,6 +106,10 @@ function formatIssueCloseFailure(issueNumber: number, error: unknown): string {
   return `Issue close failed for #${issueNumber}: ${message}`;
 }
 
+function formatExistingPullRequestNote(pullRequest: PullRequestRef): string {
+  return `Reusing existing pull request: ${pullRequest.url}`;
+}
+
 export class GitHubPullRequestPublisher implements PullRequestPublisher {
   constructor(
     private readonly github: GitHubIssueClient,
@@ -197,7 +201,30 @@ export async function runIssueWorkflow(
   let publishedPullRequest: PullRequestRef | undefined;
   const publishAsDraft = !request.mergeOnApprove;
   if (request.openPullRequest && deps.publisher) {
-    if (shouldSkipDraftPullRequest(run)) {
+    if (!run.workspace) {
+      throw new Error("Run workspace is required before publishing a pull request.");
+    }
+    const existingPullRequest = await deps.github.findOpenPullRequestForBranch({
+      owner: request.owner,
+      repo: request.repo,
+      head: run.workspace.branchName,
+      base: request.baseBranch,
+    });
+    if (existingPullRequest) {
+      publishedPullRequest = existingPullRequest;
+      run = noteRun(
+        {
+          ...run,
+          draftPullRequest: {
+            ...run.draftPullRequest!,
+            number: existingPullRequest.number,
+            url: existingPullRequest.url,
+          },
+        },
+        formatExistingPullRequestNote(existingPullRequest),
+        now,
+      );
+    } else if (shouldSkipDraftPullRequest(run)) {
       run = noteRun(run, formatNoCommitPullRequestNote(run), now);
     } else {
       try {
