@@ -40,6 +40,18 @@ function formatApprovedReviewStatus(snapshot: OpenClawCodeIssueStatusSnapshot): 
     .join("\n");
 }
 
+function formatClosedWithoutMergeStatus(
+  snapshot: OpenClawCodeIssueStatusSnapshot,
+  pullRequest: GitHubPullRequestState,
+): string {
+  return [
+    `openclawcode status for ${snapshot.issueKey}`,
+    "Stage: Escalated",
+    "Summary: Pull request was closed on GitHub without merge after the latest local workflow run.",
+    `PR: ${pullRequest.url}`,
+  ].join("\n");
+}
+
 export interface GitHubStatusSyncResult {
   changed: boolean;
   snapshot: OpenClawCodeIssueStatusSnapshot;
@@ -64,6 +76,17 @@ export async function syncIssueSnapshotFromGitHub(params: {
     repo: snapshot.repo,
     pullNumber: snapshot.pullRequestNumber,
   });
+  if (pullRequest.state === "closed" && !pullRequest.merged) {
+    return {
+      changed: snapshot.stage !== "escalated",
+      snapshot: {
+        ...snapshot,
+        stage: "escalated",
+        status: formatClosedWithoutMergeStatus(snapshot, pullRequest),
+        pullRequestUrl: pullRequest.url,
+      },
+    };
+  }
   if (!pullRequest.merged) {
     const review = await github.fetchLatestPullRequestReview({
       owner: snapshot.owner,

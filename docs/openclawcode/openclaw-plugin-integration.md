@@ -250,6 +250,11 @@ Workflow reruns now also preserve pull-request continuity:
 - if the issue branch already has an open GitHub pull request, the next
   workflow run reuses that PR instead of trying to create another one
 
+GitHub-side reconciliation now also detects a closed-but-unmerged PR:
+
+- if a tracked PR is closed without merge, the issue snapshot heals to
+  `escalated` instead of staying in a stale reviewable state
+
 This keeps the first remote sync path demand-driven and cheap while still
 fixing the most important stale-status case: a human merges the PR outside the
 local workflow process.

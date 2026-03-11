@@ -840,6 +840,60 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("heals /occode-status from GitHub when a tracked pull request was closed without merge", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#211",
+        status: "openclawcode status for zhyongrui/openclawcode#211\nStage: Ready For Human Review",
+        stage: "ready-for-human-review",
+        runId: "run-211",
+        updatedAt: "2026-03-10T09:10:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 211,
+        branchName: "openclawcode/issue-211",
+        pullRequestNumber: 311,
+        pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/311",
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              number: 311,
+              html_url: "https://github.com/zhyongrui/openclawcode/pull/311",
+              state: "closed",
+              draft: false,
+              merged: false,
+            }),
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json",
+              },
+            },
+          ),
+        ),
+      );
+
+      const result = await fixture.commands.get("occode-status")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-status #211",
+        args: "#211",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Stage: Escalated");
+      const snapshot = await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#211");
+      expect(snapshot?.stage).toBe("escalated");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("shows pending, running, queued, and recent activity through /occode-inbox", async () => {
     const fixture = await registerPluginFixture();
     try {

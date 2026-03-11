@@ -114,6 +114,35 @@ describe("openclaw plugin GitHub snapshot sync", () => {
     expect(result.snapshot).toEqual(snapshot);
   });
 
+  it("escalates snapshots when the pull request was closed without merge", async () => {
+    const result = await syncIssueSnapshotFromGitHub({
+      snapshot: {
+        issueKey: "zhyongrui/openclawcode#405",
+        status: "openclawcode status for zhyongrui/openclawcode#405\nStage: Ready For Human Review",
+        stage: "ready-for-human-review",
+        runId: "run-405",
+        updatedAt: "2026-03-10T10:10:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 405,
+        branchName: "openclawcode/issue-405",
+        pullRequestNumber: 505,
+        pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/505",
+      },
+      github: new FakeGitHubClient({
+        number: 505,
+        url: "https://github.com/zhyongrui/openclawcode/pull/505",
+        state: "closed",
+        draft: false,
+        merged: false,
+      }),
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.snapshot.stage).toBe("escalated");
+    expect(result.snapshot.status).toContain("Stage: Escalated");
+  });
+
   it("downgrades ready-for-review snapshots to changes-requested when GitHub review requests changes", async () => {
     const result = await syncIssueSnapshotFromGitHub({
       snapshot: {
