@@ -94,9 +94,19 @@ turning the working loop into a cleanly operable product:
 - issue intake, lifecycle updates, rerun control, operator ledger visibility,
   and setup verification now exist, and the real review or close-without-merge
   lifecycle path has now been replayed successfully
-- the preflight blockers found during live replay are now fixed, and a real
-  review plus closed-without-merge replay has been validated against the live
-  route; the remaining live gap is a fresh rerun plus merged-PR validation
+- the preflight blockers found during live replay are now fixed, and the live
+  route has now validated:
+  - real review replay
+  - closed-without-merge replay
+  - one fresh `/occode-rerun` path through issue `#40`
+- live rerun validation also forced one more worktree hardening pass so stale
+  issue branches now merge the latest base before publication instead of
+  reopening dirty PRs from outdated branch state
+- the newest hardening work is currently on integration branch
+  `sync/upstream-2026-03-11`, while the live operator path still runs against
+  `main`
+- promoting validated sync-branch slices back to `main` is now part of normal
+  delivery, not an optional cleanup step
 - packaging and installation are now documented locally, but still need more
   proof under a fresh operator environment
 - policy docs lag the implemented guarded auto-merge behavior and need to be
@@ -104,17 +114,19 @@ turning the working loop into a cleanly operable product:
 
 ## Next Iteration Plan
 
-As of 2026-03-11, the immediate next stage is no longer workflow bring-up or
-single-command validation. The next stage is making the issue-to-chat-to-PR
-loop event-driven enough for day-to-day repository work in this fork.
+As of 2026-03-11, the immediate next stage is no longer workflow bring-up. The
+next stage is turning the already-working loop into a repeatable delivery
+system that can keep shipping on the same branch that the live runner uses.
 
 The short-term objective is:
 
 - keep using real GitHub issues as the driver
 - keep validating each slice end-to-end against this repository
-- move from "observable workflow state" toward "event-driven repository
-  automation with recovery"
+- move from "observable workflow state" toward "live repository automation with
+  repeatable baseline promotion"
 - make chat the normal operator entrypoint instead of a side-channel demo
+- keep `main` usable as the live validation base instead of letting the real
+  runner drift behind the latest integration work
 - align the roadmap and setup docs with the behavior already proved in code
 
 ### Current Checkpoint
@@ -156,12 +168,36 @@ The last local blockers found while preparing the live replay are now closed:
 - local reconciliation can recover a tracked pull request number and URL from
   older run artifacts when the newest rerun record missed that metadata
 
-This means the next iteration can shift from workflow bring-up to setup
-hardening, live validation, and trust in the visible lifecycle state.
+This means the next iteration can shift from workflow bring-up to baseline
+promotion, live validation, and trust in the visible lifecycle state.
 
 ### Near-Term Delivery Streams
 
-The next iteration should run across four delivery streams in parallel.
+The next iteration should run across five delivery streams in parallel.
+
+#### Stream 0: Baseline Promotion and Branch Discipline
+
+Objective:
+
+- keep the code validated on the same branch that the live runner actually
+  executes
+
+Priority backlog:
+
+1. finish the remaining sync-branch fixes that were discovered by live rerun
+   validation
+2. promote validated slices from `sync/upstream-2026-03-11` back to `main`
+   before starting the next live issue run
+3. treat upstream sync and fork-only feature work as separate checkpoints
+4. document when live validation should run on `main` versus an integration
+   branch
+5. keep `origin/main` and the local operator environment aligned after each
+   validated checkpoint
+
+Validation rule:
+
+- no new live GitHub issue validation should start from stale `main` once the
+  relevant fix has already been validated on the sync branch
 
 #### Stream 1: GitHub Lifecycle Intake and Chat Routing
 
@@ -251,27 +287,52 @@ Validation rule:
 - a fresh operator should be able to configure the repository and trigger a
   full issue run using docs only
 
+#### Stream 5: Real Workflow Validation and Merge Confidence
+
+Objective:
+
+- keep proving the product on real repository traffic instead of stopping at
+  unit and integration coverage
+
+Priority backlog:
+
+1. finish one low-risk merged-PR validation on the live route after the sync
+   branch is promoted back to `main`
+2. rerun a low-risk command-layer issue against the refreshed base and confirm
+   draft PR, verification, merge, and issue closure still work
+3. keep a small pool of low-risk validation issues ready so real failures can
+   be reproduced quickly
+4. turn every live failure into either a regression test, a workflow rule, or
+   an operator runbook update
+5. record exact GitHub permission and reviewer caveats discovered during each
+   live run
+
+Validation rule:
+
+- every materially new workflow slice must be closed by at least one real issue
+  run or real lifecycle replay before the iteration is considered stable
+
 ### Recommended Issue Sequence
 
 The next concrete issue order should be:
 
-1. `pull_request` and `pull_request_review` webhook intake with delivery
-   deduplication
-2. event-driven chat notifications and snapshot updates for review, merge, and
-   closed-without-merge outcomes
-3. request-changes rerun control and rerun artifact continuity
-4. operator ledger expansion for recent events, final disposition, and rerun
-   chains
-5. installation, runbook, and policy-doc hardening
-6. full low-risk real issue validation through review, rerun, and merge
+1. land the existing-PR reuse push fix so reruns cannot leave a reused remote
+   PR stale
+2. promote the validated sync-branch hardening back to `main`
+3. re-run one low-risk command-layer issue on the live route from refreshed
+   `main`
+4. validate one real merged-PR lifecycle path on the refreshed base
+5. align README, plan, and operator docs with the exact live-tested branch and
+   merge workflow
+6. only then start the next product slice beyond lifecycle and rerun hardening
 
 This order is deliberate:
 
-- first make GitHub lifecycle updates event-driven instead of primarily
-  poll-driven
-- then make rerun loops coherent and inspectable
-- then improve operator trust with better visibility
-- finally harden setup and docs once the behavior is stable
+- first close the remaining rerun publication gap found by live validation
+- then make sure the live runner uses the same validated code as local
+  development
+- then finish a clean merged-PR proof on the refreshed base
+- only after that resume new capability work
 
 ### Execution Rules For The Next Iteration
 
@@ -281,15 +342,19 @@ Keep the current working pattern:
 2. implement only the smallest change needed for that issue
 3. run targeted local tests first
 4. commit the feature slice
-5. push to `origin/main`
-6. run the real `openclaw code run` workflow against that issue
-7. record the result in the dev log
+5. if the slice was developed on `sync/upstream-2026-03-11`, promote it to
+   `main` before using it as a live validation base
+6. push the validated base branch used by the live runner
+7. run the real `openclaw code run` workflow against that issue
+8. record the result in the dev log
 
 Additional rules:
 
 - prefer slices that close real operational gaps over adding more output fields
 - treat real issue runs as the primary acceptance test
 - sync `upstream/main` only at clean checkpoints, not mid-slice
+- do not leave live validation pinned to stale `main` after a fix is already
+  validated on the integration branch
 - keep `openclawcode` workflow logic isolated from broad upstream runtime edits
 - do not trust plugin-state text alone when a structured snapshot exists;
   always reconcile toward the newest structured state
@@ -302,6 +367,8 @@ Additional rules:
 
 This iteration is complete when:
 
+- the live operator path is running on a refreshed `main` that includes the
+  latest validated sync-branch hardening
 - a new GitHub issue can notify the configured chat target automatically
 - a human can approve the run from chat without touching the terminal
 - the workflow can open a draft PR, survive retries, and keep state consistent
@@ -647,21 +714,26 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. choose one fresh low-risk issue in this repository
-2. drive it to a real draft PR and one real `changes requested` review
-3. exercise `/occode-rerun` against that tracked issue while preserving branch
-   and PR continuity
-4. verify chat notifications, snapshot updates, and `/occode-inbox` output for:
-   - rerun lineage
-   - updated review context
-   - final disposition after rerun
-5. if the issue remains low-risk, validate one real merged-PR lifecycle event
-   against the live route
-6. document the exact GitHub permissions, replay method, and operator caveats,
+1. land the remaining existing-PR reuse push fix found during live rerun
+   validation
+2. promote `sync/upstream-2026-03-11` back to `main` and verify the local
+   operator runtime is executing that refreshed base
+3. choose one low-risk tracked issue or fresh issue branch suitable for merge
+   validation
+4. drive it to a real draft PR on the live route
+5. confirm the branch is mergeable after the reusable-worktree refresh rules:
+   - stale branches with no unique commits fast-forward to base
+   - stale branches with unique commits merge the latest base before publish
+6. validate one real merged-PR lifecycle event against the live route
+7. verify chat notifications, snapshot updates, and `/occode-inbox` output for:
+   - final merged disposition
+   - notification delivery metadata
+   - post-merge issue closure when policy allows it
+8. document the exact GitHub permissions, replay method, and operator caveats,
    including the need for a second reviewer account when the PR author cannot
    request changes on their own pull request
-7. update the dev log and status docs with the live rerun or merge result
-8. commit the slice only after targeted validation passes
+9. update the dev log and status docs with the live merge result
+10. commit the slice only after targeted validation passes
 
 ## Test Strategy
 
