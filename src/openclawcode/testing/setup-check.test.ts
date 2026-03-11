@@ -142,7 +142,7 @@ if [[ "$script" == *"hmac.new"* ]]; then
   printf 'sha256=test-signature\\n'
   exit 0
 fi
-printf '%s' "$script" | "${realPythonPath}" - "$@"
+printf '%s' "$script" | "${realPythonPath}" "$@"
 `,
     );
     await writeExecutable(
@@ -206,7 +206,7 @@ script="$(cat)"
 if [[ "$script" == *"socket.create_connection"* ]]; then
   exit 0
 fi
-printf '%s' "$script" | "${realPythonPath}" - "$@"
+printf '%s' "$script" | "${realPythonPath}" "$@"
 `,
     );
     await writeExecutable(
