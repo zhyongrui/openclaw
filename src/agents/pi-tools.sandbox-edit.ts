@@ -36,6 +36,45 @@ function formatSuccessfulEditResult(pathParam: string): AgentToolResult<unknown>
   } as AgentToolResult<unknown>;
 }
 
+function formatDeterministicEditResult(
+  pathParam: string,
+  firstChangedLine: number | undefined,
+): AgentToolResult<unknown> {
+  return {
+    content: [
+      {
+        type: "text",
+        text: `Successfully replaced text in ${pathParam}.`,
+      },
+    ],
+    details: {
+      diff: "",
+      firstChangedLine,
+    },
+  } as AgentToolResult<unknown>;
+}
+
+function countOccurrences(content: string, needle: string): number {
+  if (!needle) {
+    return 0;
+  }
+  let count = 0;
+  let index = content.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = content.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+function findFirstChangedLine(content: string, oldText: string): number | undefined {
+  const index = content.indexOf(oldText);
+  if (index < 0) {
+    return undefined;
+  }
+  return content.slice(0, index).split("\n").length;
+}
+
 function resolveSandboxHostPath(params: {
   bridge: SandboxFsBridge;
   root: string;
@@ -107,7 +146,32 @@ async function restoreSandboxFile(params: {
     .catch(() => false);
 }
 
-export function wrapSandboxEditToolWithPostWriteRecovery(
+function createExactReplaceContent(params: {
+  pathParam: string;
+  originalContent: string;
+  oldText: string;
+  newText: string;
+}): { nextContent: string; firstChangedLine: number | undefined } {
+  const matches = countOccurrences(params.originalContent, params.oldText);
+  if (matches === 0) {
+    throw new Error(
+      `Could not find the exact text to replace in ${params.pathParam}. The old text must match exactly including all whitespace and newlines.`,
+    );
+  }
+  if (matches > 1) {
+    throw new Error(
+      `Found ${matches} matches for the requested text in ${params.pathParam}. Provide a more specific oldText/old_string so the edit is unambiguous.`,
+    );
+  }
+
+  const firstChangedLine = findFirstChangedLine(params.originalContent, params.oldText);
+  return {
+    nextContent: params.originalContent.replace(params.oldText, params.newText),
+    firstChangedLine,
+  };
+}
+
+export function createDeterministicSandboxEditTool(
   base: AnyAgentTool,
   params: { bridge: SandboxFsBridge; root: string },
 ): AnyAgentTool {
@@ -137,10 +201,29 @@ export function wrapSandboxEditToolWithPostWriteRecovery(
               });
 
       try {
-        const result = await base.execute(toolCallId, rawParams, signal, onUpdate);
-        if (!pathParam || (!newText && !oldText)) {
-          return result;
+        if (!pathParam || oldText === undefined || newText === undefined) {
+          return await base.execute(toolCallId, rawParams, signal, onUpdate);
         }
+
+        if (originalContent === undefined) {
+          throw new Error(`File not found: ${pathParam}`);
+        }
+
+        const originalText = originalContent.toString("utf-8");
+        const replacement = createExactReplaceContent({
+          pathParam,
+          originalContent: originalText,
+          oldText,
+          newText,
+        });
+
+        await params.bridge.writeFile({
+          filePath: pathParam,
+          cwd: params.root,
+          data: replacement.nextContent,
+          mkdir: true,
+          signal,
+        });
 
         const applied = await verifySandboxEditApplied({
           bridge: params.bridge,
@@ -150,19 +233,16 @@ export function wrapSandboxEditToolWithPostWriteRecovery(
           newText,
         }).catch(() => false);
         if (applied) {
-          return result;
+          return formatDeterministicEditResult(pathParam, replacement.firstChangedLine);
         }
 
-        const restored =
-          pathParam && originalContent !== undefined
-            ? await restoreSandboxFile({
-                bridge: params.bridge,
-                root: params.root,
-                pathParam,
-                originalContent,
-                signal,
-              })
-            : false;
+        const restored = await restoreSandboxFile({
+          bridge: params.bridge,
+          root: params.root,
+          pathParam,
+          originalContent,
+          signal,
+        });
 
         throw new Error(
           `Sandbox edit verification failed for ${pathParam}: file content on disk did not match the requested replacement after the tool reported success.${restored ? " The original file contents were restored." : ""}`,
@@ -185,6 +265,22 @@ export function wrapSandboxEditToolWithPostWriteRecovery(
           }
         } catch {
           // Bridge read failed or path is invalid; keep the original error.
+        }
+
+        const restored =
+          pathParam && originalContent !== undefined
+            ? await restoreSandboxFile({
+                bridge: params.bridge,
+                root: params.root,
+                pathParam,
+                originalContent,
+                signal,
+              }).catch(() => false)
+            : false;
+        if (restored && error instanceof Error && !error.message.includes("restored")) {
+          throw new Error(`${error.message} The original file contents were restored.`, {
+            cause: error,
+          });
         }
 
         throw error;

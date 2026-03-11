@@ -196,9 +196,15 @@ The current repository state already supports:
     readback alone
   - restores the original file contents through the resolved host path when the
     bridge write path still leaves the mounted file empty
+- a deterministic sandbox edit path that now performs the exact replacement
+  through the bridge directly instead of delegating the mutation step to the
+  upstream sandbox edit implementation
 - a docker-gated sandbox edit e2e regression that exercises alias-style edit
   params against a real workspace mount before the temporary runtime deny is
   removed
+- a second docker-gated linked-worktree edit e2e regression that proves the
+  rewritten sandbox edit path keeps large files visible through both
+  `/workspace` and the absolute worktree mount shape used in live issue runs
 
 The last local blockers found while preparing the live replay are now closed:
 
@@ -210,9 +216,9 @@ The last local blockers found while preparing the live replay are now closed:
 - local reconciliation can recover a tracked pull request number and URL from
   older run artifacts when the newest rerun record missed that metadata
 
-This means the next iteration can shift from proving one merged path to
-removing temporary mitigations, hardening fresh-operator setup, and trusting
-the visible lifecycle state under repeated live runs.
+This means the next iteration can shift from bridge root-cause hunting to
+staged runner re-enable, hardening fresh-operator setup, and trusting the
+visible lifecycle state under repeated live runs.
 
 ### Near-Term Delivery Streams
 
@@ -274,17 +280,17 @@ Objective:
 
 Priority backlog:
 
-1. repair the underlying sandbox edit bridge so builder sessions no longer need
-   the temporary top-level `edit`/`write` deny
+1. stage a safe re-enable path for sandbox-backed builder edits now that the
+   mutation step is deterministic locally
 2. keep corrupt-success verification, rollback coverage, and docker-gated e2e
    coverage for both host and sandbox edit wrappers, including alias-based edit
-   calls
+   calls and linked-worktree mounts
 3. preserve rerun continuity after failed builder attempts without reopening
    file-corruption paths in reusable issue worktrees
 4. harden stale worker completions and duplicate queue promotions across reruns
 5. expose rerun chains in operator-visible status output
 6. remove the temporary runner-level tool carveout only after a fresh live
-   issue run proves the bridge fix on refreshed `main`
+   issue run proves the deterministic edit path on refreshed `main`
 
 Validation rule:
 
@@ -367,10 +373,10 @@ Validation rule:
 
 The next concrete issue order should be:
 
-1. repair the sandbox edit bridge that still forces the temporary
-   `edit`/`write` deny in live `openclawcode` runner sessions
-2. prove the bridge repair locally through the docker-gated sandbox edit path
-   before removing the live runner carveout
+1. stage the deterministic sandbox edit path for live validation without
+   removing the runner carveout globally in one jump
+2. prove the local repair through the docker-gated sandbox edit paths,
+   including linked-worktree mounts, before removing the live runner carveout
 3. re-run one low-risk command-layer issue on the live route without that
    carveout and confirm draft PR, verification, merge, and issue closure still
    work
@@ -767,25 +773,22 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. inspect the sandbox edit bridge path that still leaves files empty on disk
-   when the upstream edit tool reports corrupt success, now using the
-   docker-gated workspace-mount regression as the local proving path
-2. keep the new host-path restoration fallback in place until the bridge itself
-   is repaired
-3. remove the temporary runner-level `edit`/`write` deny only in code paths
-   that are proved safe by tests and a fresh live issue run
-4. add or extend regression coverage around sandbox bridge recovery and any
-   path alias handling required by the upstream edit tool
-5. rebuild and rerun one low-risk live issue on refreshed `main`
-6. confirm the run still reaches:
+1. keep the deterministic sandbox edit path and host-path restoration fallback
+   in place while staging the next live validation
+2. add or extend regression coverage around sandbox bridge recovery and the
+   linked-worktree mount shape used by live issue runs
+3. re-enable the runner-level `edit`/`write` tools only in code paths that are
+   proved safe by tests and a fresh live issue run
+4. rebuild and rerun one low-risk live issue on refreshed `main`
+5. confirm the run still reaches:
    - draft PR publication
    - verification approval
    - automatic merge and issue closure when policy allows it
-7. verify chat notifications, snapshot updates, and `/occode-inbox` output for
+6. verify chat notifications, snapshot updates, and `/occode-inbox` output for
    the final merged disposition after the bridge fix
-8. update the dev log and status docs with both the bridge fix and the new live
+7. update the dev log and status docs with both the bridge fix and the new live
    proof
-9. commit the slice only after targeted validation passes
+8. commit the slice only after targeted validation passes
 
 ## Test Strategy
 

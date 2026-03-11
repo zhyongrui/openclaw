@@ -90,12 +90,18 @@ loop with:
   - restores the original sandbox worktree file through the resolved host path
     when the bridge still reports success but keeps leaving the mounted file
     empty on disk
+  - replaces the sandbox-side edit write path with a deterministic bridge-backed
+    exact-replace implementation instead of trusting the upstream sandbox edit
+    mutation path
   - temporarily denies `edit` and `write` in `OpenClawAgentRunner` sessions so
     live issue runs stay on `read`/`exec`/`process` until the underlying
     sandbox edit bridge is repaired
 - a docker-gated sandbox edit end-to-end regression that exercises alias-style
   edit parameters through the real workspace mount path before the runner-level
   deny is removed
+- a second docker-gated linked-worktree regression that proves the rewritten
+  sandbox edit path keeps large mounted files non-empty and visible through
+  both `/workspace` and the absolute worktree mount used by live issue runs
 - a fresh direct live rerun of issue `#44` on refreshed `main` that completed
   as a no-op `ready-for-human-review` run instead of reproducing the earlier
   stalled-planning corruption path
@@ -108,8 +114,8 @@ loop with:
 
 Still pending for a fuller product loop:
 
-- removal of the temporary `edit`/`write` deny by fixing the underlying
-  sandbox edit bridge
+- fresh live validation with the deterministic sandbox edit path, followed by
+  removal of the temporary `edit`/`write` deny
 - stronger suitability/risk gating ahead of autonomous execution
 - proof under a fresh operator environment using docs and scripts only
 - broader policy-doc polish

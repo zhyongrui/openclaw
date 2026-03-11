@@ -1,47 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { EditToolOptions } from "@mariozechner/pi-coding-agent";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { SandboxFsBridge, SandboxFsStat } from "./sandbox/fs-bridge.js";
-
-const mocks = vi.hoisted(() => ({
-  executeMode: "throw" as "throw" | "pass-through" | "corrupt-success",
-}));
-
-vi.mock("@mariozechner/pi-coding-agent", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@mariozechner/pi-coding-agent")>();
-  return {
-    ...actual,
-    createEditTool: (cwd: string, options?: EditToolOptions) => {
-      const base = actual.createEditTool(cwd, options);
-      return {
-        ...base,
-        execute: async (...args: Parameters<typeof base.execute>) => {
-          if (mocks.executeMode === "throw") {
-            throw new Error("Simulated sandbox post-write failure");
-          }
-          if (mocks.executeMode === "corrupt-success") {
-            const params = args[1] as { path?: string };
-            if (typeof params?.path === "string") {
-              await fs.writeFile(path.join(cwd, params.path), "", "utf-8");
-            }
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: `Successfully replaced text in ${params?.path ?? "unknown"}.`,
-                },
-              ],
-              details: { diff: "", firstChangedLine: undefined },
-            };
-          }
-          return base.execute(...args);
-        },
-      };
-    },
-  };
-});
 
 const { createSandboxedEditTool } = await import("./pi-tools.read.js");
 
@@ -109,29 +70,30 @@ function createTestBridge(root: string, options?: { corruptWrites?: boolean }): 
   };
 }
 
-describe("createSandboxedEditTool post-write recovery", () => {
+describe("createSandboxedEditTool", () => {
   let tmpDir = "";
 
   afterEach(async () => {
-    mocks.executeMode = "throw";
     if (tmpDir) {
       await fs.rm(tmpDir, { recursive: true, force: true });
       tmpDir = "";
     }
   });
 
-  it("returns success when upstream throws but the sandbox file already contains the requested text", async () => {
+  it("replaces exact text deterministically through the sandbox bridge", async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-sandbox-edit-recovery-"));
     const filePath = path.join(tmpDir, "file.ts");
-    const oldText = "old text";
-    const newText = "new text";
-    await fs.writeFile(filePath, `${newText}\n`, "utf-8");
+    await fs.writeFile(filePath, "const value = 'old text';\n", "utf-8");
 
     const tool = createSandboxedEditTool({
       root: tmpDir,
       bridge: createTestBridge(tmpDir),
     });
-    const result = await tool.execute("call-1", { path: "file.ts", oldText, newText }, undefined);
+    const result = await tool.execute(
+      "call-1",
+      { path: "file.ts", oldText: "old text", newText: "new text" },
+      undefined,
+    );
 
     const content = Array.isArray((result as { content?: unknown }).content)
       ? (result as { content: Array<{ type?: string; text?: string }> }).content
@@ -139,14 +101,14 @@ describe("createSandboxedEditTool post-write recovery", () => {
     expect(content.find((entry) => entry?.type === "text")?.text).toContain(
       "Successfully replaced text",
     );
+    await expect(fs.readFile(filePath, "utf-8")).resolves.toContain("new text");
   });
 
-  it("restores the original sandbox file when the tool reports success but leaves corrupted contents on disk", async () => {
+  it("rejects ambiguous replacements instead of editing the wrong occurrence", async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-sandbox-edit-recovery-"));
     const filePath = path.join(tmpDir, "file.ts");
-    const original = "const value = 'old text';\n";
+    const original = "const value = 'old text';\nconst another = 'old text';\n";
     await fs.writeFile(filePath, original, "utf-8");
-    mocks.executeMode = "corrupt-success";
 
     const tool = createSandboxedEditTool({
       root: tmpDir,
@@ -158,29 +120,32 @@ describe("createSandboxedEditTool post-write recovery", () => {
         { path: "file.ts", oldText: "old text", newText: "new text" },
         undefined,
       ),
-    ).rejects.toThrow(/Sandbox edit verification failed/);
+    ).rejects.toThrow(/unambiguous/);
     await expect(fs.readFile(filePath, "utf-8")).resolves.toBe(original);
   });
 
-  it("verifies and restores file_path alias edits in sandbox mode", async () => {
+  it("supports Claude-style alias params in sandbox mode", async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-sandbox-edit-recovery-"));
     const filePath = path.join(tmpDir, "file-alias.ts");
     const original = "const value = 'old text';\n";
     await fs.writeFile(filePath, original, "utf-8");
-    mocks.executeMode = "corrupt-success";
 
     const tool = createSandboxedEditTool({
       root: tmpDir,
       bridge: createTestBridge(tmpDir),
     });
-    await expect(
-      tool.execute(
-        "call-1",
-        { file_path: "file-alias.ts", old_string: "old text", new_string: "new text" },
-        undefined,
-      ),
-    ).rejects.toThrow(/Sandbox edit verification failed/);
-    await expect(fs.readFile(filePath, "utf-8")).resolves.toBe(original);
+    const result = await tool.execute(
+      "call-1",
+      { file_path: "file-alias.ts", old_string: "old text", new_string: "new text" },
+      undefined,
+    );
+    const content = Array.isArray((result as { content?: unknown }).content)
+      ? (result as { content: Array<{ type?: string; text?: string }> }).content
+      : [];
+    expect(content.find((entry) => entry?.type === "text")?.text).toContain(
+      "Successfully replaced text",
+    );
+    await expect(fs.readFile(filePath, "utf-8")).resolves.toContain("new text");
   });
 
   it("falls back to host-path restoration when bridge writes keep leaving the sandbox file empty", async () => {
@@ -188,7 +153,6 @@ describe("createSandboxedEditTool post-write recovery", () => {
     const filePath = path.join(tmpDir, "file-host-restore.ts");
     const original = "const value = 'old text';\n";
     await fs.writeFile(filePath, original, "utf-8");
-    mocks.executeMode = "pass-through";
 
     const tool = createSandboxedEditTool({
       root: tmpDir,
