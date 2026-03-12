@@ -472,3 +472,20 @@ Operator caveat for live review replay:
   collaborator account
 - if you do not want to merge the PR, validating `closed without merge` is a
   safer real-world `pull_request` lifecycle check than merging a nontrivial PR
+
+More live-proof notes worth carrying into new sessions:
+
+- the long-lived real operator root is `~/.openclaw`
+- the long-lived real chat surface is one Feishu conversation bound to
+  `zhyongrui/openclawcode`
+- after changing chat-visible plugin behavior, restart the long-lived gateway
+  before trusting `/occode-inbox`, `/occode-status`, or `/occode-rerun`
+- refreshed-branch issue-worktree reruns now use lightweight bootstrap context:
+  - the earlier oversized `AGENTS.md` truncation warning is gone in live
+    `#87` reruns
+  - if a rerun still fails with `HTTP 400: Internal server error` after that,
+    treat it as the current provider-resilience blocker rather than a
+    bootstrap file-injection bug
+- one heavier openclawcode suite run on refreshed branches can still time out
+  under parallel pressure; the stable proof command remains:
+  - `pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads --maxWorkers 1`

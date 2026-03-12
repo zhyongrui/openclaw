@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import path from "node:path";
 import { mirrorMergedSkillsToProjectWorkspace } from "../../agents/skills.js";
 import { createDefaultDeps } from "../../cli/deps.js";
 import { agentCommand } from "../../commands/agent.js";
@@ -33,6 +34,7 @@ export interface AgentRunner {
 
 const OPENCLAWCODE_DEFAULT_DENIED_TOOLS = ["write"] as const;
 const OPENCLAWCODE_ENABLE_FS_TOOLS_ENV = "OPENCLAWCODE_ENABLE_FS_TOOLS";
+const OPENCLAWCODE_WORKTREE_MARKER = `${path.sep}.openclawcode${path.sep}worktrees${path.sep}`;
 
 function resolveOpenClawCodeDeniedTools(env: NodeJS.ProcessEnv = process.env): string[] {
   const enabled = new Set(
@@ -53,6 +55,10 @@ function normalizeSessionToken(value: string): string {
       .replace(/^-+|-+$/g, "")
       .slice(0, 64) || `openclawcode-${crypto.randomUUID()}`
   );
+}
+
+function resolveOpenClawCodeBootstrapContextMode(workspaceDir: string): "lightweight" | undefined {
+  return workspaceDir.includes(OPENCLAWCODE_WORKTREE_MARKER) ? "lightweight" : undefined;
 }
 
 function extractText(raw: unknown): string {
@@ -134,6 +140,7 @@ export const __testing = {
   resolveOpenClawCodeDeniedTools,
   extractStopReason,
   assertSuccessfulAgentRun,
+  resolveOpenClawCodeBootstrapContextMode,
 };
 
 export class OpenClawAgentRunner implements AgentRunner {
@@ -162,6 +169,7 @@ export class OpenClawAgentRunner implements AgentRunner {
           extraSystemPrompt: request.extraSystemPrompt,
           timeout:
             typeof request.timeoutSeconds === "number" ? String(request.timeoutSeconds) : undefined,
+          bootstrapContextMode: resolveOpenClawCodeBootstrapContextMode(request.workspaceDir),
           json: true,
         },
         createNonExitingRuntime(),

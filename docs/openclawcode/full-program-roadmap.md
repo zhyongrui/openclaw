@@ -51,6 +51,40 @@ The program is not done until all of these are true:
    proof and a rollback path
 8. the long-lived `main` operator baseline can be trusted as the real demo path
 
+## Ordered Endgame Backlog
+
+This is the ordered queue from the current state to the intended finished
+product. Each item should be consumed as one or more narrow slices.
+
+1. finish refreshed-branch provider resilience
+   - keep issue-worktree builder and verifier runs inside the real prompt
+     budget of the current model
+   - rerun or replace issue `#87` until a refreshed-branch low-risk proof can
+     merge again
+   - keep recording the exact remaining live failure signal after each repair
+2. promote the refreshed branch back to `main`
+   - require a green strict setup check, one real low-risk live proof, and a
+     rollback note before promotion
+   - restart the long-lived Feishu operator on the promoted build
+3. re-prove the long-lived `main` baseline
+   - run one more merged low-risk chat-visible proof
+   - run one more high-risk or clarification-path proof
+4. deepen chat-native intake
+   - preview and edit generated issues before creation
+   - support clarification loops for ambiguous requests
+   - keep one-line intake as the fast path for low-risk requests
+5. add operator-grade policy override flows
+   - explicit override path for suitability or merge-policy exceptions
+   - clearer auto-merge eligibility explanations in chat surfaces
+6. finish and document the stable JSON contract
+   - complete the remaining useful top-level convenience fields
+   - document the supported contract as intentional API surface
+7. keep install, promotion, rollback, and copied-root proofs routine
+   - update the runbook whenever a new live proof changes the real steps
+8. keep upstream drift bounded
+   - continue regular sync branches before conflict hotspots grow expensive
+   - record conflict hotspots and promotion decisions in docs and dev logs
+
 ## Current Operating Baseline
 
 As of 2026-03-12:
@@ -89,6 +123,13 @@ As of 2026-03-12:
   - last transient failure timestamp
     so operators no longer have to infer whether pause state disappeared because
     the system recovered or because status reconciliation dropped context
+- direct reruns of refreshed-branch issue `#87` now prove that the lightweight
+  bootstrap context fix is active:
+  - the oversized `AGENTS.md` truncation warning is gone
+  - `systemPromptReport.bootstrapTruncation.warningShown = false`
+  - `systemPromptReport.injectedWorkspaceFiles = []`
+  - the remaining blocker after that fix is still provider
+    `HTTP 400: Internal server error` during build
 
 ## Execution Loop
 
@@ -250,10 +291,10 @@ Goal:
 
 Remaining work:
 
-- provider-aware rerun summaries in chat surfaces
+- keep reducing live issue-worktree prompt pressure after the bootstrap fix
 - explicit queue-start or queue-resume feedback after a pause window clears
-- another real rerun proof on the refreshed branch once provider stability
-  allows it
+- another real rerun or low-risk proof on the refreshed branch now that the
+  oversized bootstrap injection warning is gone
 
 ### Track 5: Review And Rerun Loop
 

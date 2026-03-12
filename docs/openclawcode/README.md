@@ -81,6 +81,14 @@ loop with:
     one assistant `400 Internal server error`
   - repeated fresh failures still reactivate the queue-level provider pause
     instead of continuing to drain the queue during provider instability
+- refreshed-branch direct reruns on issue `#87` now confirm that the new
+  lightweight bootstrap path is active for issue worktrees:
+  - the earlier oversized `AGENTS.md` truncation warning is gone from the live
+    builder session
+  - `systemPromptReport.injectedWorkspaceFiles` is now empty on that rerun
+  - `HTTP 400: Internal server error` still remains as the blocking live build
+    failure, so the next provider-resilience slice now targets prompt budget or
+    provider behavior rather than more bootstrap-file filtering
 - operator-facing provider-pause messaging is now visible beyond
   `/occode-inbox` too:
   - `/occode-start` and `/occode-rerun` now tell the operator when work was

@@ -299,6 +299,18 @@ turning the working loop into a cleanly operable product:
   - cleared pauses now render as a recovery probe so the operator can see that
     the rerun is intentionally testing whether provider-side build failures
     have recovered
+- refreshed-branch direct reruns on issue `#87` now prove that the new
+  lightweight bootstrap path is active for
+  `/.openclawcode/worktrees/...` runs:
+  - the earlier `workspace bootstrap file AGENTS.md ... truncating` warning is
+    gone
+  - `systemPromptReport.bootstrapTruncation.warningShown` stays `false`
+  - `systemPromptReport.injectedWorkspaceFiles` is now empty on the live
+    builder session
+  - the remaining blocker is still provider
+    `HTTP 400: Internal server error`, but it now survives after the bootstrap
+    fix, which means the next slice should target prompt budget or provider
+    behavior instead of more bootstrap-file filtering
 - policy docs are now in sync with the live-tested guarded auto-merge behavior
 - the next engineering priority is now consume-and-reseed workflow plus
   broader chat-native intake behavior
@@ -328,6 +340,9 @@ The short-term objective is:
   maintained without dropping into CLI
 - keep the repaired failed-run summaries stable so provider-side errors stay
   attributable to the build/verifier stage that actually failed
+- keep the refreshed-branch live proofs focused on the actual remaining blocker:
+  provider-side build failures after bootstrap-lightweight context has already
+  removed the oversized `AGENTS.md` injection warning
 - keep the new openclawcode-worktree retry clamp stable so the outer workflow
   owns provider backoff instead of the embedded SDK
 - keep provider-pause activation observable and predictable after fresh
@@ -1226,15 +1241,18 @@ The next implementation slice should follow this order:
 
 1. use the green `./scripts/openclawcode-setup-check.sh --strict` result as the
    live preflight gate on the refreshed branch
-2. rerun proof issue `#87` now that provider-aware rerun summaries can show
-   whether the operator is probing recovery after a cleared pause
-3. if `#87` is still noisy, mint the next equivalent low-risk validation issue
-   and keep the same provider-aware rerun path
-4. promote only after the refreshed branch can pass both strict setup checks
+2. keep direct rerun proof issue `#87` as the standing refreshed-branch probe
+   until the post-bootstrap failure signal is no longer just provider
+   `HTTP 400`
+3. trim or reshape the live builder prompt budget now that oversized bootstrap
+   injection has already been removed from the worktree session
+4. rerun `#87` again after each prompt-budget slice and record the new live
+   signal rather than guessing
+5. promote only after the refreshed branch can pass both strict setup checks
    and a real low-risk live proof on the target runtime
-5. after promotion, rerun the same strict check and one chat-visible proof on
+6. after promotion, rerun the same strict check and one chat-visible proof on
    `main`
-6. keep docs/operator issue `#60` open as the standing docs-side proof target
+7. keep docs/operator issue `#60` open as the standing docs-side proof target
    only until the copied-root teardown guidance is judged complete
 
 ## Test Strategy

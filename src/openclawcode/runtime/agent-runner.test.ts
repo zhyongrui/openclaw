@@ -103,6 +103,7 @@ describe("OpenClawAgentRunner", () => {
         agentId: "main",
         sessionId: expect.stringMatching(/^openclawcode-/),
         sessionKey: expect.stringMatching(/^agent:main:openclawcode-/),
+        bootstrapContextMode: undefined,
         json: true,
       }),
       expect.anything(),
@@ -127,6 +128,26 @@ describe("OpenClawAgentRunner", () => {
       expect.objectContaining({
         sessionId: "openclawcode-builder-issue-1",
         sessionKey: "agent:main:openclawcode-builder-issue-1",
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("uses lightweight bootstrap context for openclawcode issue worktrees", async () => {
+    const { OpenClawAgentRunner } = await import("./agent-runner.js");
+
+    const runner = new OpenClawAgentRunner();
+    await runner.run({
+      prompt: "Implement the issue",
+      workspaceDir: "/tmp/repo/.openclawcode/worktrees/run-87",
+      agentId: "main",
+    });
+
+    expect(mocks.agentCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceDir: "/tmp/repo/.openclawcode/worktrees/run-87",
+        bootstrapContextMode: "lightweight",
       }),
       expect.anything(),
       expect.anything(),
@@ -266,5 +287,16 @@ describe("OpenClawAgentRunner", () => {
     expect(config.agents?.list?.[0]?.tools?.deny ?? []).toEqual([]);
     expect(config.agents?.list?.[0]?.tools?.deny).not.toContain("edit");
     expect(config.agents?.list?.[0]?.tools?.deny).not.toContain("write");
+  });
+
+  it("detects openclawcode issue worktrees for lightweight bootstrap context", async () => {
+    const { __testing } = await import("./agent-runner.js");
+
+    expect(
+      __testing.resolveOpenClawCodeBootstrapContextMode("/tmp/repo/.openclawcode/worktrees/run-99"),
+    ).toBe("lightweight");
+    expect(__testing.resolveOpenClawCodeBootstrapContextMode("/tmp/openclawcode-worktree")).toBe(
+      undefined,
+    );
   });
 });

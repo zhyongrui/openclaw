@@ -80,6 +80,10 @@ export type AgentCommandOpts = {
   streamParams?: AgentStreamParams;
   /** Explicit workspace directory override (for subagents to inherit parent workspace). */
   workspaceDir?: SpawnedRunMetadata["workspaceDir"];
+  /** Override workspace bootstrap injection mode for this run. */
+  bootstrapContextMode?: "full" | "lightweight";
+  /** Classify the bootstrap run kind for lightweight context handling. */
+  bootstrapContextRunKind?: "default" | "heartbeat" | "cron";
 };
 
 export type AgentCommandIngressOpts = Omit<AgentCommandOpts, "senderIsOwner"> & {
