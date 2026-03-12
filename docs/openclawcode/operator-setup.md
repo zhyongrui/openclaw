@@ -162,8 +162,10 @@ Useful follow-up commands:
 - `/occode-intake` creates a new GitHub issue directly from the bound chat and
   queues low-risk work immediately
 - `/occode-unbind` removes the saved repo-to-chat binding
-- `/occode-inbox` shows pending approvals, queue state, and recent lifecycle activity
-- `/occode-status <owner>/<repo>#<issue>` shows the latest tracked status for one issue
+- `/occode-inbox` shows pending approvals, queue state, recent lifecycle activity,
+  and the live open validation pool
+- `/occode-status <owner>/<repo>#<issue>` shows the latest tracked status for one
+  issue and annotates seeded validation issues with class/template metadata
 
 Do not hand-edit
 `${OPENCLAWCODE_OPERATOR_ROOT:-~/.openclaw}/plugins/openclawcode/chatops-state.json`
@@ -275,6 +277,17 @@ Detailed issue body...
 
 That should create the GitHub issue, queue low-risk work immediately, and still
 precheck obviously high-risk text into an `escalated` snapshot.
+
+You can also validate the operator-facing validation inventory from the same
+conversation:
+
+```text
+/occode-inbox
+/occode-status <owner>/<repo>#66
+```
+
+That should show the open validation pool directly in chat and annotate issue
+`#66` as a `command-layer` / `command-json-number` validation issue.
 
 At that point the supported setup is complete.
 The next validation target should be a real `pull_request` or `pull_request_review`

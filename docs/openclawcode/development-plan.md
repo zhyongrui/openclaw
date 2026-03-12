@@ -159,6 +159,11 @@ turning the working loop into a cleanly operable product:
 - validation-pool upkeep now has a repo-native CLI surface through:
   - `openclaw code seed-validation-issue`
   - `openclaw code list-validation-issues`
+- operator-facing inbox and status views now surface that same validation-pool
+  taxonomy directly from chat:
+  - `/occode-inbox` appends the live open validation pool
+  - `/occode-status <issue>` annotates validation issues with class and
+    template metadata
 - live inventory proof now shows the current open pool directly:
   - command-layer issue `#66`
   - docs/operator issue `#60`
@@ -186,9 +191,14 @@ turning the working loop into a cleanly operable product:
   - both live attempts on `#70` were blocked by repeated upstream provider
     `400 Internal server error` responses rather than workflow state loss or
     queue corruption
+- a fresh operator-surface live proof now confirms validation-pool visibility
+  from chat-facing state too:
+  - `/occode-inbox` lists open validation issues `#60` and `#66`
+  - `/occode-status #66` annotates the issue as
+    `command-layer / command-json-number`
 - policy docs are now in sync with the live-tested guarded auto-merge behavior
 - the next engineering priority is now consume-and-reseed workflow plus
-  inventory visibility on operator-facing surfaces
+  broader chat-native intake behavior
 - packaging and installation are now documented locally, but still need more
   proof under a fresh operator environment
 
@@ -207,6 +217,8 @@ The short-term objective is:
 - make chat the normal operator entrypoint instead of a side-channel demo
 - keep the new explicit `/occode-intake` path stable while it serves as the
   bridge toward more natural chat-driven issue drafting
+- keep operator-facing validation-pool surfaces stable so the pool can be
+  maintained without dropping into CLI
 - keep `main` usable as the live validation base instead of letting the real
   runner drift behind the latest integration work
 - keep the now-proven merged-PR path stable on refreshed integration branches

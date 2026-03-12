@@ -30,7 +30,13 @@ import {
   type OpenClawCodeGitHubDeliveryRecord,
   type OpenClawCodeIssueStatusSnapshot,
 } from "../../src/integrations/openclaw-plugin/index.js";
+import type { GitHubIssueClient } from "../../src/openclawcode/github/index.js";
 import { GitHubRestClient } from "../../src/openclawcode/github/index.js";
+import {
+  classifyValidationIssue,
+  type ValidationIssueClass,
+  type ValidationIssueTemplateId,
+} from "../../src/openclawcode/validation-issues.js";
 
 const DEFAULT_POLL_INTERVAL_MS = 3_000;
 const DEFAULT_RUN_TIMEOUT_MS = 30 * 60_000;
@@ -88,6 +94,115 @@ function trimToSingleLine(value: string | undefined): string | undefined {
     .map((line) => line.trim())
     .find(Boolean);
   return singleLine && singleLine.length > 0 ? singleLine : undefined;
+}
+
+function hasGitHubApiCredential(): boolean {
+  return Boolean(process.env.GITHUB_TOKEN?.trim() || process.env.GH_TOKEN?.trim());
+}
+
+function formatValidationIssueClass(value: ValidationIssueClass): string {
+  switch (value) {
+    case "command-layer":
+      return "command-layer";
+    case "operator-docs":
+      return "operator-docs";
+    case "high-risk-validation":
+      return "high-risk-validation";
+    default:
+      return value;
+  }
+}
+
+function formatValidationIssueTemplate(value: ValidationIssueTemplateId): string {
+  return value;
+}
+
+interface ValidationPoolEntry {
+  issueNumber: number;
+  title: string;
+  issueClass: ValidationIssueClass;
+  template: ValidationIssueTemplateId;
+}
+
+interface ValidationPoolSummary {
+  entries: ValidationPoolEntry[];
+}
+
+async function fetchValidationPoolSummary(params: {
+  repo: { owner: string; repo: string };
+  github?: GitHubIssueClient;
+}): Promise<ValidationPoolSummary | undefined> {
+  if (!hasGitHubApiCredential()) {
+    return undefined;
+  }
+  const github = params.github ?? new GitHubRestClient();
+  const issues = await github.listIssues({
+    owner: params.repo.owner,
+    repo: params.repo.repo,
+    state: "open",
+    perPage: 100,
+  });
+  const entries = issues
+    .flatMap((issue) => {
+      const classified = classifyValidationIssue({
+        title: issue.title,
+        body: issue.body,
+      });
+      if (!classified) {
+        return [];
+      }
+      return [
+        {
+          issueNumber: issue.number,
+          title: issue.title,
+          issueClass: classified.issueClass,
+          template: classified.template,
+        } satisfies ValidationPoolEntry,
+      ];
+    })
+    .toSorted((left, right) => left.issueNumber - right.issueNumber);
+  return { entries };
+}
+
+function buildValidationPoolLines(summary: ValidationPoolSummary | undefined): string[] {
+  if (!summary) {
+    return [];
+  }
+  const lines = [`Validation pool: ${summary.entries.length}`];
+  for (const entry of summary.entries) {
+    lines.push(
+      `- #${entry.issueNumber} | ${formatValidationIssueClass(entry.issueClass)} | ${formatValidationIssueTemplate(entry.template)} | ${entry.title}`,
+    );
+  }
+  return lines;
+}
+
+async function appendValidationIssueStatusContext(params: {
+  text: string;
+  issue: { owner: string; repo: string; number: number };
+  github?: GitHubIssueClient;
+}): Promise<string> {
+  if (!hasGitHubApiCredential()) {
+    return params.text;
+  }
+  const github = params.github ?? new GitHubRestClient();
+  const issue = await github.fetchIssue({
+    owner: params.issue.owner,
+    repo: params.issue.repo,
+    issueNumber: params.issue.number,
+  });
+  const classified = classifyValidationIssue({
+    title: issue.title,
+    body: issue.body,
+  });
+  if (!classified) {
+    return params.text;
+  }
+  return [
+    params.text,
+    `Validation issue: ${formatValidationIssueClass(classified.issueClass)}`,
+    `Validation template: ${formatValidationIssueTemplate(classified.template)}`,
+  ].join("\n");
 }
 
 function formatDeliveryReason(record: OpenClawCodeGitHubDeliveryRecord): string {
@@ -360,6 +475,7 @@ function buildIntakeEscalatedMessage(params: {
 function buildInboxMessage(params: {
   repo: { owner: string; repo: string };
   state: Awaited<ReturnType<OpenClawCodeChatopsStore["snapshot"]>>;
+  validationPool?: ValidationPoolSummary;
 }): string {
   const repoKey = formatRepoKey(params.repo);
   const pending = params.state.pendingApprovals.filter((entry) =>
@@ -480,6 +596,8 @@ function buildInboxMessage(params: {
   } else {
     lines.push("Recent ledger: 0");
   }
+
+  lines.push(...buildValidationPoolLines(params.validationPool));
 
   return lines.join("\n");
 }
@@ -1741,35 +1859,48 @@ export default {
             text: `No openclawcode repo config found for ${command.issue.owner}/${command.issue.repo}.`,
           };
         }
+        let statusText: string | undefined;
         if (await store.isPendingApproval(issueKey)) {
-          return {
-            text: (await store.getStatus(issueKey)) ?? `Awaiting chat approval for ${issueKey}.`,
-          };
-        }
-        const currentSnapshot = await store.getStatusSnapshot(issueKey);
-        if (currentSnapshot) {
-          try {
-            const synced = await syncIssueSnapshotFromGitHub({
-              snapshot: currentSnapshot,
-            });
-            if (synced.changed) {
-              await store.setStatusSnapshot(synced.snapshot);
-              return { text: synced.snapshot.status };
+          statusText =
+            (await store.getStatus(issueKey)) ?? `Awaiting chat approval for ${issueKey}.`;
+        } else {
+          const currentSnapshot = await store.getStatusSnapshot(issueKey);
+          if (currentSnapshot) {
+            try {
+              const synced = await syncIssueSnapshotFromGitHub({
+                snapshot: currentSnapshot,
+              });
+              if (synced.changed) {
+                await store.setStatusSnapshot(synced.snapshot);
+                statusText = synced.snapshot.status;
+              }
+            } catch {
+              // Keep /occode-status usable even if GitHub is temporarily unavailable.
             }
-          } catch {
-            // Keep /occode-status usable even if GitHub is temporarily unavailable.
+          }
+          if (!statusText) {
+            const currentStatus = await store.getStatus(issueKey);
+            if (currentStatus) {
+              statusText = currentStatus;
+            }
+          }
+          if (!statusText) {
+            const reconciled = await findLatestLocalRunStatusForIssue({
+              repo: repoConfig,
+              issueKey,
+            });
+            statusText =
+              reconciled?.status ?? `No openclawcode status recorded yet for ${issueKey}.`;
           }
         }
-        const currentStatus = await store.getStatus(issueKey);
-        if (currentStatus) {
-          return { text: currentStatus };
-        }
-        const reconciled = await findLatestLocalRunStatusForIssue({
-          repo: repoConfig,
-          issueKey,
-        });
+        const resolvedStatusText =
+          statusText ?? `No openclawcode status recorded yet for ${issueKey}.`;
         return {
-          text: reconciled?.status ?? `No openclawcode status recorded yet for ${issueKey}.`,
+          text:
+            (await appendValidationIssueStatusContext({
+              text: resolvedStatusText,
+              issue: command.issue,
+            }).catch(() => resolvedStatusText)) ?? resolvedStatusText,
         };
       },
     });
@@ -1802,6 +1933,12 @@ export default {
         }
 
         const state = await store.snapshot();
+        const validationPool = await fetchValidationPoolSummary({
+          repo: {
+            owner: repoConfig.owner,
+            repo: repoConfig.repo,
+          },
+        }).catch(() => undefined);
         return {
           text: buildInboxMessage({
             repo: {
@@ -1809,6 +1946,7 @@ export default {
               repo: repoConfig.repo,
             },
             state,
+            validationPool,
           }),
         };
       },

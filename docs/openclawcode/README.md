@@ -109,6 +109,10 @@ loop with:
 - suitability is now visible in operator-facing surfaces too:
   - run status messages include suitability decision and summary
   - `/occode-inbox` recent ledger entries include a `suitability:` line
+- validation-pool inventory is now visible in operator-facing surfaces too:
+  - `/occode-inbox` appends the live open validation pool
+  - `/occode-status <issue>` annotates validation issues with their class and
+    template when the issue matches the seeded validation taxonomy
 - operator setup health checks that now retry transient gateway reachability and
   signed webhook probe failures during short restart windows
 - a repo-native validation-pool CLI surface:
@@ -241,8 +245,6 @@ Still pending for a fuller product loop:
   reseeding it before it runs dry again
 - lifting chat intake from explicit command syntax to a more natural
   conversation-driven issue-drafting path
-- surfacing the same validation-pool inventory through operator-facing status
-  views instead of only the CLI
 - broadening the remaining command-layer pool beyond one still-open issue after
   consuming `#54`, `#50`, and `#55`
 - broader packaging and install proof beyond the current local operator

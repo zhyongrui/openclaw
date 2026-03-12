@@ -1686,6 +1686,59 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("annotates validation issue metadata through /occode-status", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      vi.stubEnv("GH_TOKEN", "test-token");
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify(
+            createGitHubIssueResponse({
+              issueNumber: 266,
+              title: "[Feature]: Expose stageRecordCount in openclaw code run --json output",
+              body: [
+                "<!-- openclawcode-validation template=command-json-number class=command-layer -->",
+                "",
+                "Summary",
+                "Add one stable top-level numeric field to `openclaw code run --json` named `stageRecordCount`.",
+              ].join("\n"),
+            }),
+          ),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await fixture.commands.get("occode-status")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-status #266",
+        args: "#266",
+        config: {},
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://api.github.com/repos/zhyongrui/openclawcode/issues/266",
+        expect.any(Object),
+      );
+      expect(result).toEqual({
+        text: [
+          "No openclawcode status recorded yet for zhyongrui/openclawcode#266.",
+          "Validation issue: command-layer",
+          "Validation template: command-json-number",
+        ].join("\n"),
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("heals /occode-status from GitHub when a tracked pull request was merged externally", async () => {
     const fixture = await registerPluginFixture();
     try {
@@ -2048,6 +2101,77 @@ describe("openclawcode extension", () => {
           "Running: 0",
           "Queued: 0",
           "Recent ledger: 0",
+        ].join("\n"),
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows validation pool inventory through /occode-inbox", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      vi.stubEnv("GH_TOKEN", "test-token");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify([
+              createGitHubIssueResponse({
+                issueNumber: 60,
+                title: "[Docs]: Clarify copied-root fresh-operator proof expectations",
+                body: [
+                  "<!-- openclawcode-validation template=operator-doc-note class=operator-docs -->",
+                  "",
+                  "Summary",
+                  "Clarify the copied-root validation proof in the operator runbook.",
+                ].join("\n"),
+              }),
+              createGitHubIssueResponse({
+                issueNumber: 66,
+                title: "[Feature]: Expose stageRecordCount in openclaw code run --json output",
+                body: [
+                  "<!-- openclawcode-validation template=command-json-number class=command-layer -->",
+                  "",
+                  "Summary",
+                  "Add one stable top-level numeric field to `openclaw code run --json` named `stageRecordCount`.",
+                ].join("\n"),
+              }),
+              createGitHubIssueResponse({
+                issueNumber: 99,
+                title: "Non-validation issue",
+                body: "Leave me out of the validation pool.",
+              }),
+            ]),
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json",
+              },
+            },
+          ),
+        ),
+      );
+
+      const result = await fixture.commands.get("occode-inbox")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-inbox",
+        args: "",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "openclawcode inbox for zhyongrui/openclawcode",
+          "Pending approvals: 0",
+          "Running: 0",
+          "Queued: 0",
+          "Recent ledger: 0",
+          "Validation pool: 2",
+          "- #60 | operator-docs | operator-doc-note | [Docs]: Clarify copied-root fresh-operator proof expectations",
+          "- #66 | command-layer | command-json-number | [Feature]: Expose stageRecordCount in openclaw code run --json output",
         ].join("\n"),
       });
     } finally {
