@@ -311,6 +311,7 @@ function toWorkflowRunJson(run: WorkflowRun) {
     draftPullRequestBranchName: run.draftPullRequest?.branchName ?? null,
     draftPullRequestBaseBranch: run.draftPullRequest?.baseBranch ?? null,
     draftPullRequestNumber: run.draftPullRequest?.number ?? null,
+    publishedPullRequestNumber: run.draftPullRequest?.number ?? null,
     draftPullRequestUrl: run.draftPullRequest?.url ?? null,
     draftPullRequestDisposition: draftPullRequestDisposition.draftPullRequestDisposition,
     draftPullRequestDispositionReason:

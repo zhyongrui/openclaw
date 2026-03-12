@@ -75,6 +75,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.draftPullRequestBranchName).toBe("openclawcode/issue-2");
     expect(payload.draftPullRequestBaseBranch).toBe("main");
     expect(payload.draftPullRequestNumber).toBe(42);
+    expect(payload.publishedPullRequestNumber).toBe(42);
     expect(payload.draftPullRequestUrl).toBe("https://github.com/openclaw/openclaw/pull/42");
     expect(payload.draftPullRequest.branchName).toBe(payload.draftPullRequestBranchName);
     expect(payload.draftPullRequest.baseBranch).toBe(payload.draftPullRequestBaseBranch);
@@ -139,6 +140,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.draftPullRequestBranchName).toBeNull();
     expect(payload.draftPullRequestBaseBranch).toBeNull();
     expect(payload.draftPullRequestNumber).toBeNull();
+    expect(payload.publishedPullRequestNumber).toBeNull();
     expect(payload.draftPullRequestUrl).toBeNull();
     expect(payload.draftPullRequestDisposition).toBeNull();
     expect(payload.draftPullRequestDispositionReason).toBeNull();
@@ -305,6 +307,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.draftPullRequestBranchName).toBe("openclawcode/issue-2");
     expect(payload.draftPullRequestBaseBranch).toBe("main");
     expect(payload.draftPullRequestNumber).toBeNull();
+    expect(payload.publishedPullRequestNumber).toBeNull();
     expect(payload.draftPullRequestUrl).toBeNull();
     expect(payload.draftPullRequestDisposition).toBeNull();
     expect(payload.draftPullRequestDispositionReason).toBeNull();
@@ -343,6 +346,7 @@ describe("openclawCodeRunCommand", () => {
       "Draft PR skipped: no new commits were produced between the base branch and openclawcode/issue-2.",
     );
     expect(payload.draftPullRequestNumber).toBeNull();
+    expect(payload.publishedPullRequestNumber).toBeNull();
     expect(payload.draftPullRequestUrl).toBeNull();
     expect(payload.draftPullRequestDisposition).toBe("skipped");
     expect(payload.draftPullRequestDispositionReason).toBe(
