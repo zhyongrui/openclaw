@@ -214,6 +214,19 @@ The current repository state already supports:
   cleanly merges `upstream/main` through `841ee24340` and still passes:
   - `pnpm build`
   - `pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads`
+- a fresh sync-branch live validation on issue `#36` that reached
+  `ready-for-human-review` and exposed three real follow-ups that are now fixed:
+  - the setup health-check must require
+    `OPENCLAWCODE_GITHUB_WEBHOOK_SECRET` in the configured env file instead of
+    accepting an inherited process secret
+  - draft PR metadata must preserve a non-`main` workflow base branch instead
+    of hard-coding `main`
+  - the sandbox fs pinned mutation helper must preserve stdin payloads for
+    writes instead of consuming stdin for the embedded Python script itself
+- a local shell regression for the pinned sandbox write helper plus rerun proof
+  through:
+  - `src/agents/sandbox/fs-bridge.e2e-docker.test.ts`
+  - `src/agents/pi-tools.read.sandbox-edit.e2e-docker.test.ts`
 
 The last local blockers found while preparing the live replay are now closed:
 
@@ -225,10 +238,9 @@ The last local blockers found while preparing the live replay are now closed:
 - local reconciliation can recover a tracked pull request number and URL from
   older run artifacts when the newest rerun record missed that metadata
 
-This means the next iteration can shift from bridge root-cause hunting to
-staged runner re-enable on the refreshed sync branch, hardening
-fresh-operator setup, and trusting the visible lifecycle state under repeated
-live runs.
+This means the next iteration can shift from local bridge/root-cause hunting to
+one final sync-branch live rerun after correcting `PR #47`'s base branch, then
+resume staged runner re-enable cleanup and broader operator hardening.
 
 ### Near-Term Delivery Streams
 
@@ -784,14 +796,12 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. keep the deterministic sandbox edit path and host-path restoration fallback
-   in place while staging the next live validation through
-   `OPENCLAWCODE_ENABLE_FS_TOOLS`
-2. add or extend regression coverage around sandbox bridge recovery and the
-   linked-worktree mount shape used by live issue runs
-3. re-enable the runner-level `edit`/`write` tools only in code paths that are
-   proved safe by tests and a fresh live issue run
-4. rebuild and rerun one low-risk live issue on refreshed `main`
+1. correct `PR #47` so it targets `sync/upstream-2026-03-12`, not `main`
+2. rerun low-risk issue `#36` on the live route and confirm deterministic
+   sandbox `edit` succeeds without falling back to a shell rewrite
+3. re-enable the runner-level `edit` tool only after that live rerun stays on
+   the deterministic bridge path
+4. rebuild and rerun one low-risk merged issue on refreshed `main`
 5. confirm the run still reaches:
    - draft PR publication
    - verification approval
@@ -800,7 +810,7 @@ The next implementation slice should follow this order:
    the final merged disposition after the bridge fix
 7. update the dev log and status docs with both the bridge fix and the new live
    proof
-8. commit the slice only after targeted validation passes
+8. commit each slice only after targeted validation passes
 
 ## Test Strategy
 

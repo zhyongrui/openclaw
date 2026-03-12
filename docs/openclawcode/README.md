@@ -124,9 +124,9 @@ loop with:
 
 Still pending for a fuller product loop:
 
-- fresh live validation with the deterministic sandbox edit path using the new
-  staged runner switch on the refreshed sync branch, followed by removal of the
-  temporary `edit`/`write` deny
+- one final sync-branch live rerun after correcting `PR #47`'s base branch, so
+  the deterministic sandbox edit path is proved end to end without falling back
+  to `exec`, followed by removal of the temporary `edit`/`write` deny
 - stronger suitability/risk gating ahead of autonomous execution
 - proof under a fresh operator environment using docs and scripts only
 - broader policy-doc polish
