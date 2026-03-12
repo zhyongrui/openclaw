@@ -156,7 +156,7 @@ loop with:
     a duplicate
   - current live inventory is visible without opening GitHub manually and
     includes:
-    - command-layer issue `#72`
+    - command-layer issue `#73`
     - docs/operator issue `#60`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
@@ -170,6 +170,9 @@ loop with:
   - `openclaw code run --json` now exposes `stageRecordCount`
   - the command-layer pool was replenished with `#72` for
     `acceptanceCriteriaCount`
+- command-layer issue `#72` has now been consumed on `main` too:
+  - `openclaw code run --json` now exposes `acceptanceCriteriaCount`
+  - the command-layer pool was replenished with `#73` for `openQuestionCount`
 - real live lifecycle replay against `PR #37`, covering:
   - `pull_request_review` changes requested
   - `pull_request_review` approved
