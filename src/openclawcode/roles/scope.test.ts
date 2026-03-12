@@ -123,6 +123,31 @@ describe("issue scope classification", () => {
     expect(classifyIssueScope(run)).toBe("command-layer");
   });
 
+  it("treats marked operator-doc validation issues as command-layer-safe", () => {
+    const run: WorkflowRun = {
+      ...createRun(),
+      issue: {
+        ...createRun().issue,
+        number: 86,
+        title: "[Docs]: Clarify provider-pause behavior for auto-queued work",
+        body: [
+          "<!-- openclawcode-validation template=operator-doc-note class=operator-docs -->",
+          "",
+          "Summary",
+          "Clarify how auto-queued work behaves when a provider pause is active.",
+          "",
+          "Proposed solution",
+          "Update `docs/openclawcode/operator-setup.md` with a short note that explains the observable behavior during an active provider pause, including that queue intake can succeed before execution resumes.",
+          "- keep the change docs-only",
+          "- keep the note specific to operator behavior during active provider pauses",
+        ].join("\n"),
+      },
+    };
+
+    expect(classifyIssueScope(run)).toBe("command-layer");
+    expect(buildScopeGuardrail(run).preferredPaths).toContain("docs/openclawcode/");
+  });
+
   it("classifies orchestration work as workflow-core", () => {
     const run: WorkflowRun = {
       ...createRun(),

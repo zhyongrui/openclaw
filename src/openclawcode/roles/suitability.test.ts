@@ -85,6 +85,40 @@ describe("assessIssueSuitability", () => {
     );
   });
 
+  it("accepts marked operator-doc validation issues for autonomous execution", () => {
+    const run: WorkflowRun = {
+      ...createRun(),
+      issue: {
+        ...createRun().issue,
+        number: 86,
+        title: "[Docs]: Clarify provider-pause behavior for auto-queued work",
+        body: [
+          "<!-- openclawcode-validation template=operator-doc-note class=operator-docs -->",
+          "",
+          "Summary",
+          "Clarify how auto-queued work behaves when a provider pause is active.",
+          "",
+          "Proposed solution",
+          "Update `docs/openclawcode/operator-setup.md` with a short note that explains the observable behavior during an active provider pause, including that queue intake can succeed before execution resumes.",
+          "- keep the change docs-only",
+          "- keep the note specific to operator behavior during active provider pauses",
+        ].join("\n"),
+      },
+      executionSpec: {
+        ...createRun().executionSpec!,
+        summary: "Clarify one operator doc note.",
+        scope: ["Update docs/openclawcode/operator-setup.md only."],
+        testPlan: ["No runtime code changes; keep docs-only validation narrow."],
+      },
+    };
+
+    const result = assessIssueSuitability(run, "2026-03-12T17:25:00.000Z");
+
+    expect(result.decision).toBe("auto-run");
+    expect(result.classification).toBe("command-layer");
+    expect(result.summary).toContain("Suitability accepted for autonomous execution.");
+  });
+
   it("escalates high-risk issues before branch mutation", () => {
     const run: WorkflowRun = {
       ...createRun(),

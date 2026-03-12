@@ -218,6 +218,11 @@ loop with:
   - auto-mode webhook intake and chat-native `/occode-intake` now append active
     provider-pause details directly to the queued message when work is waiting
     behind a transient provider pause
+  - seeded low-risk validation issues now short-circuit scope classification
+    from their validation marker before the usual text heuristics run, so
+    `operator-doc-note` issues like `#86` do not drift into
+    `workflow-core`/`needs-human-review` classification just because the prose
+    mentions queue or runtime behavior
   - operator docs now include a refreshed-branch promotion checklist and
     copied-root teardown guidance
   - the next refreshed-branch ops slice is a real low-risk live proof on the

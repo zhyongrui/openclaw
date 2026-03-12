@@ -1216,13 +1216,16 @@ The next implementation slice should follow this order:
    runner immediately when the service is already active
 2. use the now-green `./scripts/openclawcode-setup-check.sh --strict` result as
    the preflight gate before that proof
-3. use the new provider-pause queue messaging to distinguish "queued behind a
+3. prefer a seeded validation issue whose marker keeps the slice low-risk even
+   if the prose mentions runtime behavior; issue `#86` exposed that this needed
+   an explicit marker-aware scope short-circuit on the refreshed branch
+4. use the new provider-pause queue messaging to distinguish "queued behind a
    pause" from "queue is stalled" during that live proof
-4. keep docs/operator issue `#60` open as the standing docs-side proof target
+5. keep docs/operator issue `#60` open as the standing docs-side proof target
    only until the copied-root teardown guidance is judged complete
-5. promote only after the refreshed branch can pass both strict setup checks
+6. promote only after the refreshed branch can pass both strict setup checks
    and a real low-risk live proof on the target runtime
-6. after promotion, rerun the same strict check and one chat-visible proof on
+7. after promotion, rerun the same strict check and one chat-visible proof on
    `main`
 
 ## Test Strategy

@@ -1,4 +1,5 @@
 import type { IssueImplementationScope, WorkflowRun } from "../contracts/index.js";
+import { classifyValidationIssue } from "../validation-issues.js";
 
 export interface ScopeGuardrail {
   classification: IssueImplementationScope;
@@ -88,6 +89,17 @@ function collectSupportText(run: WorkflowRun): string {
 }
 
 export function classifyIssueScope(run: WorkflowRun): IssueImplementationScope {
+  const validationIssue = classifyValidationIssue({
+    title: run.issue.title,
+    body: run.issue.body,
+  });
+  if (
+    validationIssue?.issueClass === "command-layer" ||
+    validationIssue?.issueClass === "operator-docs"
+  ) {
+    return "command-layer";
+  }
+
   const issueText = [run.issue.title, run.issue.body ?? ""].join("\n").toLowerCase();
   const issueCommandScore = countHints(issueText, COMMAND_LAYER_HINTS);
   const issueWorkflowScore = countHints(issueText, WORKFLOW_CORE_HINTS);
