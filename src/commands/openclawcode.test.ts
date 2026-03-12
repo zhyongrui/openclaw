@@ -640,10 +640,13 @@ describe("openclawCodeRunCommand", () => {
               required: true,
             },
           ],
+          openQuestions: [
+            "Should this count stay top-level for downstream consumers?",
+            "Do we want a matching boolean later?",
+          ],
           testPlan: [],
           risks: [],
           assumptions: [],
-          openQuestions: [],
           riskLevel: "low",
         },
         stageRecords: [
@@ -667,11 +670,12 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.acceptanceCriteriaCount).toBe(1);
+    expect(payload.openQuestionCount).toBe(2);
     expect(payload.stageRecordCount).toBe(2);
     expect(payload.historyEntryCount).toBe(2);
   });
 
-  it("prints historyEntryCount, stageRecordCount, and acceptanceCriteriaCount as null when metadata is missing", async () => {
+  it("prints historyEntryCount, stageRecordCount, acceptanceCriteriaCount, and openQuestionCount as null when metadata is missing", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
         executionSpec: undefined,
@@ -684,6 +688,7 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.acceptanceCriteriaCount).toBeNull();
+    expect(payload.openQuestionCount).toBeNull();
     expect(payload.stageRecordCount).toBeNull();
     expect(payload.historyEntryCount).toBeNull();
   });

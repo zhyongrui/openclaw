@@ -372,6 +372,7 @@ function toWorkflowRunJson(run: WorkflowRun) {
     suitabilityRiskLevel: run.suitability?.riskLevel ?? null,
     suitabilityEvaluatedAt: run.suitability?.evaluatedAt ?? null,
     acceptanceCriteriaCount: run.executionSpec?.acceptanceCriteria.length ?? null,
+    openQuestionCount: run.executionSpec?.openQuestions.length ?? null,
     draftPullRequestBranchName: run.draftPullRequest?.branchName ?? null,
     draftPullRequestBaseBranch: run.draftPullRequest?.baseBranch ?? null,
     draftPullRequestNumber: run.draftPullRequest?.number ?? null,

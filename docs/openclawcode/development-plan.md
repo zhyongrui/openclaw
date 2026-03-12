@@ -185,7 +185,7 @@ turning the working loop into a cleanly operable product:
 - `openclaw code list-validation-issues` now reports template-level counts in
   both text and JSON output, so pool upkeep no longer requires manual counting
 - live inventory proof now shows the current open pool directly:
-  - command-layer issue `#73`
+  - command-layer issue `#74`
   - docs/operator issue `#60`
 - duplicate seeding attempts now reuse an existing open issue with the same
   template and title instead of creating a fresh duplicate
@@ -202,8 +202,9 @@ turning the working loop into a cleanly operable product:
   `main` and closed through the live Feishu operator path
 - command-layer issue `#66` has now also been implemented on `main` and closed
 - command-layer issue `#72` has now also been implemented on `main` and closed
+- command-layer issue `#73` has now also been implemented on `main` and closed
 - the command-layer pool is now replenished with:
-  - issue `#73` for `openQuestionCount`
+  - issue `#74` for `riskCount`
   - docs/operator issue `#60`
 - a fresh explicit chat-intake live proof is now complete through issue `#70`:
   - `/occode-intake` created the GitHub issue and queued it from chat-facing
