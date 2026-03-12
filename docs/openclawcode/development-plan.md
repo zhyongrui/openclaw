@@ -162,9 +162,11 @@ turning the working loop into a cleanly operable product:
 - command-layer issues `#54` and `#50` have now been implemented on `main` and
   closed, proving the consume-and-reseed loop on two consecutive real issues
 - command-layer issue `#55` has now also been implemented on `main` and closed
-- the command-layer pool was immediately replenished with:
-  - issue `#61` for `verificationAttemptCount`
-  - issue `#62` for `planningAttemptCount`
+- command-layer issues `#61` and `#62` have now also been implemented on
+  `main` and closed
+- the command-layer pool was immediately replenished again with:
+  - issue `#63` for `totalAttemptCount`
+  - issue `#64` for `buildAttemptCount`
 - policy docs are now in sync with the live-tested guarded auto-merge behavior
 - the next engineering priority is now consume-and-reseed workflow plus
   inventory visibility on operator-facing surfaces
@@ -311,7 +313,7 @@ Exit criteria:
 - when the validation pool is empty, Codex replenishes it through
   `openclaw code seed-validation-issue` instead of an ad hoc GitHub API call
 - the current live inventory is explicit and reusable:
-  - command-layer issues `#61`, `#62`
+  - command-layer issues `#63`, `#64`
   - docs/operator issue `#60`
 - duplicate seed attempts are absorbed back into the existing pool instead of
   creating another open issue with the same title
@@ -1052,7 +1054,7 @@ The next implementation slice should follow this order:
 
 1. keep the validation pool above one low-risk command-layer issue and one
    low-risk docs/operator issue by using `openclaw code seed-validation-issue`
-2. consume the refreshed command-layer issues `#61` and `#62` on the long-lived
+2. consume the refreshed command-layer issues `#63` and `#64` on the long-lived
    `main` baseline, then reseed immediately so the command-layer pool returns
    to at least two open issues
 3. do the same for docs/operator issue `#60`, or explicitly leave one open so

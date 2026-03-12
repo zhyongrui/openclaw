@@ -109,7 +109,7 @@ loop with:
     a duplicate
   - current live inventory is visible without opening GitHub manually and
     includes:
-    - command-layer issues `#61`, `#62`
+    - command-layer issues `#63`, `#64`
     - docs/operator issue `#60`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
@@ -117,8 +117,8 @@ loop with:
     `main`
   - command-layer issue `#55` has now been consumed and closed on `main`, and
     the pool has been replenished with:
-    - `#61` for `verificationAttemptCount`
-    - `#62` for `planningAttemptCount`
+    - `#63` for `totalAttemptCount`
+    - `#64` for `buildAttemptCount`
 - real live lifecycle replay against `PR #37`, covering:
   - `pull_request_review` changes requested
   - `pull_request_review` approved
