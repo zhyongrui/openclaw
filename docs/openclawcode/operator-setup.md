@@ -486,6 +486,14 @@ More live-proof notes worth carrying into new sessions:
   - if a rerun still fails with `HTTP 400: Internal server error` after that,
     treat it as the current provider-resilience blocker rather than a
     bootstrap file-injection bug
+- the long-lived real operator config currently uses `agents.defaults` without
+  an `agents.list`, so issue-worktree skill-filter overrides need to upsert a
+  temporary agent entry if you want them to apply live
+- after that upsert path landed, live `#87` reruns slimmed further:
+  - `systemPromptReport.systemPrompt.chars` dropped to `8629`
+  - `systemPromptReport.skills.promptChars` dropped to `1245`
+  - the live session now keeps only `coding-agent` plus the four core coding
+    tools
 - one heavier openclawcode suite run on refreshed branches can still time out
   under parallel pressure; the stable proof command remains:
   - `pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads --maxWorkers 1`

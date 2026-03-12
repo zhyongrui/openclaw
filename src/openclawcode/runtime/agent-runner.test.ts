@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
           workspaceAccess: "rw",
         },
       },
+      list: [{ id: "main" }],
     },
   })),
   setRuntimeConfigSnapshot: vi.fn(),
@@ -152,6 +153,12 @@ describe("OpenClawAgentRunner", () => {
       expect.anything(),
       expect.anything(),
     );
+
+    const runtimeConfig = mocks.setRuntimeConfigSnapshot.mock.calls.at(-1)?.[0];
+    expect(runtimeConfig?.tools?.deny).toEqual(
+      expect.arrayContaining(["sessions_spawn", "subagents", "session_status"]),
+    );
+    expect(runtimeConfig?.agents?.list?.[0]?.skills).toEqual(["coding-agent"]);
   });
 
   it("throws when the agent command ends with stopReason=error", async () => {
@@ -297,6 +304,58 @@ describe("OpenClawAgentRunner", () => {
     ).toBe("lightweight");
     expect(__testing.resolveOpenClawCodeBootstrapContextMode("/tmp/openclawcode-worktree")).toBe(
       undefined,
+    );
+    expect(
+      __testing.resolveOpenClawCodeWorktreeDeniedTools("/tmp/repo/.openclawcode/worktrees/run-99"),
+    ).toEqual(
+      expect.arrayContaining([
+        "sessions_list",
+        "sessions_history",
+        "sessions_send",
+        "sessions_spawn",
+        "subagents",
+        "session_status",
+      ]),
+    );
+    expect(__testing.resolveOpenClawCodeWorktreeDeniedTools("/tmp/openclawcode-worktree")).toEqual(
+      [],
+    );
+    expect(
+      __testing.resolveOpenClawCodeWorktreeSkillFilter("/tmp/repo/.openclawcode/worktrees/run-99"),
+    ).toEqual(["coding-agent"]);
+    expect(__testing.resolveOpenClawCodeWorktreeSkillFilter("/tmp/openclawcode-worktree")).toBe(
+      undefined,
+    );
+  });
+
+  it("upserts an agent entry for worktree skill filtering when only defaults exist", async () => {
+    const { __testing } = await import("./agent-runner.js");
+
+    const config = __testing.forceSessionScopedSandboxForAgent(
+      {
+        agents: {
+          defaults: {
+            sandbox: {
+              mode: "all",
+              scope: "agent",
+              workspaceAccess: "rw",
+            },
+          },
+        },
+      },
+      "main",
+      {
+        workspaceDir: "/tmp/repo/.openclawcode/worktrees/run-99",
+      },
+    );
+
+    expect(config.agents?.list).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "main",
+          skills: ["coding-agent"],
+        }),
+      ]),
     );
   });
 });

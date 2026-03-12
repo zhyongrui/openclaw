@@ -35,6 +35,15 @@ export interface AgentRunner {
 const OPENCLAWCODE_DEFAULT_DENIED_TOOLS = ["write"] as const;
 const OPENCLAWCODE_ENABLE_FS_TOOLS_ENV = "OPENCLAWCODE_ENABLE_FS_TOOLS";
 const OPENCLAWCODE_WORKTREE_MARKER = `${path.sep}.openclawcode${path.sep}worktrees${path.sep}`;
+const OPENCLAWCODE_WORKTREE_COORDINATION_TOOLS = [
+  "sessions_list",
+  "sessions_history",
+  "sessions_send",
+  "sessions_spawn",
+  "subagents",
+  "session_status",
+] as const;
+const OPENCLAWCODE_WORKTREE_SKILL_FILTER = ["coding-agent"] as const;
 
 function resolveOpenClawCodeDeniedTools(env: NodeJS.ProcessEnv = process.env): string[] {
   const enabled = new Set(
@@ -59,6 +68,18 @@ function normalizeSessionToken(value: string): string {
 
 function resolveOpenClawCodeBootstrapContextMode(workspaceDir: string): "lightweight" | undefined {
   return workspaceDir.includes(OPENCLAWCODE_WORKTREE_MARKER) ? "lightweight" : undefined;
+}
+
+function resolveOpenClawCodeWorktreeDeniedTools(workspaceDir: string): string[] {
+  return workspaceDir.includes(OPENCLAWCODE_WORKTREE_MARKER)
+    ? [...OPENCLAWCODE_WORKTREE_COORDINATION_TOOLS]
+    : [];
+}
+
+function resolveOpenClawCodeWorktreeSkillFilter(workspaceDir: string): string[] | undefined {
+  return workspaceDir.includes(OPENCLAWCODE_WORKTREE_MARKER)
+    ? [...OPENCLAWCODE_WORKTREE_SKILL_FILTER]
+    : undefined;
 }
 
 function extractText(raw: unknown): string {
@@ -91,11 +112,17 @@ function assertSuccessfulAgentRun(raw: unknown): void {
 function forceSessionScopedSandboxForAgent(
   config: OpenClawConfig,
   agentIdRaw?: string,
-  options?: { env?: NodeJS.ProcessEnv },
+  options?: { env?: NodeJS.ProcessEnv; workspaceDir?: string },
 ): OpenClawConfig {
   const next = structuredClone(config);
   const agentId = normalizeAgentId(agentIdRaw);
-  const deniedTools = resolveOpenClawCodeDeniedTools(options?.env);
+  const deniedTools = Array.from(
+    new Set([
+      ...resolveOpenClawCodeDeniedTools(options?.env),
+      ...resolveOpenClawCodeWorktreeDeniedTools(options?.workspaceDir ?? ""),
+    ]),
+  );
+  const skillFilter = resolveOpenClawCodeWorktreeSkillFilter(options?.workspaceDir ?? "");
   const appendDeniedPolicy = <T extends { deny?: string[] } | undefined>(policy: T): T => {
     const nextPolicy = {
       ...policy,
@@ -118,18 +145,29 @@ function forceSessionScopedSandboxForAgent(
     scope: "session",
   };
 
-  if (agentId && Array.isArray(next.agents.list)) {
-    next.agents.list = next.agents.list.map((entry) =>
-      entry.id === agentId
+  if (agentId) {
+    let matchedAgent = false;
+    next.agents.list = (next.agents.list ?? []).map((entry) => {
+      if (entry.id === agentId) {
+        matchedAgent = true;
+      }
+      return entry.id === agentId
         ? {
             ...appendDeniedTools(entry),
+            ...(skillFilter ? { skills: [...skillFilter] } : {}),
             sandbox: {
               ...entry.sandbox,
               scope: "session",
             },
           }
-        : entry,
-    );
+        : entry;
+    });
+    if (!matchedAgent && skillFilter) {
+      next.agents.list.push({
+        id: agentId,
+        skills: [...skillFilter],
+      });
+    }
   }
 
   return next;
@@ -141,11 +179,15 @@ export const __testing = {
   extractStopReason,
   assertSuccessfulAgentRun,
   resolveOpenClawCodeBootstrapContextMode,
+  resolveOpenClawCodeWorktreeDeniedTools,
+  resolveOpenClawCodeWorktreeSkillFilter,
 };
 
 export class OpenClawAgentRunner implements AgentRunner {
   async run(request: AgentRunRequest): Promise<AgentRunResult> {
-    const config = forceSessionScopedSandboxForAgent(loadConfig(), request.agentId);
+    const config = forceSessionScopedSandboxForAgent(loadConfig(), request.agentId, {
+      workspaceDir: request.workspaceDir,
+    });
     const sessionId = request.sessionId ?? `openclawcode-${crypto.randomUUID()}`;
     const sessionKey = `agent:${normalizeAgentId(request.agentId)}:${normalizeSessionToken(sessionId)}`;
     const previousRuntimeSnapshot = getRuntimeConfigSnapshot();

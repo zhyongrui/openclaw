@@ -130,6 +130,17 @@ As of 2026-03-12:
   - `systemPromptReport.injectedWorkspaceFiles = []`
   - the remaining blocker after that fix is still provider
     `HTTP 400: Internal server error` during build
+- a follow-up rerun on that same issue now proves the next prompt-budget slice
+  is active too:
+  - issue-worktree runs now keep only the four core coding tools:
+    `read`, `edit`, `exec`, `process`
+  - issue-worktree runs now upsert a temporary agent entry when the live config
+    only has `agents.defaults`, so the coding-only skill filter still applies
+  - live `systemPromptReport.systemPrompt.chars` dropped again, from `12366` to
+    `8629`
+  - live `systemPromptReport.skills.promptChars` dropped from `4982` to `1245`
+  - the remaining blocker is still provider `HTTP 400`, which now points more
+    strongly at provider or model behavior than local prompt inflation
 
 ## Execution Loop
 
@@ -291,7 +302,8 @@ Goal:
 
 Remaining work:
 
-- keep reducing live issue-worktree prompt pressure after the bootstrap fix
+- keep one narrow provider or model follow-up ready now that prompt pressure is
+  materially lower
 - explicit queue-start or queue-resume feedback after a pause window clears
 - another real rerun or low-risk proof on the refreshed branch now that the
   oversized bootstrap injection warning is gone

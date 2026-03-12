@@ -89,6 +89,16 @@ loop with:
   - `HTTP 400: Internal server error` still remains as the blocking live build
     failure, so the next provider-resilience slice now targets prompt budget or
     provider behavior rather than more bootstrap-file filtering
+- a follow-up live rerun on the same issue now confirms that prompt trimming
+  reached the next layer too:
+  - only the four core coding tools remain in the live worktree session
+  - the coding-only skill filter now applies even when the real operator config
+    has only `agents.defaults` and no `agents.list`
+  - live `systemPromptReport.systemPrompt.chars` dropped from `12366` to `8629`
+  - live `systemPromptReport.skills.promptChars` dropped from `4982` to `1245`
+  - provider `HTTP 400: Internal server error` still remained after that drop,
+    which makes the next slice provider/model-focused rather than prompt-budget
+    focused
 - operator-facing provider-pause messaging is now visible beyond
   `/occode-inbox` too:
   - `/occode-start` and `/occode-rerun` now tell the operator when work was

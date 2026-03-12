@@ -311,6 +311,17 @@ turning the working loop into a cleanly operable product:
     `HTTP 400: Internal server error`, but it now survives after the bootstrap
     fix, which means the next slice should target prompt budget or provider
     behavior instead of more bootstrap-file filtering
+- a second prompt-budget slice on the same issue now proves that local issue
+  worktree sessions are materially slimmer than before:
+  - tool schemas are down to the four core coding tools:
+    `read`, `edit`, `exec`, `process`
+  - a temporary agent entry is now upserted when the real operator config only
+    has `agents.defaults`, so the coding-only skill filter still applies live
+  - live `systemPromptReport.systemPrompt.chars` dropped from `12366` to `8629`
+  - live `systemPromptReport.skills.promptChars` dropped from `4982` to `1245`
+  - provider `HTTP 400: Internal server error` still remained after that drop,
+    so the next slice should move from prompt-budget trimming toward
+    provider/model-specific diagnostics or fallback behavior
 - policy docs are now in sync with the live-tested guarded auto-merge behavior
 - the next engineering priority is now consume-and-reseed workflow plus
   broader chat-native intake behavior
@@ -341,8 +352,9 @@ The short-term objective is:
 - keep the repaired failed-run summaries stable so provider-side errors stay
   attributable to the build/verifier stage that actually failed
 - keep the refreshed-branch live proofs focused on the actual remaining blocker:
-  provider-side build failures after bootstrap-lightweight context has already
-  removed the oversized `AGENTS.md` injection warning
+  provider-side build failures after bootstrap-lightweight context and
+  coding-only issue-worktree prompt trimming have already removed the obvious
+  local prompt inflation signals
 - keep the new openclawcode-worktree retry clamp stable so the outer workflow
   owns provider backoff instead of the embedded SDK
 - keep provider-pause activation observable and predictable after fresh
@@ -1242,12 +1254,12 @@ The next implementation slice should follow this order:
 1. use the green `./scripts/openclawcode-setup-check.sh --strict` result as the
    live preflight gate on the refreshed branch
 2. keep direct rerun proof issue `#87` as the standing refreshed-branch probe
-   until the post-bootstrap failure signal is no longer just provider
+   until the post-trim failure signal is no longer just provider
    `HTTP 400`
-3. trim or reshape the live builder prompt budget now that oversized bootstrap
-   injection has already been removed from the worktree session
-4. rerun `#87` again after each prompt-budget slice and record the new live
-   signal rather than guessing
+3. switch the next slice from prompt trimming to provider/model diagnostics or
+   fallback behavior now that live prompt size has already dropped sharply
+4. rerun `#87` again after each provider-resilience slice and record the new
+   live signal rather than guessing
 5. promote only after the refreshed branch can pass both strict setup checks
    and a real low-risk live proof on the target runtime
 6. after promotion, rerun the same strict check and one chat-visible proof on
