@@ -134,6 +134,16 @@ loop with:
     real `docs/openclawcode/openclaw-plugin-integration.md` path
   - the live builder stopped chasing the nonexistent
     `docs/openclawcode/plugin-integration.md` file name
+- a fifth sync-branch live proof on issue `#36`:
+  - `zhyongrui-openclawcode-36-1773284933205` reached
+    `ready-for-human-review` with `OPENCLAWCODE_ENABLE_FS_TOOLS=write`
+  - the live builder tool list now exposes `write` again alongside `read` and
+    `edit`, and the run stayed stable under the expanded fs-tool surface
+- a docker-gated sandbox write e2e regression that now proves
+  `createSandboxedWriteTool(...)` can:
+  - create a new mounted workspace file through alias-style `file_path` params
+  - keep linked-worktree writes visible through both `/workspace` and the
+    absolute worktree mount path used by live issue runs
 - a fresh direct live rerun of issue `#44` on refreshed `main` that completed
   as a no-op `ready-for-human-review` run instead of reproducing the earlier
   stalled-planning corruption path
@@ -146,8 +156,9 @@ loop with:
 
 Still pending for a fuller product loop:
 
-- staged validation of the remaining runner-level `write` deny before broader
-  filesystem-tool rollout
+- a low-risk merged live proof with `OPENCLAWCODE_ENABLE_FS_TOOLS=write`, so
+  the expanded fs-tool surface is exercised on a full PR publication and merge
+  path instead of only a docs-only reviewable run
 - stronger suitability/risk gating ahead of autonomous execution
 - proof under a fresh operator environment using docs and scripts only
 - broader policy-doc polish

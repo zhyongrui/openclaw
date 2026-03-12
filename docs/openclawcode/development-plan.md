@@ -129,8 +129,9 @@ turning the working loop into a cleanly operable product:
   - `OpenClawAgentRunner` now keeps the default runtime tool deny focused on
     `write` while sandbox `edit` stays enabled by default after live proof on
     `sync/upstream-2026-03-12`
-- the next engineering priority is now staged `write` rollout on the live
-  route, followed by fresh-operator-environment proof and policy-doc cleanup
+- the next engineering priority is now a low-risk merged live proof with
+  `OPENCLAWCODE_ENABLE_FS_TOOLS=write`, followed by fresh-operator-environment
+  proof and policy-doc cleanup
 - packaging and installation are now documented locally, but still need more
   proof under a fresh operator environment
 - policy docs lag the implemented guarded auto-merge behavior and need to be
@@ -266,10 +267,16 @@ The sync-branch live rerun gap is now closed:
 - the live builder no longer emits the earlier
   `/workspace/docs/openclawcode` boundary-check warning and no longer spends a
   first read on the nonexistent `docs/openclawcode/plugin-integration.md`
+- a new docker-gated write regression now proves `createSandboxedWriteTool(...)`
+  can create and surface mounted files correctly through the linked-worktree
+  mount shape used by live runs
+- run `zhyongrui-openclawcode-36-1773284933205` then reached
+  `ready-for-human-review` with `OPENCLAWCODE_ENABLE_FS_TOOLS=write`, and the
+  live builder tool list exposed `write` again without destabilizing the run
 
 This means the next iteration can shift from sandbox directory-read cleanup to
-staged `write` rollout, fresh-environment proof, and broader operator
-hardening.
+merged live proof under the expanded fs-tool surface, fresh-environment proof,
+and broader operator hardening.
 
 ### Near-Term Delivery Streams
 
@@ -825,20 +832,18 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. stage `OPENCLAWCODE_ENABLE_FS_TOOLS=write` on the refreshed sync branch now
-   that sandbox `edit`, directory reads, and docs prompt hints have all passed
-   live proof
-2. rerun one low-risk merged issue once `write` is enabled and confirm the run
+1. rerun one low-risk merged issue under
+   `OPENCLAWCODE_ENABLE_FS_TOOLS=write` and confirm the run still reaches:
    still reaches:
    - draft PR publication
    - verification approval
    - automatic merge and issue closure when policy allows it
-3. verify chat notifications, snapshot updates, and `/occode-inbox` output for
+2. verify chat notifications, snapshot updates, and `/occode-inbox` output for
    the final merged disposition after the fs-tool rollout
-4. re-run the setup or runbook flow in a fresh operator environment after the
+3. re-run the setup or runbook flow in a fresh operator environment after the
    write rollout is stable
-5. update the dev log and status docs after each live proof
-6. commit each slice only after targeted validation passes
+4. update the dev log and status docs after each live proof
+5. commit each slice only after targeted validation passes
 
 ## Test Strategy
 
