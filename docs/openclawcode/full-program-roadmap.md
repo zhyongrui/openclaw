@@ -67,9 +67,9 @@ Remaining work:
 
 Immediate queue:
 
-- `#79` `testCommandCount`
-- follow with `testResultCount`
-- follow with `noteCount`
+- `#80` `testResultCount`
+- `#81` `noteCount`
+- follow with `changedFileCount`
 
 ### Track 2: Chat-Native Intake
 
@@ -186,4 +186,4 @@ As of this revision:
 - active feature branch:
   - `sync/upstream-2026-03-12-refresh`
 - next command-layer slice after the current one:
-  - `#79` `testCommandCount`
+  - `#81` `noteCount`

@@ -179,6 +179,7 @@ loop with:
     - command-layer issue `#78`
     - command-layer issue `#79`
     - command-layer issue `#80`
+    - command-layer issue `#81`
     - docs/operator issue `#60`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
@@ -198,6 +199,10 @@ loop with:
 - command-layer issue `#73` has now been consumed on `main` too:
   - `openclaw code run --json` now exposes `openQuestionCount`
   - the command-layer pool was replenished with `#74` for `riskCount`
+- the refreshed sync branch has now consumed more `BuildResult` count slices too:
+  - `openclaw code run --json` now exposes `testCommandCount`
+  - `openclaw code run --json` now exposes `testResultCount`
+  - the follow-up command-layer issue is `#81` for `noteCount`
 - real live lifecycle replay against `PR #37`, covering:
   - `pull_request_review` changes requested
   - `pull_request_review` approved
