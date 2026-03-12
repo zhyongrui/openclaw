@@ -632,7 +632,7 @@ describe("openclawCodeRunCommand", () => {
         executionSpec: {
           summary: "Keep stage and acceptance metadata visible in command JSON.",
           scope: ["Command-layer JSON output only.", "No workflow-core or runtime changes."],
-          outOfScope: [],
+          outOfScope: ["No gateway runtime behavior changes.", "No chatops policy changes."],
           acceptanceCriteria: [
             {
               id: "count-criteria",
@@ -692,11 +692,12 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.assumptionCount).toBe(2);
     expect(payload.testPlanCount).toBe(2);
     expect(payload.scopeItemCount).toBe(2);
+    expect(payload.outOfScopeCount).toBe(2);
     expect(payload.stageRecordCount).toBe(2);
     expect(payload.historyEntryCount).toBe(2);
   });
 
-  it("prints historyEntryCount, stageRecordCount, acceptanceCriteriaCount, openQuestionCount, riskCount, assumptionCount, testPlanCount, and scopeItemCount as null when metadata is missing", async () => {
+  it("prints historyEntryCount, stageRecordCount, acceptanceCriteriaCount, openQuestionCount, riskCount, assumptionCount, testPlanCount, scopeItemCount, and outOfScopeCount as null when metadata is missing", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
         executionSpec: undefined,
@@ -714,6 +715,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.assumptionCount).toBeNull();
     expect(payload.testPlanCount).toBeNull();
     expect(payload.scopeItemCount).toBeNull();
+    expect(payload.outOfScopeCount).toBeNull();
     expect(payload.stageRecordCount).toBeNull();
     expect(payload.historyEntryCount).toBeNull();
   });
