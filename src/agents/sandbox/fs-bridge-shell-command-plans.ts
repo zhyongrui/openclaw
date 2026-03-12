@@ -12,7 +12,7 @@ export type SandboxFsCommandPlan = {
 
 export function buildStatPlan(target: SandboxResolvedFsPath): SandboxFsCommandPlan {
   return {
-    checks: [{ target, options: { action: "stat files" } }],
+    checks: [{ target, options: { action: "stat files", allowedType: "file-or-directory" } }],
     script: 'set -eu; stat -c "%F|%s|%Y" -- "$1"',
     args: [target.containerPath],
     allowFailure: true,

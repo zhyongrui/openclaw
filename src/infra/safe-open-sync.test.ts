@@ -46,4 +46,33 @@ describe("openVerifiedFileSync", () => {
       fs.closeSync(opened.fd);
     });
   });
+
+  it("accepts both files and directories when allowedType is file-or-directory", async () => {
+    await withTempDir("openclaw-safe-open-", async (root) => {
+      const targetDir = path.join(root, "nested");
+      const targetFile = path.join(root, "note.txt");
+      await fsp.mkdir(targetDir, { recursive: true });
+      await fsp.writeFile(targetFile, "hello", "utf8");
+
+      const openedFile = openVerifiedFileSync({
+        filePath: targetFile,
+        allowedType: "file-or-directory",
+      });
+      expect(openedFile.ok).toBe(true);
+      if (openedFile.ok) {
+        expect(openedFile.stat.isFile()).toBe(true);
+        fs.closeSync(openedFile.fd);
+      }
+
+      const openedDir = openVerifiedFileSync({
+        filePath: targetDir,
+        allowedType: "file-or-directory",
+      });
+      expect(openedDir.ok).toBe(true);
+      if (openedDir.ok) {
+        expect(openedDir.stat.isDirectory()).toBe(true);
+        fs.closeSync(openedDir.fd);
+      }
+    });
+  });
 });

@@ -122,6 +122,12 @@ loop with:
   - `zhyongrui-openclawcode-36-1773282908481` reached
     `ready-for-human-review` again after `edit` was re-enabled by default in
     `OpenClawAgentRunner`
+- a third sync-branch live proof on issue `#36`:
+  - `zhyongrui-openclawcode-36-1773283954561` reached
+    `ready-for-human-review` after sandbox `read` learned to page in-boundary
+    directories such as `/workspace/docs/openclawcode`
+  - the builder no longer emitted the earlier boundary-check warning for that
+    directory path during the live run
 - a fresh direct live rerun of issue `#44` on refreshed `main` that completed
   as a no-op `ready-for-human-review` run instead of reproducing the earlier
   stalled-planning corruption path
@@ -134,8 +140,9 @@ loop with:
 
 Still pending for a fuller product loop:
 
-- a fix for sandbox directory reads such as `/workspace/docs/openclawcode`,
-  which still emit boundary-check warnings during live issue runs
+- cleanup for stale issue-context file hints that still point the live builder
+  at `docs/openclawcode/plugin-integration.md` instead of the real
+  `docs/openclawcode/openclaw-plugin-integration.md`
 - staged validation of the remaining runner-level `write` deny before broader
   filesystem-tool rollout
 - stronger suitability/risk gating ahead of autonomous execution

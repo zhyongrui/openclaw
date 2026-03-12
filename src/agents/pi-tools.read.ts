@@ -51,6 +51,9 @@ const MAX_ADAPTIVE_READ_PAGES = 8;
 type OpenClawReadToolOptions = {
   modelContextWindowTokens?: number;
   imageSanitization?: ImageSanitizationLimits;
+  readDirectoryEntries?: (
+    filePath: string,
+  ) => Promise<Array<{ name: string; isDirectory: boolean }> | null>;
 };
 
 type ReadTruncationDetails = {
@@ -204,6 +207,56 @@ function stripReadTruncationContentDetails(
       truncation: restTruncation,
     },
   };
+}
+
+function coercePositiveInteger(value: unknown, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+  return Math.floor(value);
+}
+
+async function maybeReadDirectoryListing(params: {
+  args: Record<string, unknown>;
+  options?: OpenClawReadToolOptions;
+}): Promise<AgentToolResult<unknown> | null> {
+  const filePath = typeof params.args.path === "string" ? params.args.path : undefined;
+  if (!filePath || !params.options?.readDirectoryEntries) {
+    return null;
+  }
+
+  const entries = await params.options.readDirectoryEntries(filePath);
+  if (!entries) {
+    return null;
+  }
+
+  const offset = coercePositiveInteger(params.args.offset, 1);
+  const limit = coercePositiveInteger(params.args.limit, 200);
+  const startIndex = Math.max(0, offset - 1);
+  const pageEntries = entries.slice(startIndex, startIndex + limit);
+  const nextOffset = startIndex + pageEntries.length + 1;
+  const remaining = Math.max(0, entries.length - (startIndex + pageEntries.length));
+  const textLines =
+    pageEntries.length > 0
+      ? pageEntries.map((entry) => (entry.isDirectory ? `${entry.name}/` : entry.name))
+      : entries.length === 0
+        ? ["(empty directory)"]
+        : [`[No directory entries at offset ${offset}.]`];
+  let text = textLines.join("\n");
+  if (remaining > 0) {
+    text += `\n\n[${remaining} more entries in directory. Use offset=${nextOffset} to continue.]`;
+  }
+
+  return {
+    content: [{ type: "text", text }] as AgentToolResult<unknown>["content"],
+    details: {
+      truncation: {
+        truncated: remaining > 0,
+        outputLines: pageEntries.length,
+        firstLineExceedsLimit: false,
+      },
+    },
+  } as AgentToolResult<unknown>;
 }
 
 async function executeReadWithAdaptivePaging(params: {
@@ -649,6 +702,25 @@ export function createSandboxedReadTool(params: SandboxToolParams) {
   return createOpenClawReadTool(base, {
     modelContextWindowTokens: params.modelContextWindowTokens,
     imageSanitization: params.imageSanitization,
+    readDirectoryEntries: async (filePath) => {
+      const stat = await params.bridge.stat({ filePath, cwd: params.root }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        return /ENOENT|No such file/i.test(message) ? null : Promise.reject(error);
+      });
+      if (!stat || stat.type !== "directory") {
+        return null;
+      }
+      const hostPath = params.bridge.resolvePath({ filePath, cwd: params.root }).hostPath;
+      const entries = await fs.readdir(hostPath, { withFileTypes: true });
+      return entries
+        .map((entry) => ({
+          name: entry.name,
+          isDirectory: entry.isDirectory(),
+        }))
+        .toSorted((left, right) =>
+          left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+        );
+    },
   });
 }
 
@@ -695,6 +767,13 @@ export function createOpenClawReadTool(
         normalized ??
         (params && typeof params === "object" ? (params as Record<string, unknown>) : undefined);
       assertRequiredParams(record, CLAUDE_PARAM_GROUPS.read, base.name);
+      const directoryResult = await maybeReadDirectoryListing({
+        args: (normalized ?? params ?? {}) as Record<string, unknown>,
+        options,
+      });
+      if (directoryResult) {
+        return directoryResult;
+      }
       const result = await executeReadWithAdaptivePaging({
         base,
         toolCallId,
