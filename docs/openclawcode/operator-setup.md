@@ -19,6 +19,11 @@ Before wiring the plugin, make sure you already have:
 
 - one local checkout of this repository
 - `pnpm install` completed in that checkout
+- a Node runtime new enough for the current branch you are operating:
+  - the refreshed upstream integration branch now expects Node `>=22.16.0`
+    for CLI startup
+  - this workstation still builds under `22.12.0`, but the built
+    `dist/index.js` entrypoint refuses to start below the new floor
 - one chat surface already connected to the local gateway
 - a GitHub token with:
   - repo read/write access for issue fetch, PR publish, and merge operations

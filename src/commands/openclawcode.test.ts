@@ -645,7 +645,18 @@ describe("openclawCodeRunCommand", () => {
             "Do we want a matching boolean later?",
           ],
           testPlan: [],
-          risks: [],
+          risks: [
+            {
+              id: "risk-provider-output",
+              summary: "Downstream tooling could still ignore the new field accidentally.",
+              mitigation: "Add a stable top-level count for direct JSON consumers.",
+            },
+            {
+              id: "risk-null-shape",
+              summary: "Missing execution metadata could still change the payload shape.",
+              mitigation: "Emit null when executionSpec is unavailable.",
+            },
+          ],
           assumptions: [],
           riskLevel: "low",
         },
@@ -671,11 +682,12 @@ describe("openclawCodeRunCommand", () => {
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.acceptanceCriteriaCount).toBe(1);
     expect(payload.openQuestionCount).toBe(2);
+    expect(payload.riskCount).toBe(2);
     expect(payload.stageRecordCount).toBe(2);
     expect(payload.historyEntryCount).toBe(2);
   });
 
-  it("prints historyEntryCount, stageRecordCount, acceptanceCriteriaCount, and openQuestionCount as null when metadata is missing", async () => {
+  it("prints historyEntryCount, stageRecordCount, acceptanceCriteriaCount, openQuestionCount, and riskCount as null when metadata is missing", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
         executionSpec: undefined,
@@ -689,6 +701,7 @@ describe("openclawCodeRunCommand", () => {
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.acceptanceCriteriaCount).toBeNull();
     expect(payload.openQuestionCount).toBeNull();
+    expect(payload.riskCount).toBeNull();
     expect(payload.stageRecordCount).toBeNull();
     expect(payload.historyEntryCount).toBeNull();
   });

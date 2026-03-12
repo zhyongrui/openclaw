@@ -186,6 +186,7 @@ turning the working loop into a cleanly operable product:
   both text and JSON output, so pool upkeep no longer requires manual counting
 - live inventory proof now shows the current open pool directly:
   - command-layer issue `#74`
+  - command-layer issue `#75`
   - docs/operator issue `#60`
 - duplicate seeding attempts now reuse an existing open issue with the same
   template and title instead of creating a fresh duplicate
@@ -205,6 +206,7 @@ turning the working loop into a cleanly operable product:
 - command-layer issue `#73` has now also been implemented on `main` and closed
 - the command-layer pool is now replenished with:
   - issue `#74` for `riskCount`
+  - issue `#75` for `assumptionCount`
   - docs/operator issue `#60`
 - a fresh explicit chat-intake live proof is now complete through issue `#70`:
   - `/occode-intake` created the GitHub issue and queued it from chat-facing
@@ -219,6 +221,18 @@ turning the working loop into a cleanly operable product:
   - `/occode-inbox` lists open validation issues `#60` and `#66`
   - `/occode-status #66` annotates the issue as
     `command-layer / command-json-number`
+- a refreshed upstream integration branch,
+  `sync/upstream-2026-03-12-refresh`, now merges `upstream/main` through
+  `c965049dc6` and still passes:
+  - `pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads`
+  - `pnpm build`
+- that refreshed branch is now the active feature branch while `main` stays as
+  the long-lived Feishu operator baseline until the next live proof promotion
+- upstream also raised the runtime floor to Node `>=22.16.0`:
+  - this workstation is still on `22.12.0`
+  - `pnpm build` and targeted tests still pass with warnings
+  - the built CLI entrypoint now refuses to start below that floor, so
+    promotion planning has to track a local Node upgrade alongside code work
 - issue `#71` exposed a workflow-fidelity bug after a one-line chat intake
   proof:
   - builder accepted agent `stopReason=error` output as a successful build
@@ -265,6 +279,10 @@ system that can keep shipping on the same branch that the live runner uses.
 
 The short-term objective is:
 
+- keep `sync/upstream-2026-03-12-refresh` as the active engineering branch
+  until the next live operator proof is complete
+- keep `main` as the stable long-lived Feishu operator baseline rather than
+  mixing in unproven upstream-sync work immediately
 - keep using real GitHub issues as the driver
 - keep validating each slice end-to-end against this repository
 - move from "observable workflow state" toward "live repository automation with
@@ -289,6 +307,32 @@ The short-term objective is:
 - align the roadmap and setup docs with the behavior already proved in code
 - keep a renewable queue of low-risk validation issues available so the next
   live proof does not stall on missing repository traffic
+- absorb upstream runtime movement continuously, but only through explicit sync
+  branches with targeted validation and promotion checkpoints
+
+### Rolling Execution Loop
+
+The next several development cycles should now follow one repeating loop:
+
+1. refresh `upstream/main` into a dedicated `sync/upstream-*` branch whenever
+   the local branch is materially behind
+2. keep feature work on that refreshed sync branch until the next operator
+   proof is ready
+3. land one narrow slice at a time with:
+   - code
+   - tests
+   - build validation
+   - dev-log updates
+   - operator or runbook notes when the slice changes real operating behavior
+4. consume one low-risk validation issue and immediately reseed the next one
+   before the pool runs dry
+5. run a real proof on the refreshed branch once a coherent batch of low-risk
+   slices is ready
+6. only then promote the refreshed branch back to `main` and restart the
+   long-lived operator there
+
+This keeps upstream sync, feature work, and live operator promotion separate
+enough that failures stay attributable.
 
 ### Long-Range Program Update
 
@@ -407,7 +451,7 @@ Exit criteria:
 - when the validation pool is empty, Codex replenishes it through
   `openclaw code seed-validation-issue` instead of an ad hoc GitHub API call
 - the current live inventory is explicit and reusable:
-  - command-layer issues `#63`, `#64`
+  - command-layer issues `#74`, `#75`
   - docs/operator issue `#60`
 - duplicate seed attempts are absorbed back into the existing pool instead of
   creating another open issue with the same title
@@ -1146,14 +1190,18 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. keep the validation pool above one low-risk command-layer issue and one
-   low-risk docs/operator issue by using `openclaw code seed-validation-issue`
-2. consume and reseed that pool on the long-lived `main` baseline once the
-   provider pause clears and the model path is stable again
-3. keep `openclaw code list-validation-issues` as the canonical inventory view
-   and mirror the same pool signal into operator-facing status surfaces
-4. update the dev log after each live proof and commit only after targeted
-   validation passes
+1. implement command-layer issue `#75` on
+   `sync/upstream-2026-03-12-refresh` by exposing `assumptionCount` in
+   `openclaw code run --json`
+2. reseed the next command-layer validation issue immediately after that slice
+   so the pool stays above one open low-risk command issue
+3. keep docs/operator issue `#60` open as the standing docs-side proof target
+4. record the refreshed-branch Node floor constraint wherever operator-facing
+   setup or promotion guidance would otherwise assume the built CLI can start
+   under Node `22.12.0`
+5. after a small batch of low-risk refreshed-branch slices, restart the live
+   operator on that branch and run another real proof before promoting back to
+   `main`
 
 ## Test Strategy
 

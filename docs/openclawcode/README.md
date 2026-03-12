@@ -172,6 +172,7 @@ loop with:
   - current live inventory is visible without opening GitHub manually and
     includes:
     - command-layer issue `#74`
+    - command-layer issue `#75`
     - docs/operator issue `#60`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
@@ -236,6 +237,15 @@ loop with:
   merges `upstream/main` through `841ee24340` and still passes:
   - `pnpm build`
   - `pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads`
+- the next refreshed integration branch,
+  `sync/upstream-2026-03-12-refresh`, now merges `upstream/main` through
+  `c965049dc6` and still passes the same validation set
+- that refreshed branch is now the active feature branch while `main` remains
+  the long-lived Feishu operator baseline until the next live promotion
+- upstream now expects Node `>=22.16.0` for CLI startup:
+  - this workstation still runs targeted tests and `pnpm build` under
+    `22.12.0` with warnings
+  - the built CLI entrypoint no longer starts below the new floor
 - a docker-gated sandbox edit end-to-end regression that exercises alias-style
   edit parameters through the real workspace mount path before the runner-level
   deny is removed
