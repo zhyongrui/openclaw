@@ -15,6 +15,9 @@ It is intentionally broader than a single issue. It defines:
 The goal is to make it possible to keep building for long stretches without
 losing architectural direction.
 
+For the exhaustive cross-track backlog that runs all the way to the intended
+operator end-state, see `full-program-roadmap.md`.
+
 ## Product Target
 
 `openclawcode` should become a GitHub-driven coding assistant built on the
@@ -191,6 +194,7 @@ turning the working loop into a cleanly operable product:
   - command-layer issue `#77`
   - command-layer issue `#78`
   - command-layer issue `#79`
+  - command-layer issue `#80`
   - docs/operator issue `#60`
 - duplicate seeding attempts now reuse an existing open issue with the same
   template and title instead of creating a fresh duplicate
@@ -459,7 +463,7 @@ Exit criteria:
 - when the validation pool is empty, Codex replenishes it through
   `openclaw code seed-validation-issue` instead of an ad hoc GitHub API call
 - the current live inventory is explicit and reusable:
-  - command-layer issues `#74`, `#75`, `#76`, `#77`, `#78`, `#79`
+  - command-layer issues `#74`, `#75`, `#76`, `#77`, `#78`, `#79`, `#80`
   - docs/operator issue `#60`
 - duplicate seed attempts are absorbed back into the existing pool instead of
   creating another open issue with the same title
@@ -1198,8 +1202,8 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. implement command-layer issue `#79` on
-   `sync/upstream-2026-03-12-refresh` by exposing `testCommandCount` in
+1. implement command-layer issue `#80` on
+   `sync/upstream-2026-03-12-refresh` by exposing `testResultCount` in
    `openclaw code run --json`
 2. reseed the next command-layer validation issue immediately after that slice
    so the pool stays above one open low-risk command issue

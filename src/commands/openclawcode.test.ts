@@ -136,6 +136,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.scopeCheckHasBlockedFiles).toBe(false);
     expect(payload.scopeBlockedFiles).toEqual([]);
     expect(payload.scopeBlockedFileCount).toBe(0);
+    expect(payload.testCommandCount).toBe(1);
     expect(payload.buildResult.issueClassification).toBe(payload.issueClassification);
     expect(payload.buildResult.scopeCheck).toEqual(payload.scopeCheck);
     expect(payload.suitabilityDecision).toBe("auto-run");
@@ -219,6 +220,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.scopeCheckHasBlockedFiles).toBe(false);
     expect(payload.scopeBlockedFiles).toBeNull();
     expect(payload.scopeBlockedFileCount).toBeNull();
+    expect(payload.testCommandCount).toBeNull();
     expect(payload.suitabilityDecision).toBe("auto-run");
     expect(payload.suitabilitySummary).toBe(
       "Suitability accepted for autonomous execution. Issue stays within command-layer scope.",

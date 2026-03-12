@@ -9,14 +9,15 @@ Recommended reading order:
 3. `mvp-spec-v1.md`
 4. `architecture.md`
 5. `development-plan.md`
-6. `workflows.md`
-7. `specs.md`
-8. `openclaw-strategy.md`
-9. `openclaw-implementation-plan.md`
-10. `upstream-sync-policy.md`
-11. `operator-setup.md`
-12. `mvp-runbook.md`
-13. `webhook-operations.md`
+6. `full-program-roadmap.md`
+7. `workflows.md`
+8. `specs.md`
+9. `openclaw-strategy.md`
+10. `openclaw-implementation-plan.md`
+11. `upstream-sync-policy.md`
+12. `operator-setup.md`
+13. `mvp-runbook.md`
+14. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
@@ -177,6 +178,7 @@ loop with:
     - command-layer issue `#77`
     - command-layer issue `#78`
     - command-layer issue `#79`
+    - command-layer issue `#80`
     - docs/operator issue `#60`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
