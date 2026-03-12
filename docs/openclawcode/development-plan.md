@@ -192,6 +192,10 @@ Exit criteria:
 Status:
 
 - active next phase
+- copied-root setup verification is now working through a single
+  `OPENCLAWCODE_OPERATOR_ROOT`
+- the remaining gap is a true fresh-root gateway startup plus one end-to-end
+  issue run from that fresh environment
 
 Goal:
 
@@ -286,6 +290,11 @@ The current repository state already supports:
 - operator runbooks for local setup, repo binding, and temporary webhook ingress
 - a repo-local setup verification script for gateway, webhook, binding, tunnel
   health, and required GitHub webhook event subscriptions
+- operator setup scripts that now derive env, config, and plugin state from a
+  single `OPENCLAWCODE_OPERATOR_ROOT` override instead of requiring separate
+  file-path overrides for each script
+- a strict copied-root operator health-check proof that now passes when the
+  fresh root persists webhook repo and hook metadata in `openclawcode.env`
 - a fresh live merged-PR proof on refreshed `main` for issue `#45`:
   - two failed reruns persisted cleanly as `failed` artifacts
   - recovery after runtime tool hardening
@@ -950,10 +959,11 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. stand up a fresh operator state root from the documented setup flow instead
-   of the long-lived local `.openclaw` directory
-2. run `scripts/openclawcode-setup-check.sh --strict` against that fresh
-   environment and close any remaining hidden-state assumptions
+1. start one fresh gateway process from a copied operator root using
+   `OPENCLAWCODE_OPERATOR_ROOT` instead of the long-lived local `.openclaw`
+   directory
+2. keep `scripts/openclawcode-setup-check.sh --strict` green for that copied
+   root while removing any remaining hidden-state assumptions
 3. trigger one low-risk end-to-end issue run from the fresh environment and
    confirm it reaches draft PR publication plus verifier completion
 4. replenish the validation issue pool whenever it drops below one

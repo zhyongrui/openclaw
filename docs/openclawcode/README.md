@@ -60,6 +60,15 @@ loop with:
 - a repeatable operator setup runbook plus a repo-local setup verification
   script for gateway, webhook, binding, tunnel health, and required GitHub
   webhook event subscriptions
+- operator setup scripts that can now derive:
+  - `openclawcode.env`
+  - `openclaw.json`
+  - `plugins/openclawcode/chatops-state.json`
+    from a single `OPENCLAWCODE_OPERATOR_ROOT` override instead of requiring
+    three independent file-path overrides
+- a strict copied-root operator proof that now passes
+  `scripts/openclawcode-setup-check.sh --strict` when the fresh root keeps its
+  webhook repo and hook metadata in `openclawcode.env`
 - a refreshed `main` baseline promoted from `sync/upstream-2026-03-11`, pushed
   to `origin/main`, and restarted under the local live gateway
 - real end-to-end validation against this repository, including a webhook-driven

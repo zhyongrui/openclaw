@@ -11,7 +11,10 @@ readonly DEFAULT_GITHUB_REPO="zhyongrui/openclawcode"
 readonly DEFAULT_GITHUB_HOOK_ID="600049842"
 readonly DEFAULT_GITHUB_HOOK_EVENTS="issues,pull_request,pull_request_review"
 readonly DEFAULT_CLOUDFLARED_BIN="cloudflared"
-readonly DEFAULT_ENV_FILE="${HOME}/.openclaw/openclawcode.env"
+readonly DEFAULT_OPERATOR_ROOT="${OPENCLAW_STATE_DIR:-${HOME}/.openclaw}"
+
+OPERATOR_ROOT="${OPENCLAWCODE_TUNNEL_OPERATOR_ROOT:-${OPENCLAWCODE_OPERATOR_ROOT:-$DEFAULT_OPERATOR_ROOT}}"
+readonly DEFAULT_ENV_FILE="${OPERATOR_ROOT}/openclawcode.env"
 
 ENV_FILE="${OPENCLAWCODE_WEBHOOK_ENV_FILE:-$DEFAULT_ENV_FILE}"
 
@@ -54,6 +57,8 @@ Environment:
   OPENCLAWCODE_GITHUB_REPO          GitHub repo slug. Default: ${DEFAULT_GITHUB_REPO}
   OPENCLAWCODE_GITHUB_HOOK_ID       GitHub webhook id. Default: ${DEFAULT_GITHUB_HOOK_ID}
   OPENCLAWCODE_GITHUB_HOOK_EVENTS   Comma-separated webhook events to keep in sync.
+  OPENCLAWCODE_TUNNEL_OPERATOR_ROOT Operator state root containing openclawcode.env.
+  OPENCLAWCODE_OPERATOR_ROOT        Shared operator state root override.
   OPENCLAWCODE_WEBHOOK_ENV_FILE     Env file to source before syncing. Default: ${DEFAULT_ENV_FILE}
 EOF
 }

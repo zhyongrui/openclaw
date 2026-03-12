@@ -41,12 +41,27 @@ dist/index.js
 
 ## 2. Create The Operator Env File
 
-Create `~/.openclaw/openclawcode.env` with the GitHub token and webhook secret
-used by both the gateway and the tunnel helper:
+Optional fresh-operator mode:
+
+```bash
+export OPENCLAWCODE_OPERATOR_ROOT=/tmp/openclawcode-fresh/.openclaw
+mkdir -p "$OPENCLAWCODE_OPERATOR_ROOT"
+```
+
+When `OPENCLAWCODE_OPERATOR_ROOT` is set, the local operator scripts derive
+their default file paths from that root instead of `~/.openclaw`. That is the
+recommended way to prove a fresh operator environment without mutating the
+long-lived local state directory.
+
+Create `${OPENCLAWCODE_OPERATOR_ROOT:-~/.openclaw}/openclawcode.env` with the
+GitHub token and webhook secret used by both the gateway and the tunnel helper:
 
 ```bash
 GH_TOKEN=<github-token>
 OPENCLAWCODE_GITHUB_WEBHOOK_SECRET=<shared-webhook-secret>
+OPENCLAWCODE_GITHUB_REPO=<owner>/<repo>
+OPENCLAWCODE_GITHUB_HOOK_ID=<existing-webhook-id>
+OPENCLAWCODE_GITHUB_HOOK_EVENTS=issues,pull_request,pull_request_review
 ```
 
 Notes:
@@ -55,10 +70,14 @@ Notes:
 - `scripts/openclawcode-setup-check.sh` accepts either `GH_TOKEN` or `GITHUB_TOKEN`
   for health checks, but keeping one canonical env file is simpler.
 - The webhook secret must match the GitHub repo webhook configuration exactly.
+- keeping repo and hook metadata in the same env file lets
+  `openclawcode-setup-check.sh --strict` verify a copied fresh operator root
+  without relying on extra shell exports
 
 ## 3. Enable The Bundled Plugin
 
-Add or update the bundled plugin entry in `~/.openclaw/openclaw.json`:
+Add or update the bundled plugin entry in
+`${OPENCLAWCODE_OPERATOR_ROOT:-~/.openclaw}/openclaw.json`:
 
 ```json5
 {
@@ -142,9 +161,10 @@ Useful follow-up commands:
 - `/occode-inbox` shows pending approvals, queue state, and recent lifecycle activity
 - `/occode-status <owner>/<repo>#<issue>` shows the latest tracked status for one issue
 
-Do not hand-edit `~/.openclaw/plugins/openclawcode/chatops-state.json` unless you
-are repairing corruption. Normal routing changes should go through `/occode-bind`
-and `/occode-unbind`.
+Do not hand-edit
+`${OPENCLAWCODE_OPERATOR_ROOT:-~/.openclaw}/plugins/openclawcode/chatops-state.json`
+unless you are repairing corruption. Normal routing changes should go through
+`/occode-bind` and `/occode-unbind`.
 
 ## 6. Create Or Reuse The GitHub Repo Webhook
 
@@ -160,12 +180,12 @@ Create one repository webhook in GitHub with:
 The current tunnel helper rewrites an existing webhook URL.
 It does not create the webhook for you, so keep the numeric webhook id available.
 
-Recommended env overrides when using the helper:
+Recommended persistent env-file values when using the helper:
 
 ```bash
-export OPENCLAWCODE_GITHUB_REPO=<owner>/<repo>
-export OPENCLAWCODE_GITHUB_HOOK_ID=<existing-webhook-id>
-export OPENCLAWCODE_GITHUB_HOOK_EVENTS=issues,pull_request,pull_request_review
+OPENCLAWCODE_GITHUB_REPO=<owner>/<repo>
+OPENCLAWCODE_GITHUB_HOOK_ID=<existing-webhook-id>
+OPENCLAWCODE_GITHUB_HOOK_EVENTS=issues,pull_request,pull_request_review
 ```
 
 ## 7. Start Temporary Public Ingress
@@ -220,6 +240,15 @@ Useful flags:
 Use `--strict` when you want warnings to fail the check.
 Use `--skip-route-probe` only during partial setup work when the local route is
 intentionally unavailable.
+
+Fresh-root note:
+
+- `openclawcode-setup-check.sh` derives
+  `openclawcode.env`, `openclaw.json`, and
+  `plugins/openclawcode/chatops-state.json` from `OPENCLAWCODE_OPERATOR_ROOT`
+  unless you explicitly override the individual file paths
+- `openclawcode-webhook-tunnel.sh` also derives its default env file from the
+  same root, so one exported variable is enough for both scripts
 
 ## 9. First Live Validation
 
