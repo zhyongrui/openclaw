@@ -67,9 +67,9 @@ Remaining work:
 
 Immediate queue:
 
-- `#80` `testResultCount`
 - `#81` `noteCount`
-- follow with `changedFileCount`
+- `#82` `changedFileCount`
+- follow with the next non-duplicative JSON contract gap or a Node-floor setup gate
 
 ### Track 2: Chat-Native Intake
 
@@ -186,4 +186,4 @@ As of this revision:
 - active feature branch:
   - `sync/upstream-2026-03-12-refresh`
 - next command-layer slice after the current one:
-  - `#81` `noteCount`
+  - `#82` `changedFileCount`

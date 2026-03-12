@@ -196,6 +196,7 @@ turning the working loop into a cleanly operable product:
   - command-layer issue `#79`
   - command-layer issue `#80`
   - command-layer issue `#81`
+  - command-layer issue `#82`
   - docs/operator issue `#60`
 - duplicate seeding attempts now reuse an existing open issue with the same
   template and title instead of creating a fresh duplicate
@@ -222,6 +223,7 @@ turning the working loop into a cleanly operable product:
   - issue `#79` for `testCommandCount`
   - issue `#80` for `testResultCount`
   - issue `#81` for `noteCount`
+  - issue `#82` for `changedFileCount`
   - docs/operator issue `#60`
 - a fresh explicit chat-intake live proof is now complete through issue `#70`:
   - `/occode-intake` created the GitHub issue and queued it from chat-facing
@@ -1205,8 +1207,8 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. implement command-layer issue `#81` on
-   `sync/upstream-2026-03-12-refresh` by exposing `noteCount` in
+1. implement command-layer issue `#82` on
+   `sync/upstream-2026-03-12-refresh` by exposing `changedFileCount` in
    `openclaw code run --json`
 2. reseed the next command-layer validation issue immediately after that slice
    so the pool stays above one open low-risk command issue

@@ -138,6 +138,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.scopeBlockedFileCount).toBe(0);
     expect(payload.testCommandCount).toBe(1);
     expect(payload.testResultCount).toBe(1);
+    expect(payload.noteCount).toBe(1);
     expect(payload.buildResult.issueClassification).toBe(payload.issueClassification);
     expect(payload.buildResult.scopeCheck).toEqual(payload.scopeCheck);
     expect(payload.suitabilityDecision).toBe("auto-run");
@@ -223,6 +224,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.scopeBlockedFileCount).toBeNull();
     expect(payload.testCommandCount).toBeNull();
     expect(payload.testResultCount).toBeNull();
+    expect(payload.noteCount).toBeNull();
     expect(payload.suitabilityDecision).toBe("auto-run");
     expect(payload.suitabilitySummary).toBe(
       "Suitability accepted for autonomous execution. Issue stays within command-layer scope.",
@@ -1006,7 +1008,7 @@ function createRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
       },
       testCommands: ["vitest run"],
       testResults: ["passed"],
-      notes: [],
+      notes: ["Builder left one note for the operator."],
     },
     suitability: {
       decision: "auto-run",
