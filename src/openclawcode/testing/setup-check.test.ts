@@ -117,7 +117,7 @@ describeWithShell("openclawcode-setup-check.sh", () => {
       }),
     );
     tempRoots.clear();
-  });
+  }, 30_000);
 
   it("passes against a reachable gateway with a signed webhook probe", async () => {
     const rootDir = await createTempDir();

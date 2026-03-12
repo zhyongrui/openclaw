@@ -257,13 +257,12 @@ function buildPinnedMutationPlan(params: {
   return {
     checks: params.checks,
     recheckBeforeCommand: true,
+    // Feed the helper source over fd 3 so stdin stays available for write payload bytes.
     script: [
       "set -eu",
-      "PYTHON_CODE=$(cat <<'PY'",
+      "python3 /dev/fd/3 \"$@\" 3<<'PY'",
       SANDBOX_PINNED_MUTATION_PYTHON,
       "PY",
-      ")",
-      'python3 -c "$PYTHON_CODE" "$@"',
     ].join("\n"),
     args: params.args,
   };
