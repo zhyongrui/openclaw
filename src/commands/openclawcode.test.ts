@@ -629,6 +629,16 @@ describe("openclawCodeRunCommand", () => {
   it("prints historyEntryCount when history is present", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
+        stageRecords: [
+          {
+            stage: "planning",
+            recordedAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            stage: "building",
+            recordedAt: "2026-01-01T00:01:00.000Z",
+          },
+        ],
         history: [
           "Draft PR opened: https://github.com/openclaw/openclaw/pull/42",
           "Verification approved for human review",
@@ -639,12 +649,14 @@ describe("openclawCodeRunCommand", () => {
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.stageRecordCount).toBe(2);
     expect(payload.historyEntryCount).toBe(2);
   });
 
-  it("prints historyEntryCount as null when history is missing", async () => {
+  it("prints historyEntryCount and stageRecordCount as null when metadata is missing", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
+        stageRecords: undefined,
         history: undefined,
       }),
     );
@@ -652,6 +664,7 @@ describe("openclawCodeRunCommand", () => {
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.stageRecordCount).toBeNull();
     expect(payload.historyEntryCount).toBeNull();
   });
 
