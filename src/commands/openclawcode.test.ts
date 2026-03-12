@@ -168,6 +168,7 @@ describe("openclawCodeRunCommand", () => {
       "Verification completed and the run is ready for human review.",
     );
     expect(payload.verificationHasFindings).toBe(false);
+    expect(payload.verificationHasMissingCoverage).toBe(false);
     expect(payload.verificationHasFollowUps).toBe(false);
     expect(payload.verificationFindingCount).toBe(0);
     expect(payload.verificationMissingCoverageCount).toBe(0);
@@ -225,6 +226,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.verificationApprovedForHumanReview).toBeNull();
     expect(payload.verificationSummary).toBeNull();
     expect(payload.verificationHasFindings).toBe(false);
+    expect(payload.verificationHasMissingCoverage).toBe(false);
     expect(payload.verificationHasFollowUps).toBe(false);
     expect(payload.verificationFindingCount).toBeNull();
     expect(payload.verificationMissingCoverageCount).toBeNull();
@@ -255,6 +257,26 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.verificationFollowUpCount).toBe(1);
     expect(payload.verificationReport.followUps).toEqual([
       "Add a regression test for the JSON follow-up flag.",
+    ]);
+  });
+
+  it("reports verificationHasMissingCoverage when verifier coverage gaps exist", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        verificationReport: {
+          ...createRun().verificationReport!,
+          missingCoverage: ["Add a regression test for missing coverage output."],
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.verificationHasMissingCoverage).toBe(true);
+    expect(payload.verificationMissingCoverageCount).toBe(1);
+    expect(payload.verificationReport.missingCoverage).toEqual([
+      "Add a regression test for missing coverage output.",
     ]);
   });
 
@@ -549,6 +571,8 @@ describe("openclawCodeRunCommand", () => {
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.verificationApprovedForHumanReview).toBe(false);
     expect(payload.verificationHasFindings).toBe(true);
+    expect(payload.verificationHasMissingCoverage).toBe(true);
+    expect(payload.verificationHasFollowUps).toBe(true);
     expect(payload.verificationFindingCount).toBe(2);
     expect(payload.verificationMissingCoverageCount).toBe(1);
     expect(payload.verificationFollowUpCount).toBe(2);
