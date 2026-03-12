@@ -1,6 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { WorkflowRun, WorkflowStage } from "../../openclawcode/contracts/index.js";
+import type {
+  SuitabilityDecision,
+  WorkflowRun,
+  WorkflowStage,
+} from "../../openclawcode/contracts/index.js";
 import type { OpenClawCodeChatopsRunRequest } from "./chatops.js";
 
 export interface OpenClawCodeQueuedRun {
@@ -38,6 +42,8 @@ export interface OpenClawCodeIssueStatusSnapshot {
   rerunRequestedAt?: string;
   rerunPriorRunId?: string;
   rerunPriorStage?: WorkflowStage;
+  suitabilityDecision?: SuitabilityDecision;
+  suitabilitySummary?: string;
   lastNotificationChannel?: string;
   lastNotificationTarget?: string;
   lastNotificationAt?: string;
@@ -142,6 +148,14 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
       typeof candidate.rerunPriorRunId === "string" ? candidate.rerunPriorRunId : undefined,
     rerunPriorStage:
       typeof candidate.rerunPriorStage === "string" ? candidate.rerunPriorStage : undefined,
+    suitabilityDecision:
+      candidate.suitabilityDecision === "auto-run" ||
+      candidate.suitabilityDecision === "needs-human-review" ||
+      candidate.suitabilityDecision === "escalate"
+        ? candidate.suitabilityDecision
+        : undefined,
+    suitabilitySummary:
+      typeof candidate.suitabilitySummary === "string" ? candidate.suitabilitySummary : undefined,
     lastNotificationChannel:
       typeof candidate.lastNotificationChannel === "string"
         ? candidate.lastNotificationChannel
@@ -243,6 +257,8 @@ function buildStatusSnapshot(params: {
     rerunRequestedAt: params.run.rerunContext?.requestedAt,
     rerunPriorRunId: params.run.rerunContext?.priorRunId,
     rerunPriorStage: params.run.rerunContext?.priorStage,
+    suitabilityDecision: params.run.suitability?.decision,
+    suitabilitySummary: params.run.suitability?.summary,
     lastNotificationChannel: params.notifyChannel,
     lastNotificationTarget: params.notifyTarget,
     lastNotificationAt: params.notifiedAt,

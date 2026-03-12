@@ -192,6 +192,19 @@ function buildNotificationLedgerLines(snapshot: OpenClawCodeIssueStatusSnapshot)
   return error ? [line, `  notify-error: ${error}`] : [line];
 }
 
+function buildSuitabilityLedgerLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
+  if (!snapshot.suitabilityDecision && !snapshot.suitabilitySummary) {
+    return [];
+  }
+  const line = `  suitability: ${[
+    snapshot.suitabilityDecision ?? "unknown",
+    trimToSingleLine(snapshot.suitabilitySummary),
+  ]
+    .filter(Boolean)
+    .join(" | ")}`;
+  return [line];
+}
+
 function buildPrecheckedEscalationStatus(params: {
   issue: { owner: string; repo: string; number: number };
   summary: string;
@@ -201,6 +214,7 @@ function buildPrecheckedEscalationStatus(params: {
     `openclawcode status for ${issueKey}`,
     "Stage: Escalated",
     `Summary: ${params.summary}`,
+    "Suitability: escalate",
   ].join("\n");
 }
 
@@ -313,6 +327,7 @@ function buildInboxMessage(params: {
             .join("; ")}`,
         );
       }
+      lines.push(...buildSuitabilityLedgerLines(entry));
       lines.push(
         ...buildRerunLedgerLines({
           priorRunId: entry.rerunPriorRunId,
@@ -632,6 +647,8 @@ async function handleIssueWebhookEvent(params: {
       issueNumber: decision.issue.number,
       notifyChannel: destination.channel,
       notifyTarget: destination.target,
+      suitabilityDecision: decision.precheck.decision,
+      suitabilitySummary: decision.precheck.summary,
     });
     if (!accepted) {
       return await params.respondJson({

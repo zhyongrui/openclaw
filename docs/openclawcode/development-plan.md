@@ -138,9 +138,10 @@ turning the working loop into a cleanly operable product:
   preparation and can escalate high-risk issues before any branch mutation
 - webhook and chat intake now honor an explicit high-risk precheck before
   approval or auto-queue
-- the next engineering priority is now surfacing suitability decisions through
-  operator ledger or status views, plus validation-pool upkeep and policy-doc
-  cleanup
+- operator-facing status and inbox views now surface suitability decisions and
+  summaries
+- the next engineering priority is now promotion back to the long-lived `main`
+  operator baseline, plus validation-pool upkeep and policy-doc cleanup
 - packaging and installation are now documented locally, but still need more
   proof under a fresh operator environment
 - policy docs lag the implemented guarded auto-merge behavior and need to be
@@ -229,9 +230,10 @@ Status:
   `zhyongrui-openclawcode-53-1773298188208`
 - webhook and chat intake now precheck obvious high-risk issues into
   `precheck-escalated` snapshots instead of `pendingApprovals` or `queue`
-- the remaining gap is surfacing those suitability decisions more clearly in
-  operator ledger and status views, and re-validating them on the long-lived
-  main operator after promotion
+- operator-facing status and inbox views now expose suitability decisions and
+  summaries for both workflow runs and webhook prechecks
+- the remaining gap is re-validating the same behavior on the long-lived main
+  operator after promotion
 
 Goal:
 
@@ -354,6 +356,9 @@ The current repository state already supports:
   - accepted delivery reason `precheck-escalated`
   - an `escalated` snapshot with run id `intake-precheck-9053`
   - no `pendingApprovals` entry and no queued run
+- operator-facing suitability surfaces that now:
+  - include suitability decision and summary in run status messages
+  - include a `suitability:` ledger line in `/occode-inbox` recent activity
 - runner-level tool hardening that originally removed `edit` and `write` from
   live `openclawcode` agent sessions while the sandbox edit bridge was being
   repaired
@@ -580,8 +585,8 @@ Objective:
 
 Priority backlog:
 
-1. surface suitability decision and reasons in `/occode-inbox`, status output,
-   and chat notifications
+1. promote the validated suitability behavior back to the long-lived `main`
+   operator baseline and re-run both the safe and high-risk live proofs there
 2. keep the webhook/chat intake routing aligned with the workflow-level
    suitability gate as heuristics evolve
 3. keep a small pool of low-risk validation issues ready so real failures can
@@ -591,7 +596,7 @@ Priority backlog:
    not stall on missing repository traffic
 5. turn every live failure into either a regression test, a workflow rule, or
    an operator runbook update
-6. after the operator-surface update, run one low-risk merged proof and one
+6. after the promotion back to `main`, run one low-risk merged proof and one
    high-risk escalated proof through the long-lived live operator path
 
 Validation rule:
@@ -603,8 +608,8 @@ Validation rule:
 
 The next concrete issue order should be:
 
-1. show suitability decisions and reasons in the operator ledger and status
-   surfaces so humans can see why a run was gated
+1. promote the suitability changes back to the long-lived `main` operator
+   baseline
 2. keep webhook/chat intake prechecks aligned with the workflow-level
    suitability rules as they expand
 3. prove the new routing with:
@@ -619,7 +624,7 @@ The next concrete issue order should be:
 
 This order is deliberate:
 
-- first surface the already-routed suitability decisions clearly to operators
+- first switch the long-lived operator to the now-validated suitability branch
 - then prove both the safe merged path and the high-risk escalated path on the
   long-lived live route
 - then lock the docs to the actually validated operating model

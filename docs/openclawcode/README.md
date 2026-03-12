@@ -88,6 +88,9 @@ loop with:
 - a copied-root webhook precheck proof for synthetic issue `#9053`, which now:
   - returns `reason: "precheck-escalated"`
   - writes an `escalated` snapshot instead of `pendingApprovals` or `queue`
+- suitability is now visible in operator-facing surfaces too:
+  - run status messages include suitability decision and summary
+  - `/occode-inbox` recent ledger entries include a `suitability:` line
 - real live lifecycle replay against `PR #37`, covering:
   - `pull_request_review` changes requested
   - `pull_request_review` approved
@@ -197,7 +200,8 @@ loop with:
 
 Still pending for a fuller product loop:
 
-- richer operator surfaces for suitability decisions and reasons in inbox/status
+- promotion of the new suitability behavior back to the long-lived `main`
+  operator baseline
 - keeping a renewable pool of low-risk validation issues ready for future live
   proofs
 - broader policy-doc polish

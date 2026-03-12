@@ -625,6 +625,14 @@ export function buildRunStatusMessage(run: WorkflowRun): string {
     `Summary: ${resolveRunSummary(run)}`,
   ];
 
+  if (run.suitability?.decision) {
+    lines.push(`Suitability: ${run.suitability.decision}`);
+  }
+
+  if (run.suitability?.summary) {
+    lines.push(`Suitability summary: ${run.suitability.summary}`);
+  }
+
   if (run.draftPullRequest?.url) {
     lines.push(`PR: ${run.draftPullRequest.url}`);
   }

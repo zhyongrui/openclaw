@@ -79,6 +79,19 @@ function createRun(): WorkflowRun {
       missingCoverage: [],
       followUps: [],
     },
+    suitability: {
+      decision: "auto-run",
+      summary:
+        "Suitability accepted for autonomous execution. Issue stays within command-layer scope.",
+      reasons: [
+        "Issue stays within command-layer scope.",
+        "Planner risk level is medium.",
+        "No high-risk issue signals were detected in the issue text or labels.",
+      ],
+      classification: "command-layer",
+      riskLevel: "medium",
+      evaluatedAt: "2026-03-10T06:12:00.000Z",
+    },
   };
 }
 
@@ -320,6 +333,10 @@ describe("openclaw plugin integration helpers", () => {
 
     expect(message).toContain("zhyongrui/openclawcode#34");
     expect(message).toContain("Stage: Merged");
+    expect(message).toContain("Suitability: auto-run");
+    expect(message).toContain(
+      "Suitability summary: Suitability accepted for autonomous execution. Issue stays within command-layer scope.",
+    );
     expect(message).toContain("PR: https://github.com/zhyongrui/openclawcode/pull/35");
     expect(message).toContain("Verification: approve-for-human-review");
   });

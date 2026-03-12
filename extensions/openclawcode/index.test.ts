@@ -443,9 +443,13 @@ describe("openclawcode extension", () => {
         issueNumber: 2053,
         notifyChannel: "telegram",
         notifyTarget: "chat:primary",
+        suitabilityDecision: "escalate",
       });
       expect(snapshot.statusByIssue["zhyongrui/openclawcode#2053"]).toContain(
         "Webhook intake precheck escalated the issue before chat approval",
+      );
+      expect(snapshot.statusByIssue["zhyongrui/openclawcode#2053"]).toContain(
+        "Suitability: escalate",
       );
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
@@ -1637,6 +1641,9 @@ describe("openclawcode extension", () => {
         branchName: "openclawcode/issue-304",
         pullRequestNumber: 404,
         pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/404",
+        suitabilityDecision: "auto-run",
+        suitabilitySummary:
+          "Suitability accepted for autonomous execution. Issue stays within command-layer scope.",
         lastNotificationChannel: "telegram",
         lastNotificationTarget: "chat:merge-target",
         lastNotificationAt: "2026-03-11T03:01:00.000Z",
@@ -1656,6 +1663,9 @@ describe("openclawcode extension", () => {
         rerunRequestedAt: "2026-03-11T02:40:00.000Z",
         rerunPriorRunId: "run-300",
         rerunPriorStage: "changes-requested",
+        suitabilityDecision: "needs-human-review",
+        suitabilitySummary:
+          "Suitability recommends human review before autonomous execution. Issue is classified as mixed scope instead of command-layer.",
         lastNotificationChannel: "feishu",
         lastNotificationTarget: "user:review-chat",
         lastNotificationAt: "2026-03-11T02:59:00.000Z",
@@ -1703,9 +1713,11 @@ describe("openclawcode extension", () => {
           "Recent ledger: 2",
           "- zhyongrui/openclawcode#304 | Merged | final: merged | PR #404 | 2026-03-11T03:00:00.000Z",
           "  events: pull request merged @ 2026-03-11T03:00:30.000Z",
+          "  suitability: auto-run | Suitability accepted for autonomous execution. Issue stays within command-layer scope.",
           "  notify: sent | telegram:chat:merge-target | 2026-03-11T03:01:00.000Z",
           "- zhyongrui/openclawcode#305 | Ready For Human Review | final: awaiting human review | 2026-03-11T02:58:00.000Z",
           "  events: review approved @ 2026-03-11T02:58:30.000Z",
+          "  suitability: needs-human-review | Suitability recommends human review before autonomous execution. Issue is classified as mixed scope instead of command-layer.",
           "  rerun: run-300 | from Changes Requested | 2026-03-11T02:40:00.000Z",
           "  reason: Address GitHub review feedback",
           "  notify: sent | feishu:user:review-chat | 2026-03-11T02:59:00.000Z",
