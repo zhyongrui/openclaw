@@ -129,9 +129,11 @@ turning the working loop into a cleanly operable product:
   - `OpenClawAgentRunner` now keeps the default runtime tool deny focused on
     `write` while sandbox `edit` stays enabled by default after live proof on
     `sync/upstream-2026-03-12`
-- the next engineering priority is now a low-risk merged live proof with
-  `OPENCLAWCODE_ENABLE_FS_TOOLS=write`, followed by fresh-operator-environment
-  proof and policy-doc cleanup
+- the low-risk merged live proof under
+  `OPENCLAWCODE_ENABLE_FS_TOOLS=write` is now complete through issue `#48` and
+  `PR #49`
+- the next engineering priority is now fresh-operator-environment proof,
+  validation-pool upkeep, and policy-doc cleanup
 - packaging and installation are now documented locally, but still need more
   proof under a fresh operator environment
 - policy docs lag the implemented guarded auto-merge behavior and need to be
@@ -139,7 +141,7 @@ turning the working loop into a cleanly operable product:
 
 ## Next Iteration Plan
 
-As of 2026-03-11, the immediate next stage is no longer workflow bring-up. The
+As of 2026-03-12, the immediate next stage is no longer workflow bring-up. The
 next stage is turning the already-working loop into a repeatable delivery
 system that can keep shipping on the same branch that the live runner uses.
 
@@ -152,11 +154,13 @@ The short-term objective is:
 - make chat the normal operator entrypoint instead of a side-channel demo
 - keep `main` usable as the live validation base instead of letting the real
   runner drift behind the latest integration work
-- keep the now-proven merged-PR path stable on refreshed `main` while removing
-  temporary builder mitigations
-- keep the repaired sandbox edit path stable while shrinking the remaining
-  runner-level filesystem deny down to `write` only
+- keep the now-proven merged-PR path stable on refreshed integration branches
+  while proving fresh-operator reproducibility
+- keep the repaired sandbox edit and write paths stable without reintroducing
+  runtime-only mitigations
 - align the roadmap and setup docs with the behavior already proved in code
+- keep a renewable queue of low-risk validation issues available so the next
+  live proof does not stall on missing repository traffic
 
 ### Long-Range Program Update
 
@@ -164,6 +168,11 @@ The longer-range delivery program should now run in six rolling phases instead
 of only chasing the next single live fix.
 
 #### Phase 1: Stable Live Baseline
+
+Status:
+
+- complete as of 2026-03-12 via issue `#48`, run
+  `zhyongrui-openclawcode-48-1773286729110`, and merged `PR #49`
 
 Goal:
 
@@ -179,6 +188,10 @@ Exit criteria:
 - operator-visible status and chat output stay coherent for that merged path
 
 #### Phase 2: Fresh-Operator Reproducibility
+
+Status:
+
+- active next phase
 
 Goal:
 
@@ -268,7 +281,7 @@ The current repository state already supports:
   - scope-check status and blocked files
   - draft PR metadata and disposition
   - published PR and merged PR status
-  - verification decision, summary, and counts
+  - verification decision, summary, boolean findings flag, and counts
   - auto-merge policy eligibility and disposition
 - operator runbooks for local setup, repo binding, and temporary webhook ingress
 - a repo-local setup verification script for gateway, webhook, binding, tunnel
@@ -277,6 +290,15 @@ The current repository state already supports:
   - two failed reruns persisted cleanly as `failed` artifacts
   - recovery after runtime tool hardening
   - `PR #46` published, verified, auto-merged, and the issue closed
+- a fresh sync-branch merged live proof under
+  `OPENCLAWCODE_ENABLE_FS_TOOLS=write` for issue `#48`:
+  - the validation pool was empty, so a new low-risk command-layer issue was
+    seeded directly through the GitHub API
+  - run `zhyongrui-openclawcode-48-1773286729110` stayed scoped to
+    `src/commands/openclawcode.ts` and `src/commands/openclawcode.test.ts`
+  - `PR #49` published, verified, auto-merged, and issue `#48` closed
+  - the merged run added stable top-level JSON output
+    `verificationHasFindings`
 - runner-level tool hardening that originally removed `edit` and `write` from
   live `openclawcode` agent sessions while the sandbox edit bridge was being
   repaired
@@ -367,9 +389,9 @@ The sync-branch live rerun gap is now closed:
   builder summary explicitly recorded that it avoided sandbox package-manager,
   formatter, and full-test commands
 
-This means the next iteration can shift from sandbox directory-read cleanup to
-merged live proof under the expanded fs-tool surface, fresh-environment proof,
-and broader operator hardening.
+This means the next iteration can shift from expanded fs-tool rollout proof to
+fresh-environment setup proof, validation-pool upkeep, and broader operator
+hardening.
 
 ### Near-Term Delivery Streams
 
@@ -928,18 +950,16 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. rerun one low-risk merged issue under
-   `OPENCLAWCODE_ENABLE_FS_TOOLS=write` and confirm the run still reaches:
-   still reaches:
-   - draft PR publication
-   - verification approval
-   - automatic merge and issue closure when policy allows it
-2. verify chat notifications, snapshot updates, and `/occode-inbox` output for
-   the final merged disposition after the fs-tool rollout
-3. re-run the setup or runbook flow in a fresh operator environment after the
-   write rollout is stable
-4. update the dev log and status docs after each live proof
-5. commit each slice only after targeted validation passes
+1. stand up a fresh operator state root from the documented setup flow instead
+   of the long-lived local `.openclaw` directory
+2. run `scripts/openclawcode-setup-check.sh --strict` against that fresh
+   environment and close any remaining hidden-state assumptions
+3. trigger one low-risk end-to-end issue run from the fresh environment and
+   confirm it reaches draft PR publication plus verifier completion
+4. replenish the validation issue pool whenever it drops below one
+   command-layer issue and one docs/operator issue
+5. update the dev log and status docs after each live proof
+6. commit each slice only after targeted validation passes
 
 ## Test Strategy
 

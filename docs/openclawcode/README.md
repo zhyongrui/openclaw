@@ -22,7 +22,7 @@ Development logs live in `dev-log/`.
 
 ## Current Status
 
-As of 2026-03-11, the repository includes a working `openclawcode` issue-driven
+As of 2026-03-12, the repository includes a working `openclawcode` issue-driven
 loop with:
 
 - workflow state, persistence, and isolated worktree management
@@ -161,12 +161,20 @@ loop with:
   - recovery through the earlier runner-level `edit`/`write` deny mitigation
   - real PR publication to `PR #46`
   - automatic verification, merge, and issue closure on the live route
+- a fresh sync-branch merged live validation under
+  `OPENCLAWCODE_ENABLE_FS_TOOLS=write` through issue `#48`, including:
+  - direct GitHub API seeding of a new low-risk validation issue when the
+    command-layer validation pool was empty
+  - real PR publication to `PR #49`
+  - automatic verification, merge, and issue closure on the expanded fs-tool
+    surface
+  - stable top-level JSON output for downstream tooling via
+    `verificationHasFindings`
 
 Still pending for a fuller product loop:
 
-- a low-risk merged live proof with `OPENCLAWCODE_ENABLE_FS_TOOLS=write`, so
-  the expanded fs-tool surface is exercised on a full PR publication and merge
-  path instead of only a docs-only reviewable run
 - stronger suitability/risk gating ahead of autonomous execution
 - proof under a fresh operator environment using docs and scripts only
+- keeping a renewable pool of low-risk validation issues ready for future live
+  proofs
 - broader policy-doc polish
