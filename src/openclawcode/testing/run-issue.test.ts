@@ -299,6 +299,64 @@ describe("runIssueWorkflow", () => {
     }
   });
 
+  it("keeps the draft pull request base branch aligned with a non-main workflow base", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "sync/upstream-2026-03-12",
+        branchName: "openclawcode/issue-66-sync-upstream-2026-03-12",
+        worktreePath: "/repo/.openclawcode/worktrees/run-66",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const github = new FakeGitHubClient();
+      const publisher = new FakePublisher({
+        number: 111,
+        url: "https://github.com/zhyongrui/openclawcode/pull/111",
+      });
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 66,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "sync/upstream-2026-03-12",
+          openPullRequest: true,
+          mergeOnApprove: false,
+        },
+        {
+          github,
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder("mixed", ["docs/openclawcode/README.md"]),
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["docs/openclawcode/README.md"]),
+          shellRunner: new NoopShellRunner(),
+          publisher,
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.stage).toBe("ready-for-human-review");
+      expect(run.draftPullRequest?.baseBranch).toBe("sync/upstream-2026-03-12");
+
+      const savedRun = JSON.parse(
+        await fs.readFile(path.join(stateDir, "runs", `${run.id}.json`), "utf8"),
+      ) as typeof run;
+      expect(savedRun.draftPullRequest?.baseBranch).toBe("sync/upstream-2026-03-12");
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("keeps merged runs usable when issue close fails after auto-merge", async () => {
     const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
 

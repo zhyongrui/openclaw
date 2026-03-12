@@ -98,7 +98,7 @@ function createPullRequestDraft(run: WorkflowRun, result: BuildResult): PullRequ
       buildResult: result,
     }),
     branchName: result.branchName,
-    baseBranch: "main",
+    baseBranch: run.workspace?.baseBranch ?? "main",
   };
 }
 
