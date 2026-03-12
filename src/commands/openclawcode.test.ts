@@ -317,6 +317,28 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.mergedPullRequestMergedAt).toBeNull();
   });
 
+  it("keeps published pull request number null when publication only records a url", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        draftPullRequest: {
+          ...createRun().draftPullRequest!,
+          number: undefined,
+          url: "https://github.com/openclaw/openclaw/pull/42",
+        },
+        history: ["Pull request opened: https://github.com/openclaw/openclaw/pull/42"],
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.draftPullRequestNumber).toBeNull();
+    expect(payload.draftPullRequestUrl).toBe("https://github.com/openclaw/openclaw/pull/42");
+    expect(payload.pullRequestPublished).toBe(true);
+    expect(payload.publishedPullRequestNumber).toBeNull();
+    expect(payload.publishedPullRequestOpenedAt).toBe("2026-01-01T00:00:00.000Z");
+  });
+
   it("prints skipped draft pr disposition when publication is skipped for a no-op run", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
