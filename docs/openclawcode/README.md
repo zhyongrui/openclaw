@@ -88,6 +88,13 @@ loop with:
   - `/occode-status` now appends the same pause window, failure count, and
     pause reason so a queued or failed issue can be interpreted without
     switching back to the inbox
+- provider-failure context now persists on the affected issue snapshot even
+  after the active global pause clears:
+  - `/occode-status` and `/occode-inbox` keep the last transient failure time,
+    failure count, and provider-pause reason on failed issues
+  - those surfaces now distinguish `active pause until ...` from
+    `pause cleared after ...`, which makes it clear whether the provider has
+    recovered or the run is still blocked behind an active pause window
 - local-run reconciliation that can recover tracked PR linkage from older run
   artifacts when a newer rerun artifact omits draft PR metadata
 - merge-based reusable worktree refresh that:
@@ -118,7 +125,7 @@ loop with:
   a real Feishu-driven control plane for `zhyongrui/openclawcode`:
   - repo notifications and commands are bound to one real Feishu conversation
   - `./scripts/openclawcode-setup-check.sh --strict` passes there with
-    `15 pass`, `0 warn`, and `0 fail`
+    `17 pass`, `0 warn`, and `0 fail`
   - after code changes, restarting the long-lived gateway is required before
     trusting chat-visible behavior updates
 - a refreshed `main` baseline promoted from `sync/upstream-2026-03-11`, pushed

@@ -204,6 +204,11 @@ describe("OpenClawCodeChatopsStore", () => {
         failureCount: 2,
         lastFailureAt: "2026-03-12T12:05:00.000Z",
       });
+      expect(paused.statusSnapshotsByIssue["zhyongrui/openclawcode#1202"]).toMatchObject({
+        providerFailureCount: 2,
+        lastProviderFailureAt: "2026-03-12T12:05:00.000Z",
+        providerPauseUntil: "2026-03-12T12:15:00.000Z",
+      });
       expect(await fixture.store.getActiveProviderPause("2026-03-12T12:06:00.000Z")).toMatchObject({
         failureCount: 2,
       });
@@ -224,6 +229,11 @@ describe("OpenClawCodeChatopsStore", () => {
       const recovered = await fixture.store.snapshot();
       expect(recovered.recentProviderFailures).toEqual([]);
       expect(recovered.providerPause).toBeUndefined();
+      expect(recovered.statusSnapshotsByIssue["zhyongrui/openclawcode#1202"]).toMatchObject({
+        providerFailureCount: 2,
+        lastProviderFailureAt: "2026-03-12T12:05:00.000Z",
+        providerPauseUntil: "2026-03-12T12:15:00.000Z",
+      });
     } finally {
       await fs.rm(fixture.rootDir, { recursive: true, force: true });
     }

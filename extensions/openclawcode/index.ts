@@ -259,6 +259,49 @@ function appendProviderPauseText(params: {
   return [params.text, ...pauseLines].join("\n");
 }
 
+function buildProviderFailureContextLines(params: {
+  snapshot: OpenClawCodeIssueStatusSnapshot;
+  now?: string;
+  topLevel?: boolean;
+}): string[] {
+  if (
+    !params.snapshot.lastProviderFailureAt &&
+    !params.snapshot.providerFailureCount &&
+    !params.snapshot.providerPauseUntil
+  ) {
+    return [];
+  }
+
+  const now = params.now ?? new Date().toISOString();
+  const summaryParts: string[] = [];
+  if (params.snapshot.providerPauseUntil) {
+    summaryParts.push(
+      params.snapshot.providerPauseUntil > now
+        ? `active pause until ${params.snapshot.providerPauseUntil}`
+        : `pause cleared after ${params.snapshot.providerPauseUntil}`,
+    );
+  }
+  if (params.snapshot.lastProviderFailureAt) {
+    summaryParts.push(`last transient failure at ${params.snapshot.lastProviderFailureAt}`);
+  }
+  if (summaryParts.length === 0) {
+    return [];
+  }
+
+  const contextLabel = params.topLevel ? "Provider failure context" : "  provider";
+  const reasonLabel = params.topLevel ? "Provider failure reason" : "  provider-reason";
+  const line = `${contextLabel}: ${[
+    ...summaryParts,
+    params.snapshot.providerFailureCount
+      ? `failures: ${params.snapshot.providerFailureCount}`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(" | ")}`;
+  const reason = trimToSingleLine(params.snapshot.providerPauseReason);
+  return reason ? [line, `${reasonLabel}: ${reason}`] : [line];
+}
+
 async function appendValidationIssueStatusContext(params: {
   text: string;
   issue: { owner: string; repo: string; number: number };
@@ -678,6 +721,7 @@ function buildInboxMessage(params: {
           reason: entry.rerunReason,
         }),
       );
+      lines.push(...buildProviderFailureContextLines({ snapshot: entry }));
       lines.push(...buildNotificationLedgerLines(entry));
     }
   } else {
@@ -1990,11 +2034,11 @@ export default {
           };
         }
         let statusText: string | undefined;
+        let currentSnapshot = await store.getStatusSnapshot(issueKey);
         if (await store.isPendingApproval(issueKey)) {
           statusText =
             (await store.getStatus(issueKey)) ?? `Awaiting chat approval for ${issueKey}.`;
         } else {
-          const currentSnapshot = await store.getStatusSnapshot(issueKey);
           if (currentSnapshot) {
             try {
               const synced = await syncIssueSnapshotFromGitHub({
@@ -2002,6 +2046,7 @@ export default {
               });
               if (synced.changed) {
                 await store.setStatusSnapshot(synced.snapshot);
+                currentSnapshot = synced.snapshot;
                 statusText = synced.snapshot.status;
               }
             } catch {
@@ -2026,15 +2071,24 @@ export default {
         const resolvedStatusText =
           statusText ?? `No openclawcode status recorded yet for ${issueKey}.`;
         const providerPause = await store.getActiveProviderPause();
+        const providerLines = providerPause
+          ? buildProviderPauseLines({ pause: providerPause })
+          : currentSnapshot
+            ? buildProviderFailureContextLines({
+                snapshot: currentSnapshot,
+                topLevel: true,
+              })
+            : [];
+        const resolvedWithProvider =
+          providerLines.length > 0
+            ? [resolvedStatusText, ...providerLines].join("\n")
+            : resolvedStatusText;
         return {
           text:
             (await appendValidationIssueStatusContext({
-              text: appendProviderPauseText({
-                text: resolvedStatusText,
-                pause: providerPause,
-              }),
+              text: resolvedWithProvider,
               issue: command.issue,
-            }).catch(() => resolvedStatusText)) ?? resolvedStatusText,
+            }).catch(() => resolvedWithProvider)) ?? resolvedWithProvider,
         };
       },
     });

@@ -44,6 +44,10 @@ export interface OpenClawCodeIssueStatusSnapshot {
   rerunPriorStage?: WorkflowStage;
   suitabilityDecision?: SuitabilityDecision;
   suitabilitySummary?: string;
+  providerFailureCount?: number;
+  lastProviderFailureAt?: string;
+  providerPauseUntil?: string;
+  providerPauseReason?: string;
   lastNotificationChannel?: string;
   lastNotificationTarget?: string;
   lastNotificationAt?: string;
@@ -178,6 +182,18 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
         : undefined,
     suitabilitySummary:
       typeof candidate.suitabilitySummary === "string" ? candidate.suitabilitySummary : undefined,
+    providerFailureCount:
+      typeof candidate.providerFailureCount === "number"
+        ? candidate.providerFailureCount
+        : undefined,
+    lastProviderFailureAt:
+      typeof candidate.lastProviderFailureAt === "string"
+        ? candidate.lastProviderFailureAt
+        : undefined,
+    providerPauseUntil:
+      typeof candidate.providerPauseUntil === "string" ? candidate.providerPauseUntil : undefined,
+    providerPauseReason:
+      typeof candidate.providerPauseReason === "string" ? candidate.providerPauseReason : undefined,
     lastNotificationChannel:
       typeof candidate.lastNotificationChannel === "string"
         ? candidate.lastNotificationChannel
@@ -372,6 +388,11 @@ function applyProviderFailureStateFromSnapshot(
   state: OpenClawCodeQueueState,
   snapshot: OpenClawCodeIssueStatusSnapshot,
 ): void {
+  snapshot.providerFailureCount = undefined;
+  snapshot.lastProviderFailureAt = undefined;
+  snapshot.providerPauseUntil = undefined;
+  snapshot.providerPauseReason = undefined;
+
   if (snapshot.stage !== "failed") {
     state.recentProviderFailures = [];
     state.providerPause = undefined;
@@ -395,7 +416,12 @@ function applyProviderFailureStateFromSnapshot(
     summary: snapshot.status,
   });
   state.recentProviderFailures = recent;
-  state.providerPause = buildProviderPause(recent);
+  const pause = buildProviderPause(recent);
+  state.providerPause = pause;
+  snapshot.providerFailureCount = recent.length;
+  snapshot.lastProviderFailureAt = snapshot.updatedAt;
+  snapshot.providerPauseUntil = pause?.until;
+  snapshot.providerPauseReason = pause?.reason;
 }
 
 function normalizeState(raw: unknown): OpenClawCodeQueueState {

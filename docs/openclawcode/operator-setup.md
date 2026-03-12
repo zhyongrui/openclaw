@@ -381,7 +381,7 @@ against `zhyongrui/openclawcode` with:
 - webhook route `/plugins/openclawcode/github`
 - strict health check passing with:
   - `./scripts/openclawcode-setup-check.sh --strict`
-  - `15 pass / 0 warn / 0 fail`
+  - `17 pass / 0 warn / 0 fail`
 
 Live operator proofs on that setup now include:
 
@@ -411,9 +411,12 @@ in the runbook instead of rediscovering them in chat:
 - when those provider failures repeat, use `/occode-rerun <owner>/<repo>#<issue>`
   after the pause window clears; the workflow now preserves a stage-specific
   failed artifact so reruns target the real failed run
-- `/occode-status` only shows provider-pause details while the pause is
-  actually active; once the pause clears, the same issue will fall back to its
-  normal failed or merged status summary
+- `/occode-status` and `/occode-inbox` now keep recent provider-failure
+  context on the affected issue even after the active pause clears:
+  - active windows render as `active pause until ...`
+  - recovered windows render as `pause cleared after ...`
+  - that distinction is useful during rerun decisions because it shows whether
+    the system is still paused or has already resumed queue drain
 - one-line `/occode-intake` is now the fastest safe smoke test for the bound
   Feishu path because it exercises:
   - chat command parsing

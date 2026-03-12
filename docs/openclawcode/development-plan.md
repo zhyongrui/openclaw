@@ -250,10 +250,10 @@ turning the working loop into a cleanly operable product:
 - that refreshed branch is now the active feature branch while `main` stays as
   the long-lived Feishu operator baseline until the next live proof promotion
 - upstream also raised the runtime floor to Node `>=22.16.0`:
-  - this workstation is still on `22.12.0`
-  - `pnpm build` and targeted tests still pass with warnings
-  - the built CLI entrypoint now refuses to start below that floor, so
-    promotion planning has to track a local Node upgrade alongside code work
+  - this workstation now runs local Node `22.16.0`
+  - the built CLI entrypoint refuses to start below that floor
+  - refreshed-branch promotion planning now needs to keep that floor green in
+    setup checks rather than treating it as a soft warning
 - issue `#71` exposed a workflow-fidelity bug after a one-line chat intake
   proof:
   - builder accepted agent `stopReason=error` output as a successful build
@@ -286,6 +286,14 @@ turning the working loop into a cleanly operable product:
     reason when work is queued behind a provider pause
   - `/occode-status` now appends the same pause context so queued or failed
     issues can be interpreted without first opening `/occode-inbox`
+- provider-failure context now persists per issue even after the active global
+  pause clears:
+  - `/occode-status` and `/occode-inbox` keep the last transient failure time,
+    failure count, and pause reason on the affected issue snapshot
+  - those surfaces now explicitly distinguish `active pause until ...` from
+    `pause cleared after ...`, which closes the earlier ambiguity where the
+    pause banner disappeared and operators had to guess whether context was
+    lost or the provider had recovered
 - policy docs are now in sync with the live-tested guarded auto-merge behavior
 - the next engineering priority is now consume-and-reseed workflow plus
   broader chat-native intake behavior
@@ -1211,25 +1219,21 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. run another real low-risk proof on `sync/upstream-2026-03-12-refresh` now
-   that the operator host satisfies the Node floor and queued work can kick the
-   runner immediately when the service is already active
-2. use the now-green `./scripts/openclawcode-setup-check.sh --strict` result as
-   the preflight gate before that proof
-3. prefer a seeded validation issue whose marker keeps the slice low-risk even
-   if the prose mentions runtime behavior; issue `#86` exposed that this needed
-   an explicit marker-aware scope short-circuit on the refreshed branch
-4. use the new provider-pause queue messaging to distinguish "queued behind a
-   pause" from "queue is stalled" during that live proof
-5. use refreshed-branch proof issue `#87` as the standing rerun target once
-   provider stability improves; the classification side of that proof is now
-   green, while the remaining failure is provider `HTTP 400`
-6. keep docs/operator issue `#60` open as the standing docs-side proof target
-   only until the copied-root teardown guidance is judged complete
-7. promote only after the refreshed branch can pass both strict setup checks
+1. extend `/occode-rerun` queue messaging so it can explain whether a rerun is
+   probing recovery after a cleared provider pause or still waiting behind an
+   active one
+2. run that change on `sync/upstream-2026-03-12-refresh` with focused chatops
+   tests, the full `vitest.openclawcode.config.mjs` suite, and `pnpm build`
+3. use the green `./scripts/openclawcode-setup-check.sh --strict` result as the
+   live preflight gate on the refreshed branch
+4. rerun proof issue `#87` once provider stability improves, or mint the next
+   equivalent low-risk validation issue if `#87` becomes noisy
+5. promote only after the refreshed branch can pass both strict setup checks
    and a real low-risk live proof on the target runtime
-8. after promotion, rerun the same strict check and one chat-visible proof on
+6. after promotion, rerun the same strict check and one chat-visible proof on
    `main`
+7. keep docs/operator issue `#60` open as the standing docs-side proof target
+   only until the copied-root teardown guidance is judged complete
 
 ## Test Strategy
 

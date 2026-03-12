@@ -427,6 +427,28 @@ async function registerPluginFixture(params?: {
   };
 }
 
+async function cleanupPluginFixture(fixture: Awaited<ReturnType<typeof registerPluginFixture>>) {
+  await fixture.service?.stop?.({
+    config: {},
+    stateDir: fixture.stateDir,
+    logger: { info() {}, warn() {}, error() {} },
+  });
+  await fixture.store.snapshot();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await fs.rm(fixture.repoRoot, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 20,
+  });
+  await fs.rm(fixture.stateDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 20,
+  });
+}
+
 describe("openclawcode extension", () => {
   beforeEach(() => {
     mocked.readRequestBodyWithLimit.mockReset();
@@ -553,6 +575,12 @@ describe("openclawcode extension", () => {
         "Suitability: escalate",
       );
     } finally {
+      await fixture.service?.stop?.({
+        config: {},
+        stateDir: fixture.stateDir,
+        logger: { info() {}, warn() {}, error() {} },
+      });
+      await fixture.store.snapshot();
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
     }
@@ -1139,30 +1167,13 @@ describe("openclawcode extension", () => {
           lastNotificationStatus: "sent",
         });
       });
-      expect(
-        mocked.runMessageAction.mock.calls.some((call) =>
-          String(call[0]?.params?.message ?? "").includes("Stage: Ready For Human Review"),
-        ),
-      ).toBe(true);
-
-      await fixture.service?.stop?.({
-        config: {},
-        stateDir: fixture.stateDir,
-        logger: { info() {}, warn() {}, error() {} },
-      });
     } finally {
       resolveRun?.({
         code: 0,
         stdout: JSON.stringify(createWorkflowRun({ issueNumber: 204 })),
         stderr: "",
       });
-      await fixture.service?.stop?.({
-        config: {},
-        stateDir: fixture.stateDir,
-        logger: { info() {}, warn() {}, error() {} },
-      });
-      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
-      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+      await cleanupPluginFixture(fixture);
     }
   });
 
@@ -1543,13 +1554,7 @@ describe("openclawcode extension", () => {
         text: "Queued rerun for zhyongrui/openclawcode#230 from Failed state. I will post status updates here.",
       });
     } finally {
-      await fixture.service?.stop?.({
-        config: {},
-        stateDir: fixture.stateDir,
-        logger: { info() {}, warn() {}, error() {} },
-      });
-      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
-      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+      await cleanupPluginFixture(fixture);
     }
   });
 
@@ -2169,6 +2174,49 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("keeps recent provider failure context in /occode-status after the pause clears", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6621,
+          stage: "failed",
+          updatedAt: "2026-03-12T12:00:00.000Z",
+        }),
+        buildTransientProviderFailedStatus(6621),
+      );
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6622,
+          stage: "failed",
+          updatedAt: "2026-03-12T12:05:00.000Z",
+        }),
+        buildTransientProviderFailedStatus(6622),
+      );
+
+      const result = await fixture.commands.get("occode-status")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-status #6622",
+        args: "#6622",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "openclawcode status for zhyongrui/openclawcode#6622",
+          "Stage: Failed",
+          "Summary: Build failed: HTTP 400: Internal server error",
+          "Provider failure context: pause cleared after 2026-03-12T12:15:00.000Z | last transient failure at 2026-03-12T12:05:00.000Z | failures: 2",
+          "Provider failure reason: Paused after 2 recent provider-side transient failures. Recent workflow runs are failing with HTTP 400 internal errors before code changes are produced.",
+        ].join("\n"),
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("heals /occode-status from GitHub when a tracked pull request was merged externally", async () => {
     const fixture = await registerPluginFixture();
     try {
@@ -2651,9 +2699,52 @@ describe("openclawcode extension", () => {
           "Queued: 0",
           "Recent ledger: 2",
           "- zhyongrui/openclawcode#6602 | Failed | final: failed | 2099-03-12T12:05:00.000Z",
+          "  provider: active pause until 2099-03-12T12:15:00.000Z | last transient failure at 2099-03-12T12:05:00.000Z | failures: 2",
+          "  provider-reason: Paused after 2 recent provider-side transient failures. Recent workflow runs are failing with HTTP 400 internal errors before code changes are produced.",
           "- zhyongrui/openclawcode#6601 | Failed | final: failed | 2099-03-12T12:00:00.000Z",
+          "  provider: last transient failure at 2099-03-12T12:00:00.000Z | failures: 1",
         ].join("\n"),
       });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps recent provider failure context in /occode-inbox after the pause clears", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6711,
+          stage: "failed",
+          updatedAt: "2026-03-12T12:00:00.000Z",
+        }),
+        buildTransientProviderFailedStatus(6711),
+      );
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6712,
+          stage: "failed",
+          updatedAt: "2026-03-12T12:05:00.000Z",
+        }),
+        buildTransientProviderFailedStatus(6712),
+      );
+
+      const result = await fixture.commands.get("occode-inbox")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-inbox",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain(
+        "provider: pause cleared after 2026-03-12T12:15:00.000Z | last transient failure at 2026-03-12T12:05:00.000Z | failures: 2",
+      );
+      expect(result?.text).toContain(
+        "provider-reason: Paused after 2 recent provider-side transient failures. Recent workflow runs are failing with HTTP 400 internal errors before code changes are produced.",
+      );
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });

@@ -21,6 +21,36 @@ Use it to answer three questions quickly:
 7. react to review, rerun, merge, and close events
 8. keep humans informed from the bound chat surface
 
+## Final User Story
+
+The finished product should support this loop without ad hoc operator repair:
+
+1. a teammate sends a chat-native request in Feishu
+2. the operator turns that request into a scoped GitHub issue draft
+3. the operator asks for clarification or blocks the request if it is risky
+4. once approved, the operator implements the change in an isolated worktree
+5. the operator runs bounded tests and verification
+6. the operator opens a PR, reacts to review, reruns when needed, and merges
+   only when policy allows
+7. the bound chat thread stays current with queue state, failures, reruns,
+   PR lifecycle, and final outcome
+
+## Program Completion Checklist
+
+The program is not done until all of these are true:
+
+1. chat-native intake can preview, edit, and create scoped issues safely
+2. low-risk issues can run from chat or GitHub issue intake without manual file
+   repair or state surgery
+3. provider failures are visible both while a pause is active and after the
+   pause clears
+4. rerun, review, and merge flows are first-class in chat surfaces
+5. operator install, promotion, rollback, and copied-root proofs are routine
+6. the JSON contract is documented and intentionally versioned
+7. the refreshed upstream branch can be promoted back to `main` with a live
+   proof and a rollback path
+8. the long-lived `main` operator baseline can be trusted as the real demo path
+
 ## Current Operating Baseline
 
 As of 2026-03-12:
@@ -46,9 +76,19 @@ As of 2026-03-12:
     validation issues needed a marker-aware scope short-circuit so
     `operator-doc-note` issues do not drift into `workflow-core` solely because
     their prose references queue or runtime behavior
-  - issue `#87` confirmed that the marker-aware scope fix works in a real
-    refreshed-branch run artifact; the remaining blocker on that proof is now
-    provider `HTTP 400` failure during build rather than suitability drift
+- issue `#87` confirmed that the marker-aware scope fix works in a real
+  refreshed-branch run artifact; the remaining blocker on that proof is now
+  provider `HTTP 400` failure during build rather than suitability drift
+- operator surfaces on the refreshed branch now preserve recent provider
+  failure history per issue, so `/occode-status` and `/occode-inbox` can still
+  explain a failed run after the active global provider pause has already
+  cleared
+- those same surfaces now distinguish:
+  - active pause
+  - pause cleared after <timestamp>
+  - last transient failure timestamp
+    so operators no longer have to infer whether pause state disappeared because
+    the system recovered or because status reconciliation dropped context
 
 ## Execution Loop
 
@@ -210,9 +250,10 @@ Goal:
 
 Remaining work:
 
-- better provider-pause history in operator surfaces
-- clearer pause-cleared signaling
-- explicit queue-start feedback during and after pause windows
+- provider-aware rerun summaries in chat surfaces
+- explicit queue-start or queue-resume feedback after a pause window clears
+- another real rerun proof on the refreshed branch once provider stability
+  allows it
 
 ### Track 5: Review And Rerun Loop
 
@@ -268,32 +309,30 @@ Remaining work:
 
 Preferred near-to-mid-term order:
 
-1. run one low-risk live proof on `sync/upstream-2026-03-12-refresh`
-2. confirm the refreshed branch's immediate queue-drain path and provider-pause
-   queue messaging under the real operator
-3. rerun the refreshed-branch low-risk proof after the marker-aware scope fix
-   for seeded validation issues
-4. rerun proof issue `#87` when provider stability improves, or mint the next
-   equivalent low-risk validation issue if `#87` becomes noisy
-5. promote the refreshed sync branch back to `main`
-6. restart the long-lived operator on promoted `main`
-7. rerun a low-risk Feishu proof on promoted `main`
-8. close or refresh the remaining docs/operator validation issue `#60`
-9. finish the current command-layer JSON count series if any non-duplicative
+1. rerun refreshed-branch proof issue `#87` once provider stability improves,
+   now using the persisted per-issue provider history as the operator baseline
+2. add provider-aware rerun summaries so queued reruns explain whether they are
+   probing recovery after a cleared pause or still waiting behind an active one
+3. run one more low-risk refreshed-branch live proof after that rerun-path
+   improvement lands
+4. promote the refreshed sync branch back to `main`
+5. restart the long-lived operator on promoted `main`
+6. rerun a low-risk Feishu proof on promoted `main`
+7. close or refresh the remaining docs/operator validation issue `#60`
+8. finish the current command-layer JSON count series if any non-duplicative
    fields remain
-10. write the first explicit JSON contract reference doc for `openclaw code run --json`
-11. add clearer provider-pause history to `/occode-status` and `/occode-inbox`
-12. add pause-cleared signaling so operators can see when queue draining resumes
-13. add preview and edit steps for chat-native issue drafts before creation
-14. add clarification loops for ambiguous chat-native requests
-15. add explicit operator overrides for suitability-gated work
-16. tighten auto-merge eligibility into a documented narrow policy
-17. add rollback instructions for failed refreshed-branch promotions
-18. record recurring upstream merge conflict hotspots in the sync policy docs
-19. run another real PR-review-rerun proof after the next promotion
-20. add richer rerun lineage and reason summaries to operator surfaces
-21. add another copied-root fresh-operator live proof after the next major sync
-22. keep seeding and consuming low-risk validation issues so the proof pool
+9. write the first explicit JSON contract reference doc for `openclaw code run --json`
+10. add preview and edit steps for chat-native issue drafts before creation
+11. add clarification loops for ambiguous chat-native requests
+12. add explicit operator overrides for suitability-gated work
+13. tighten auto-merge eligibility into a documented narrow policy
+14. add rollback instructions for failed refreshed-branch promotions
+15. record recurring upstream merge conflict hotspots in the sync policy docs
+16. run another real PR-review-rerun proof after the next promotion
+17. add richer rerun lineage and reason summaries to operator surfaces
+18. add another copied-root fresh-operator live proof after the next major sync
+19. add a chat-native "request -> issue draft preview -> approve -> run" proof
+20. keep seeding and consuming low-risk validation issues so the proof pool
     never goes empty
 
 ## Session Handoff
@@ -310,5 +349,6 @@ As of this revision:
 - active feature branch:
   - `sync/upstream-2026-03-12-refresh`
 - next planned slice after the current one:
-  - provider-resilience follow-up on top of refreshed-branch proof issue `#87`,
-    then rerun that proof once the build path is not blocked by provider `400`
+  - provider-aware rerun summaries on top of the new per-issue provider
+    history, then rerun proof issue `#87` once the build path is not blocked by
+    provider `400`
