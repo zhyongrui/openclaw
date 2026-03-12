@@ -109,10 +109,12 @@ loop with:
     a duplicate
   - current live inventory is visible without opening GitHub manually and
     includes:
-    - command-layer issues `#50`, `#54`, `#55`
+    - command-layer issue `#55`
     - docs/operator issue `#60`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
+  - command-layer issues `#54` and `#50` have now been consumed and closed on
+    `main`
 - real live lifecycle replay against `PR #37`, covering:
   - `pull_request_review` changes requested
   - `pull_request_review` approved
@@ -226,5 +228,7 @@ Still pending for a fuller product loop:
   reseeding it before it runs dry again
 - surfacing the same validation-pool inventory through operator-facing status
   views instead of only the CLI
+- broadening the remaining command-layer pool beyond one still-open issue after
+  consuming `#54` and `#50`
 - broader packaging and install proof beyond the current local operator
   environments
