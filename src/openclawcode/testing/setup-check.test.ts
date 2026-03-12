@@ -171,6 +171,8 @@ printf '{"accepted":false,"reason":"unconfigured-repo"}\\n202'
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("[PASS] built CLI artifact present");
+    expect(result.stdout).toContain("[PASS] webhook secret configured in env file");
+    expect(result.stdout).toContain("[PASS] webhook secret loaded into environment");
     expect(result.stdout).toContain("[PASS] signed webhook probe reached plugin route");
     expect(result.stdout).toContain("[PASS] repo binding present for zhyongrui/openclawcode");
     expect(result.stdout).toContain("Summary:");
@@ -230,6 +232,59 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
 
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain("[FAIL] webhook secret missing");
+    expect(result.stdout).toContain("[FAIL] webhook secret missing from env file");
+  });
+
+  it("fails when the parent environment has a webhook secret but the env file does not", async () => {
+    const rootDir = await createTempDir();
+    tempRoots.add(rootDir);
+    const repoRoot = path.join(rootDir, "repo");
+    const distDir = path.join(repoRoot, "dist");
+    const binDir = path.join(rootDir, "bin");
+    const envFile = path.join(rootDir, "openclawcode.env");
+    const configFile = path.join(rootDir, "openclaw.json");
+    const scriptPath = path.resolve("scripts/openclawcode-setup-check.sh");
+    const realPythonPath = resolveRealPythonPath();
+
+    await fs.mkdir(distDir, { recursive: true });
+    await fs.mkdir(binDir, { recursive: true });
+    await fs.writeFile(path.join(distDir, "index.js"), "console.log('ok');\n", "utf8");
+    await fs.writeFile(envFile, "GH_TOKEN=dummy-token\n", "utf8");
+    await fs.writeFile(configFile, "{}\n", "utf8");
+
+    await writeExecutable(
+      path.join(binDir, "python3"),
+      `#!/usr/bin/env bash
+set -euo pipefail
+script="$(cat)"
+if [[ "$script" == *"socket.create_connection"* ]]; then
+  exit 0
+fi
+printf '%s' "$script" | "${realPythonPath}" "$@"
+`,
+    );
+    await writeExecutable(
+      path.join(binDir, "curl"),
+      '#!/usr/bin/env bash\nset -euo pipefail\nprintf \'{"accepted":false,"reason":"unconfigured-repo"}\\n202\'\n',
+    );
+
+    const result = runSetupCheck(scriptPath, {
+      ...process.env,
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      OPENCLAWCODE_GITHUB_WEBHOOK_SECRET: "inherited-secret",
+      OPENCLAWCODE_SETUP_REPO_ROOT: repoRoot,
+      OPENCLAWCODE_SETUP_ENV_FILE: envFile,
+      OPENCLAWCODE_SETUP_CONFIG_FILE: configFile,
+      OPENCLAWCODE_SETUP_STATE_FILE: path.join(rootDir, "missing-state.json"),
+      OPENCLAWCODE_SETUP_GATEWAY_URL: "http://127.0.0.1:18789",
+      OPENCLAWCODE_SETUP_WEBHOOK_ROUTE: "/plugins/openclawcode/github",
+      OPENCLAWCODE_GITHUB_REPO: "zhyongrui/openclawcode",
+      OPENCLAWCODE_TUNNEL_LOG_FILE: path.join(rootDir, "tunnel.log"),
+      OPENCLAWCODE_TUNNEL_PID_FILE: path.join(rootDir, "tunnel.pid"),
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("[FAIL] webhook secret missing from env file");
   });
 });

@@ -144,6 +144,25 @@ load_env_file() {
   pass "env file loaded: ${ENV_FILE}"
 }
 
+env_file_defines_var() {
+  local variable_name="$1"
+  python3 - "$ENV_FILE" "$variable_name" <<'PY'
+import re
+import sys
+
+env_path = sys.argv[1]
+variable_name = sys.argv[2]
+pattern = re.compile(rf"^\s*(?:export\s+)?{re.escape(variable_name)}\s*=")
+
+with open(env_path, "r", encoding="utf-8") as handle:
+    for line in handle:
+        if pattern.match(line):
+            raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
 check_repo_root() {
   if [[ -d "$REPO_ROOT" ]]; then
     pass "repo root exists: ${REPO_ROOT}"
@@ -169,10 +188,17 @@ check_config_file() {
 }
 
 check_webhook_secret() {
+  if ! env_file_defines_var "OPENCLAWCODE_GITHUB_WEBHOOK_SECRET"; then
+    fail "webhook secret missing from env file: OPENCLAWCODE_GITHUB_WEBHOOK_SECRET"
+    return
+  fi
+
+  pass "webhook secret configured in env file"
+
   if [[ -n "${OPENCLAWCODE_GITHUB_WEBHOOK_SECRET:-}" ]]; then
-    pass "webhook secret present in env"
+    pass "webhook secret loaded into environment"
   else
-    fail "webhook secret missing: OPENCLAWCODE_GITHUB_WEBHOOK_SECRET"
+    fail "webhook secret failed to load from env file: OPENCLAWCODE_GITHUB_WEBHOOK_SECRET"
   fi
 }
 
