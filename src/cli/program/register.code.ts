@@ -1,5 +1,9 @@
 import type { Command } from "commander";
-import { openclawCodeRunCommand } from "../../commands/openclawcode.js";
+import {
+  openclawCodeRunCommand,
+  openclawCodeSeedValidationIssueCommand,
+  openclawCodeSeedValidationIssueTemplateIds,
+} from "../../commands/openclawcode.js";
 import { defaultRuntime } from "../../runtime.js";
 import { formatDocsLink } from "../../terminal/links.js";
 import { theme } from "../../terminal/theme.js";
@@ -28,6 +32,10 @@ ${formatHelpExamples([
   [
     "openclaw code run --issue 123 --open-pr",
     "Push the issue branch and open a draft PR after build.",
+  ],
+  [
+    "openclaw code seed-validation-issue --template command-json-boolean --field-name verificationHasSignals --source-path verificationReport.followUps --dry-run",
+    "Draft a low-risk validation issue without creating it on GitHub.",
   ],
 ])}
 
@@ -105,6 +113,44 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             rerunReviewSubmittedAt: opts.rerunReviewSubmittedAt as string | undefined,
             rerunReviewSummary: opts.rerunReviewSummary as string | undefined,
             rerunReviewUrl: opts.rerunReviewUrl as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("seed-validation-issue")
+    .description("Create or preview a repository-local validation issue for openclawcode")
+    .requiredOption(
+      "--template <id>",
+      `Template id (${openclawCodeSeedValidationIssueTemplateIds().join(", ")})`,
+    )
+    .option("--owner <owner>", "GitHub owner")
+    .option("--repo <repo>", "GitHub repository name")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--field-name <name>", "Top-level JSON field name for command-json templates")
+    .option("--source-path <path>", "Nested source path for command-json templates")
+    .option("--doc-path <path>", "Docs path for operator-doc-note")
+    .option("--summary <text>", "Summary for doc-note or high-risk validation templates")
+    .option("--dry-run", "Render the seeded issue without creating it on GitHub", false)
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeSeedValidationIssueCommand(
+          {
+            template: opts.template as ReturnType<
+              typeof openclawCodeSeedValidationIssueTemplateIds
+            >[number],
+            owner: opts.owner as string | undefined,
+            repo: opts.repo as string | undefined,
+            repoRoot: opts.repoRoot as string | undefined,
+            fieldName: opts.fieldName as string | undefined,
+            sourcePath: opts.sourcePath as string | undefined,
+            docPath: opts.docPath as string | undefined,
+            summary: opts.summary as string | undefined,
+            dryRun: Boolean(opts.dryRun),
             json: Boolean(opts.json),
           },
           defaultRuntime,

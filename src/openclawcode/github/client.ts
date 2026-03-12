@@ -11,6 +11,10 @@ export interface PullRequestRef {
   url: string;
 }
 
+export interface CreatedIssueRef extends IssueRef {
+  url: string;
+}
+
 export interface IssueStateRef extends RepoRef {
   issueNumber: number;
 }
@@ -39,6 +43,11 @@ export interface DraftPullRequestRequest extends RepoRef {
   draft?: boolean;
 }
 
+export interface CreateIssueRequest extends RepoRef {
+  title: string;
+  body: string;
+}
+
 export interface MergePullRequestRequest extends RepoRef {
   pullNumber: number;
   mergeMethod?: "merge" | "squash" | "rebase";
@@ -54,6 +63,7 @@ export interface ReadyForReviewRequest extends RepoRef {
 
 export interface GitHubIssueClient {
   fetchIssue(ref: IssueStateRef): Promise<IssueRef>;
+  createIssue(request: CreateIssueRequest): Promise<CreatedIssueRef>;
   fetchIssueState(ref: IssueStateRef): Promise<GitHubIssueState>;
   fetchPullRequest(ref: RepoRef & { pullNumber: number }): Promise<GitHubPullRequestState>;
   fetchLatestPullRequestReview(
@@ -71,6 +81,7 @@ export interface GitHubIssueClient {
 type GitHubIssueResponse = {
   number: number;
   title: string;
+  html_url?: string;
   body?: string | null;
   state?: "open" | "closed";
   labels?: { nodes?: Array<{ name?: string | null } | null> | null } | Array<{ name?: string }>;
@@ -183,6 +194,33 @@ export class GitHubRestClient implements GitHubIssueClient {
     };
   }
 
+  async createIssue(request: CreateIssueRequest): Promise<CreatedIssueRef> {
+    if (!this.token) {
+      throw new Error("GitHub token missing. Set GITHUB_TOKEN or GH_TOKEN to create issues.");
+    }
+    const issue = await this.request<GitHubIssueResponse>(
+      `/repos/${request.owner}/${request.repo}/issues`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          title: request.title,
+          body: request.body,
+        }),
+      },
+    );
+    return {
+      owner: request.owner,
+      repo: request.repo,
+      number: issue.number,
+      title: issue.title,
+      body: issue.body ?? undefined,
+      labels: normalizeLabels(issue.labels),
+      url:
+        issue.html_url ??
+        `https://github.com/${request.owner}/${request.repo}/issues/${issue.number}`,
+    };
+  }
+
   async fetchIssueState(ref: IssueStateRef): Promise<GitHubIssueState> {
     const issue = await this.request<GitHubIssueResponse>(
       `/repos/${ref.owner}/${ref.repo}/issues/${ref.issueNumber}`,
@@ -212,30 +250,26 @@ export class GitHubRestClient implements GitHubIssueClient {
     const reviews = await this.request<GitHubPullRequestReviewResponse[]>(
       `/repos/${ref.owner}/${ref.repo}/pulls/${ref.pullNumber}/reviews`,
     );
-    const normalized = reviews
-      .flatMap((review) => {
-        const state = review.state?.trim().toUpperCase();
-        if (state === "APPROVED") {
-          return [
-            {
-              decision: "approved" as const,
-              submittedAt:
-                typeof review.submitted_at === "string" ? review.submitted_at : undefined,
-            },
-          ];
-        }
-        if (state === "CHANGES_REQUESTED") {
-          return [
-            {
-              decision: "changes-requested" as const,
-              submittedAt:
-                typeof review.submitted_at === "string" ? review.submitted_at : undefined,
-            },
-          ];
-        }
-        return [];
-      })
-      .toSorted((left, right) => (right.submittedAt ?? "").localeCompare(left.submittedAt ?? ""));
+    const normalized: GitHubPullRequestReviewState[] = [];
+    for (const review of reviews) {
+      const state = review.state?.trim().toUpperCase();
+      if (state === "APPROVED") {
+        normalized.push({
+          decision: "approved",
+          submittedAt: typeof review.submitted_at === "string" ? review.submitted_at : undefined,
+        });
+        continue;
+      }
+      if (state === "CHANGES_REQUESTED") {
+        normalized.push({
+          decision: "changes-requested",
+          submittedAt: typeof review.submitted_at === "string" ? review.submitted_at : undefined,
+        });
+      }
+    }
+    normalized.sort((left, right) =>
+      (right.submittedAt ?? "").localeCompare(left.submittedAt ?? ""),
+    );
     return normalized[0];
   }
 

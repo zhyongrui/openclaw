@@ -2,17 +2,20 @@ import path from "node:path";
 import type { WorkflowRerunContext, WorkflowRun } from "../openclawcode/index.js";
 import {
   FileSystemWorkflowRunStore,
+  buildValidationIssueDraft,
   GitHubPullRequestMerger,
   GitHubPullRequestPublisher,
   GitHubRestClient,
   GitWorktreeManager,
   HeuristicPlanner,
   HostShellRunner,
+  listValidationIssueTemplates,
   OpenClawAgentRunner,
   AgentBackedBuilder,
   AgentBackedVerifier,
   resolveGitHubRepoFromGit,
   runIssueWorkflow,
+  type ValidationIssueTemplateId,
 } from "../openclawcode/index.js";
 import type { RuntimeEnv } from "../runtime.js";
 
@@ -40,12 +43,36 @@ export interface OpenClawCodeRunOpts {
   json?: boolean;
 }
 
+export interface OpenClawCodeSeedValidationIssueOpts {
+  template: ValidationIssueTemplateId;
+  owner?: string;
+  repo?: string;
+  repoRoot?: string;
+  fieldName?: string;
+  sourcePath?: string;
+  docPath?: string;
+  summary?: string;
+  dryRun?: boolean;
+  json?: boolean;
+}
+
 function parseIssueNumber(value: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 1) {
     throw new Error("--issue must be a positive integer");
   }
   return parsed;
+}
+
+async function resolveRepoRef(params: {
+  owner?: string;
+  repo?: string;
+  repoRoot: string;
+}): Promise<{ owner: string; repo: string }> {
+  if (params.owner && params.repo) {
+    return { owner: params.owner, repo: params.repo };
+  }
+  return await resolveGitHubRepoFromGit(params.repoRoot);
 }
 
 function resolveAutoMergePolicy(run: WorkflowRun): {
@@ -358,10 +385,11 @@ export async function openclawCodeRunCommand(
 ): Promise<void> {
   const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
   const issueNumber = parseIssueNumber(opts.issue);
-  const repoRef =
-    opts.owner && opts.repo
-      ? { owner: opts.owner, repo: opts.repo }
-      : await resolveGitHubRepoFromGit(repoRoot);
+  const repoRef = await resolveRepoRef({
+    owner: opts.owner,
+    repo: opts.repo,
+    repoRoot,
+  });
   const stateDir = path.resolve(opts.stateDir ?? path.join(repoRoot, ".openclawcode"));
   const shellRunner = new HostShellRunner();
   const worktreeManager = new GitWorktreeManager();
@@ -426,4 +454,82 @@ export async function openclawCodeRunCommand(
   if (run.draftPullRequest?.url) {
     runtime.log(`Draft PR: ${run.draftPullRequest.url}`);
   }
+}
+
+export async function openclawCodeSeedValidationIssueCommand(
+  opts: OpenClawCodeSeedValidationIssueOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const repoRef = await resolveRepoRef({
+    owner: opts.owner,
+    repo: opts.repo,
+    repoRoot,
+  });
+  const draft = buildValidationIssueDraft({
+    template: opts.template,
+    fieldName: opts.fieldName,
+    sourcePath: opts.sourcePath,
+    docPath: opts.docPath,
+    summary: opts.summary,
+  });
+
+  if (opts.dryRun) {
+    if (opts.json) {
+      runtime.log(
+        JSON.stringify(
+          {
+            ...draft,
+            owner: repoRef.owner,
+            repo: repoRef.repo,
+            dryRun: true,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    runtime.log(`Template: ${draft.template}`);
+    runtime.log(`Issue class: ${draft.issueClass}`);
+    runtime.log(`Repo: ${repoRef.owner}/${repoRef.repo}`);
+    runtime.log(`Title: ${draft.title}`);
+    runtime.log("Body:");
+    runtime.log(draft.body);
+    return;
+  }
+
+  const github = new GitHubRestClient();
+  const created = await github.createIssue({
+    owner: repoRef.owner,
+    repo: repoRef.repo,
+    title: draft.title,
+    body: draft.body,
+  });
+
+  if (opts.json) {
+    runtime.log(
+      JSON.stringify(
+        {
+          ...draft,
+          owner: created.owner,
+          repo: created.repo,
+          issueNumber: created.number,
+          issueUrl: created.url,
+          dryRun: false,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  runtime.log(`Created issue #${created.number}: ${created.url}`);
+  runtime.log(`Template: ${draft.template}`);
+  runtime.log(`Issue class: ${draft.issueClass}`);
+}
+
+export function openclawCodeSeedValidationIssueTemplateIds(): ValidationIssueTemplateId[] {
+  return listValidationIssueTemplates().map((entry) => entry.id);
 }

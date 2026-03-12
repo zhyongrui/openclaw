@@ -367,12 +367,15 @@ The MVP merge gate should be conservative.
 
 Recommended policy:
 
-- no auto-merge in v1
-- human review required for all runs
-- verifier approval is necessary for merge consideration
+- guarded auto-merge is allowed only for low-risk command-layer runs
+- verifier approval is necessary before any auto-merge consideration
+- suitability must accept autonomous execution before merge is considered
+- scope checks must pass before merge is considered
+- human review remains required for all runs outside that narrow path
 - high-risk labels force escalation regardless of test results
 
-Later versions may allow selective auto-merge, but only after strong evidence.
+Selective auto-merge should remain policy-driven and evidence-driven rather than
+prompt-driven.
 
 ## Security and Trust Boundaries
 

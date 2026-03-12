@@ -1,22 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowRun } from "../openclawcode/index.js";
-import { openclawCodeRunCommand } from "./openclawcode.js";
+import {
+  openclawCodeRunCommand,
+  openclawCodeSeedValidationIssueCommand,
+  openclawCodeSeedValidationIssueTemplateIds,
+} from "./openclawcode.js";
 import { createTestRuntime } from "./test-runtime-config-helpers.js";
 
 const mocks = vi.hoisted(() => {
   return {
     resolveGitHubRepoFromGit: vi.fn(),
     runIssueWorkflow: vi.fn(),
+    createIssue: vi.fn(),
   };
 });
 
-vi.mock("../openclawcode/index.js", async () => {
+vi.mock("../openclawcode/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../openclawcode/index.js")>();
+  class MockGitHubRestClient {
+    createIssue = mocks.createIssue;
+  }
   return {
+    ...actual,
     resolveGitHubRepoFromGit: mocks.resolveGitHubRepoFromGit,
     runIssueWorkflow: mocks.runIssueWorkflow,
     HostShellRunner: class {},
     GitWorktreeManager: class {},
-    GitHubRestClient: class {},
+    GitHubRestClient: MockGitHubRestClient,
     HeuristicPlanner: class {},
     OpenClawAgentRunner: class {},
     AgentBackedBuilder: class {},
@@ -32,6 +42,15 @@ describe("openclawCodeRunCommand", () => {
     vi.clearAllMocks();
     mocks.resolveGitHubRepoFromGit.mockResolvedValue({ owner: "openclaw", repo: "openclaw" });
     mocks.runIssueWorkflow.mockResolvedValue(createRun());
+    mocks.createIssue.mockResolvedValue({
+      owner: "openclaw",
+      repo: "openclaw",
+      number: 99,
+      title: "Seeded validation issue",
+      body: "Seeded validation issue body",
+      labels: [],
+      url: "https://github.com/openclaw/openclaw/issues/99",
+    });
   });
 
   it("prints stable top-level JSON fields for workflow scope, pr metadata, review, and merge policy", async () => {
@@ -552,6 +571,72 @@ describe("openclawCodeRunCommand", () => {
       "Pull request opened: https://github.com/openclaw/openclaw/pull/42",
     );
     expect(payload.pullRequestPublished).toBe(true);
+  });
+
+  it("renders a dry-run validation issue template without creating a GitHub issue", async () => {
+    await openclawCodeSeedValidationIssueCommand(
+      {
+        template: "command-json-boolean",
+        repoRoot: "/repo",
+        fieldName: "verificationHasSignals",
+        sourcePath: "verificationReport.followUps",
+        dryRun: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      template: "command-json-boolean",
+      issueClass: "command-layer",
+      owner: "openclaw",
+      repo: "openclaw",
+      dryRun: true,
+      title: "[Feature]: Expose verificationHasSignals in openclaw code run --json output",
+    });
+    expect(payload.body).toContain("`verificationReport.followUps` contains at least one entry");
+  });
+
+  it("creates a validation issue from the selected template", async () => {
+    await openclawCodeSeedValidationIssueCommand(
+      {
+        template: "operator-doc-note",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        docPath: "docs/openclawcode/operator-setup.md",
+        summary: "restart-window retries in setup-check",
+        json: true,
+      },
+      runtime,
+    );
+
+    expect(mocks.createIssue).toHaveBeenCalledWith({
+      owner: "zhyongrui",
+      repo: "openclawcode",
+      title: "[Docs]: Clarify restart-window retries in setup-check",
+      body: expect.stringContaining("`docs/openclawcode/operator-setup.md`"),
+    });
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      template: "operator-doc-note",
+      issueClass: "operator-docs",
+      owner: "openclaw",
+      repo: "openclaw",
+      issueNumber: 99,
+      issueUrl: "https://github.com/openclaw/openclaw/issues/99",
+      dryRun: false,
+    });
+  });
+
+  it("exposes the supported validation issue templates", () => {
+    expect(openclawCodeSeedValidationIssueTemplateIds()).toEqual([
+      "command-json-boolean",
+      "command-json-number",
+      "operator-doc-note",
+      "webhook-precheck-high-risk",
+    ]);
   });
 });
 

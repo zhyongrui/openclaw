@@ -149,12 +149,17 @@ turning the working loop into a cleanly operable product:
   queued run
 - operator health checks now retry transient gateway reachability and signed
   webhook probe failures during short restart windows
-- the next engineering priority is now validation-pool upkeep plus policy-doc
-  cleanup for Phase 5 operator productization
+- validation-pool upkeep now has a repo-native CLI path through
+  `openclaw code seed-validation-issue`
+- real seeding proof has already replenished the pool with:
+  - command-layer issue `#59`
+  - docs/operator issue `#60`
+- policy docs are now being brought back in sync with the live-tested guarded
+  auto-merge behavior
+- the next engineering priority is now validation-pool inventory plus
+  consume-and-reseed workflow on the long-lived `main` baseline
 - packaging and installation are now documented locally, but still need more
   proof under a fresh operator environment
-- policy docs lag the implemented guarded auto-merge behavior and need to be
-  brought back in sync
 
 ## Next Iteration Plan
 
@@ -293,9 +298,11 @@ Exit criteria:
 
 - there is always at least one low-risk command-layer validation issue and one
   low-risk docs/operator issue available
-- when the validation pool is empty, Codex may create a small repository-local
-  validation issue directly through GitHub CLI/API instead of waiting for a
-  manual issue seed
+- when the validation pool is empty, Codex replenishes it through
+  `openclaw code seed-validation-issue` instead of an ad hoc GitHub API call
+- the current replenishment proof is explicit and reusable:
+  - issue `#59` for command-layer work
+  - issue `#60` for docs/operator work
 
 ### Current Checkpoint
 
@@ -1031,16 +1038,18 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. trigger one low-risk end-to-end issue run from the copied fresh environment
-   and confirm it reaches draft PR publication plus verifier completion
-2. verify the copied-root gateway and chat bindings remain coherent after that
-   run instead of silently falling back to the long-lived local state
-3. keep `scripts/openclawcode-setup-check.sh --strict` green for the copied
-   root while removing any remaining hidden-state assumptions
-4. replenish the validation issue pool whenever it drops below one
-   command-layer issue and one docs/operator issue
-5. update the dev log and status docs after each live proof
-6. commit each slice only after targeted validation passes
+1. keep the validation pool above one low-risk command-layer issue and one
+   low-risk docs/operator issue by using `openclaw code seed-validation-issue`
+2. consume one seeded command-layer issue on the long-lived `main` operator and
+   reseed immediately after the proof closes
+3. do the same for one seeded docs/operator issue, or explicitly leave one open
+   so the pool never returns to zero
+4. make validation-pool inventory and age visible through a lightweight CLI or
+   operator surface so GitHub browsing is not the only way to inspect it
+5. keep README, this plan, and operator runbooks aligned with the live-tested
+   guarded auto-merge and validation-pool workflow
+6. update the dev log after each live proof and commit only after targeted
+   validation passes
 
 ## Test Strategy
 

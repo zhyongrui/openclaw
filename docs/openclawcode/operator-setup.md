@@ -266,6 +266,26 @@ At that point the supported setup is complete.
 The next validation target should be a real `pull_request` or `pull_request_review`
 event replay against the same route.
 
+## 10. Keep The Validation Pool Seeded
+
+Do not wait for a human to create a perfect low-risk issue when the validation
+pool runs dry. The preferred replenishment path is the repo-local CLI:
+
+```bash
+openclaw code seed-validation-issue --template command-json-boolean --field-name verificationHasMissingCoverage --source-path verificationReport.missingCoverage
+openclaw code seed-validation-issue --template operator-doc-note --doc-path docs/openclawcode/mvp-runbook.md --summary "copied-root teardown expectations after fresh-operator validation"
+```
+
+Operator rules:
+
+- keep at least one low-risk command-layer issue and one low-risk docs/operator
+  issue open for future live proofs
+- use `--dry-run --json` first if you want to review the title and body before
+  creating the issue on GitHub
+- use this command instead of ad hoc GitHub API calls when the pool is empty
+- reseed the pool immediately after a live proof consumes the last issue in one
+  category
+
 Staged fs-tool validation note:
 
 - default live behavior still denies the runner-added `edit` and `write` tools

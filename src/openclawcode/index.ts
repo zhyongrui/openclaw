@@ -5,5 +5,6 @@ export * from "./orchestrator/index.js";
 export * from "./persistence/index.js";
 export * from "./roles/index.js";
 export * from "./runtime/index.js";
+export * from "./validation-issues.js";
 export * from "./worktree/index.js";
 export * from "./workflow/index.js";

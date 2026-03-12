@@ -20,6 +20,20 @@ class FakeGitHubClient implements GitHubIssueClient {
     throw new Error("not used");
   }
 
+  async createIssue(
+    ref: RepoRef & { title: string; body: string },
+  ): Promise<IssueRef & { url: string }> {
+    return {
+      owner: ref.owner,
+      repo: ref.repo,
+      number: 999,
+      title: ref.title,
+      body: ref.body,
+      labels: [],
+      url: `https://github.com/${ref.owner}/${ref.repo}/issues/999`,
+    };
+  }
+
   async fetchIssueState(): Promise<GitHubIssueState> {
     return { state: "open" };
   }
