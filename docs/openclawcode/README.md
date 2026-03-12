@@ -76,6 +76,13 @@ loop with:
     one assistant `400 Internal server error`
   - repeated fresh failures still reactivate the queue-level provider pause
     instead of continuing to drain the queue during provider instability
+- operator-facing provider-pause messaging is now visible beyond
+  `/occode-inbox` too:
+  - `/occode-start` and `/occode-rerun` now tell the operator when work was
+    queued behind an active provider pause
+  - `/occode-status` now appends the same pause window, failure count, and
+    pause reason so a queued or failed issue can be interpreted without
+    switching back to the inbox
 - local-run reconciliation that can recover tracked PR linkage from older run
   artifacts when a newer rerun artifact omits draft PR metadata
 - merge-based reusable worktree refresh that:

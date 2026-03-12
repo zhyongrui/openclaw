@@ -203,6 +203,29 @@ function buildProviderPauseLines(params: {
   ];
 }
 
+function appendProviderPauseText(params: {
+  text: string;
+  pause:
+    | {
+        until: string;
+        triggeredAt: string;
+        lastFailureAt: string;
+        failureCount: number;
+        reason: string;
+      }
+    | undefined;
+  now?: string;
+}): string {
+  const pauseLines = buildProviderPauseLines({
+    pause: params.pause,
+    now: params.now,
+  });
+  if (pauseLines.length === 0) {
+    return params.text;
+  }
+  return [params.text, ...pauseLines].join("\n");
+}
+
 async function appendValidationIssueStatusContext(params: {
   text: string;
   issue: { owner: string; repo: string; number: number };
@@ -1686,8 +1709,13 @@ export default {
         if (!queuedRun) {
           return { text: `${issueKey} is already queued or running.` };
         }
-
-        return { text: `Queued ${issueKey}. I will post status updates here.` };
+        const providerPause = await store.getActiveProviderPause();
+        return {
+          text: appendProviderPauseText({
+            text: `Queued ${issueKey}. I will post status updates here.`,
+            pause: providerPause,
+          }),
+        };
       },
     });
 
@@ -1779,9 +1807,12 @@ export default {
         if (!queued) {
           return { text: `${issueKey} is already queued or running.` };
         }
-
+        const providerPause = await store.getActiveProviderPause();
         return {
-          text: `Queued rerun for ${issueKey} from ${stageLabel} state. I will post status updates here.`,
+          text: appendProviderPauseText({
+            text: `Queued rerun for ${issueKey} from ${stageLabel} state. I will post status updates here.`,
+            pause: providerPause,
+          }),
         };
       },
     });
@@ -1926,10 +1957,14 @@ export default {
         }
         const resolvedStatusText =
           statusText ?? `No openclawcode status recorded yet for ${issueKey}.`;
+        const providerPause = await store.getActiveProviderPause();
         return {
           text:
             (await appendValidationIssueStatusContext({
-              text: resolvedStatusText,
+              text: appendProviderPauseText({
+                text: resolvedStatusText,
+                pause: providerPause,
+              }),
               issue: command.issue,
             }).catch(() => resolvedStatusText)) ?? resolvedStatusText,
         };

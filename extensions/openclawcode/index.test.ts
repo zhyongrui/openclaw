@@ -1441,6 +1441,54 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("mentions an active provider pause when /occode-start queues work", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.addPendingApproval({
+        issueKey: "zhyongrui/openclawcode#214",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+      });
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6601,
+          stage: "failed",
+          updatedAt: "2099-03-12T12:00:00.000Z",
+        }),
+        buildTransientProviderFailedStatus(6601),
+      );
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6602,
+          stage: "failed",
+          updatedAt: "2099-03-12T12:05:00.000Z",
+        }),
+        buildTransientProviderFailedStatus(6602),
+      );
+
+      const result = await fixture.commands.get("occode-start")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-start #214",
+        args: "#214",
+        to: "user:current-chat",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "Queued zhyongrui/openclawcode#214. I will post status updates here.",
+          "Provider pause: active until 2099-03-12T12:15:00.000Z",
+          "- failures: 2 | last failure: 2099-03-12T12:05:00.000Z",
+          "- reason: Paused after 2 recent provider-side transient failures. Recent workflow runs are failing with HTTP 400 internal errors before code changes are produced.",
+        ].join("\n"),
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("queues /occode-rerun with review context and prefers the current chat target", async () => {
     const fixture = await registerPluginFixture();
     try {
@@ -1519,6 +1567,62 @@ describe("openclawcode extension", () => {
       expect(snapshot.queue[0]?.request.rerunContext?.requestedAt).toMatch(
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
       );
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("mentions an active provider pause when /occode-rerun queues work", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#2150",
+        status: "openclawcode status for zhyongrui/openclawcode#2150\nStage: Failed",
+        stage: "failed",
+        runId: "run-2150",
+        updatedAt: "2026-03-11T03:10:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 2150,
+        branchName: "openclawcode/issue-2150",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:old-thread",
+      });
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6611,
+          stage: "failed",
+          updatedAt: "2099-03-12T12:00:00.000Z",
+        }),
+        buildTransientProviderFailedStatus(6611),
+      );
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6612,
+          stage: "failed",
+          updatedAt: "2099-03-12T12:05:00.000Z",
+        }),
+        buildTransientProviderFailedStatus(6612),
+      );
+
+      const result = await fixture.commands.get("occode-rerun")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-rerun #2150",
+        args: "#2150",
+        to: "user:rerun-chat",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "Queued rerun for zhyongrui/openclawcode#2150 from Failed state. I will post status updates here.",
+          "Provider pause: active until 2099-03-12T12:15:00.000Z",
+          "- failures: 2 | last failure: 2099-03-12T12:05:00.000Z",
+          "- reason: Paused after 2 recent provider-side transient failures. Recent workflow runs are failing with HTTP 400 internal errors before code changes are produced.",
+        ].join("\n"),
+      });
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -1868,6 +1972,48 @@ describe("openclawcode extension", () => {
           "No openclawcode status recorded yet for zhyongrui/openclawcode#266.",
           "Validation issue: command-layer",
           "Validation template: command-json-number",
+        ].join("\n"),
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows an active provider pause through /occode-status", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6621,
+          stage: "failed",
+          updatedAt: "2099-03-12T12:00:00.000Z",
+        }),
+        buildTransientProviderFailedStatus(6621),
+      );
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6622,
+          stage: "failed",
+          updatedAt: "2099-03-12T12:05:00.000Z",
+        }),
+        buildTransientProviderFailedStatus(6622),
+      );
+
+      const result = await fixture.commands.get("occode-status")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-status #267",
+        args: "#267",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "No openclawcode status recorded yet for zhyongrui/openclawcode#267.",
+          "Provider pause: active until 2099-03-12T12:15:00.000Z",
+          "- failures: 2 | last failure: 2099-03-12T12:05:00.000Z",
+          "- reason: Paused after 2 recent provider-side transient failures. Recent workflow runs are failing with HTTP 400 internal errors before code changes are produced.",
         ].join("\n"),
       });
     } finally {

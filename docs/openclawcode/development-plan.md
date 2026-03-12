@@ -234,6 +234,12 @@ turning the working loop into a cleanly operable product:
   - this confirms both halves of the guardrail now hold live:
     - single builder attempts no longer burn multiple hidden provider retries
     - repeated fresh workflow failures still pause queue consumption
+- provider-pause state is now visible from the main interactive operator
+  commands too:
+  - `/occode-start` and `/occode-rerun` now append the active pause window and
+    reason when work is queued behind a provider pause
+  - `/occode-status` now appends the same pause context so queued or failed
+    issues can be interpreted without first opening `/occode-inbox`
 - policy docs are now in sync with the live-tested guarded auto-merge behavior
 - the next engineering priority is now consume-and-reseed workflow plus
   broader chat-native intake behavior
@@ -1129,17 +1135,15 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. keep the provider-pause signal visible from operator surfaces while the
-   upstream model path is unstable
-2. tighten the remaining outer builder/verifier retry latency now that
+1. tighten the remaining outer builder/verifier retry latency now that
    openclawcode worktrees no longer hide inner SDK retries
-3. keep the validation pool above one low-risk command-layer issue and one
+2. keep the validation pool above one low-risk command-layer issue and one
    low-risk docs/operator issue by using `openclaw code seed-validation-issue`
-4. consume and reseed that pool on the long-lived `main` baseline once the
+3. consume and reseed that pool on the long-lived `main` baseline once the
    provider pause clears and the model path is stable again
-5. keep `openclaw code list-validation-issues` as the canonical inventory view
+4. keep `openclaw code list-validation-issues` as the canonical inventory view
    and mirror the same pool signal into operator-facing status surfaces
-6. update the dev log after each live proof and commit only after targeted
+5. update the dev log after each live proof and commit only after targeted
    validation passes
 
 ## Test Strategy
