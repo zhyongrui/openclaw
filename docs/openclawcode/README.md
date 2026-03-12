@@ -69,6 +69,11 @@ loop with:
 - a strict copied-root operator proof that now passes
   `scripts/openclawcode-setup-check.sh --strict` when the fresh root keeps its
   webhook repo and hook metadata in `openclawcode.env`
+- a copied-root fresh gateway startup proof that now:
+  - starts a second local gateway from `OPENCLAWCODE_OPERATOR_ROOT` on a
+    non-default port
+  - passes `scripts/openclawcode-setup-check.sh --strict` against that gateway
+    with `14 pass`, `0 warn`, and `0 fail`
 - a refreshed `main` baseline promoted from `sync/upstream-2026-03-11`, pushed
   to `origin/main`, and restarted under the local live gateway
 - real end-to-end validation against this repository, including a webhook-driven

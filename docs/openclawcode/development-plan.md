@@ -194,8 +194,9 @@ Status:
 - active next phase
 - copied-root setup verification is now working through a single
   `OPENCLAWCODE_OPERATOR_ROOT`
-- the remaining gap is a true fresh-root gateway startup plus one end-to-end
-  issue run from that fresh environment
+- a copied-root fresh gateway startup proof is now complete on a secondary
+  local port
+- the remaining gap is one end-to-end issue run from that fresh environment
 
 Goal:
 
@@ -295,6 +296,10 @@ The current repository state already supports:
   file-path overrides for each script
 - a strict copied-root operator health-check proof that now passes when the
   fresh root persists webhook repo and hook metadata in `openclawcode.env`
+- a copied-root fresh gateway startup proof that now:
+  - launches a second local gateway from that copied root on port `18889`
+  - passes `scripts/openclawcode-setup-check.sh --strict` against the copied
+    root and alternate gateway URL with `14 pass`, `0 warn`, and `0 fail`
 - a fresh live merged-PR proof on refreshed `main` for issue `#45`:
   - two failed reruns persisted cleanly as `failed` artifacts
   - recovery after runtime tool hardening
@@ -959,13 +964,12 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. start one fresh gateway process from a copied operator root using
-   `OPENCLAWCODE_OPERATOR_ROOT` instead of the long-lived local `.openclaw`
-   directory
-2. keep `scripts/openclawcode-setup-check.sh --strict` green for that copied
+1. trigger one low-risk end-to-end issue run from the copied fresh environment
+   and confirm it reaches draft PR publication plus verifier completion
+2. verify the copied-root gateway and chat bindings remain coherent after that
+   run instead of silently falling back to the long-lived local state
+3. keep `scripts/openclawcode-setup-check.sh --strict` green for the copied
    root while removing any remaining hidden-state assumptions
-3. trigger one low-risk end-to-end issue run from the fresh environment and
-   confirm it reaches draft PR publication plus verifier completion
 4. replenish the validation issue pool whenever it drops below one
    command-layer issue and one docs/operator issue
 5. update the dev log and status docs after each live proof
