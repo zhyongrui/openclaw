@@ -657,7 +657,10 @@ describe("openclawCodeRunCommand", () => {
               mitigation: "Emit null when executionSpec is unavailable.",
             },
           ],
-          assumptions: [],
+          assumptions: [
+            "The execution spec continues to carry assumptions as a top-level array.",
+            "Downstream consumers want assumption counts without unpacking nested metadata.",
+          ],
           riskLevel: "low",
         },
         stageRecords: [
@@ -683,11 +686,12 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.acceptanceCriteriaCount).toBe(1);
     expect(payload.openQuestionCount).toBe(2);
     expect(payload.riskCount).toBe(2);
+    expect(payload.assumptionCount).toBe(2);
     expect(payload.stageRecordCount).toBe(2);
     expect(payload.historyEntryCount).toBe(2);
   });
 
-  it("prints historyEntryCount, stageRecordCount, acceptanceCriteriaCount, openQuestionCount, and riskCount as null when metadata is missing", async () => {
+  it("prints historyEntryCount, stageRecordCount, acceptanceCriteriaCount, openQuestionCount, riskCount, and assumptionCount as null when metadata is missing", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
         executionSpec: undefined,
@@ -702,6 +706,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.acceptanceCriteriaCount).toBeNull();
     expect(payload.openQuestionCount).toBeNull();
     expect(payload.riskCount).toBeNull();
+    expect(payload.assumptionCount).toBeNull();
     expect(payload.stageRecordCount).toBeNull();
     expect(payload.historyEntryCount).toBeNull();
   });

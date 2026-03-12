@@ -187,6 +187,7 @@ turning the working loop into a cleanly operable product:
 - live inventory proof now shows the current open pool directly:
   - command-layer issue `#74`
   - command-layer issue `#75`
+  - command-layer issue `#76`
   - docs/operator issue `#60`
 - duplicate seeding attempts now reuse an existing open issue with the same
   template and title instead of creating a fresh duplicate
@@ -207,6 +208,7 @@ turning the working loop into a cleanly operable product:
 - the command-layer pool is now replenished with:
   - issue `#74` for `riskCount`
   - issue `#75` for `assumptionCount`
+  - issue `#76` for `testPlanCount`
   - docs/operator issue `#60`
 - a fresh explicit chat-intake live proof is now complete through issue `#70`:
   - `/occode-intake` created the GitHub issue and queued it from chat-facing
@@ -451,7 +453,7 @@ Exit criteria:
 - when the validation pool is empty, Codex replenishes it through
   `openclaw code seed-validation-issue` instead of an ad hoc GitHub API call
 - the current live inventory is explicit and reusable:
-  - command-layer issues `#74`, `#75`
+  - command-layer issues `#74`, `#75`, `#76`
   - docs/operator issue `#60`
 - duplicate seed attempts are absorbed back into the existing pool instead of
   creating another open issue with the same title
@@ -1190,8 +1192,8 @@ Why next:
 
 The next implementation slice should follow this order:
 
-1. implement command-layer issue `#75` on
-   `sync/upstream-2026-03-12-refresh` by exposing `assumptionCount` in
+1. implement command-layer issue `#76` on
+   `sync/upstream-2026-03-12-refresh` by exposing `testPlanCount` in
    `openclaw code run --json`
 2. reseed the next command-layer validation issue immediately after that slice
    so the pool stays above one open low-risk command issue
