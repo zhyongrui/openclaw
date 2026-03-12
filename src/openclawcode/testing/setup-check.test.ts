@@ -9,9 +9,20 @@ async function createTempDir() {
 }
 
 function runSetupCheck(scriptPath: string, env: NodeJS.ProcessEnv, args: string[] = []) {
+  const isolatedParentEnv: NodeJS.ProcessEnv = {
+    HOME: process.env.HOME,
+    PATH: process.env.PATH,
+    SHELL: process.env.SHELL,
+    TMPDIR: process.env.TMPDIR,
+    TMP: process.env.TMP,
+    TEMP: process.env.TEMP,
+  };
   return spawnSync("bash", [scriptPath, ...args], {
     cwd: path.resolve("."),
-    env,
+    env: {
+      ...isolatedParentEnv,
+      ...env,
+    },
     encoding: "utf8",
     timeout: 15_000,
   });
@@ -205,7 +216,6 @@ printf '{"accepted":false,"reason":"unconfigured-repo"}\\n202'
     );
 
     const result = runSetupCheck(scriptPath, {
-      ...process.env,
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       OPENCLAWCODE_SETUP_REPO_ROOT: repoRoot,
       OPENCLAWCODE_SETUP_ENV_FILE: envFile,
@@ -336,7 +346,6 @@ printf '{"accepted":false,"reason":"unconfigured-repo"}\\n202'
     );
 
     const result = runSetupCheck(scriptPath, {
-      ...process.env,
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       OPENCLAWCODE_SETUP_REPO_ROOT: repoRoot,
       OPENCLAWCODE_SETUP_OPERATOR_ROOT: operatorRoot,
@@ -483,7 +492,6 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
     const result = runSetupCheck(
       scriptPath,
       {
-        ...process.env,
         PATH: `${binDir}:${process.env.PATH ?? ""}`,
         OPENCLAWCODE_SETUP_REPO_ROOT: repoRoot,
         OPENCLAWCODE_SETUP_OPERATOR_ROOT: operatorRoot,
@@ -603,7 +611,6 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
     );
 
     const result = runSetupCheck(scriptPath, {
-      ...process.env,
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       OPENCLAWCODE_SETUP_REPO_ROOT: repoRoot,
       OPENCLAWCODE_SETUP_ENV_FILE: envFile,
@@ -657,7 +664,6 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
     );
 
     const result = runSetupCheck(scriptPath, {
-      ...process.env,
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       OPENCLAWCODE_SETUP_REPO_ROOT: repoRoot,
       OPENCLAWCODE_SETUP_ENV_FILE: envFile,
@@ -709,7 +715,6 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
     );
 
     const result = runSetupCheck(scriptPath, {
-      ...process.env,
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       OPENCLAWCODE_GITHUB_WEBHOOK_SECRET: "inherited-secret",
       OPENCLAWCODE_SETUP_REPO_ROOT: repoRoot,
