@@ -46,6 +46,9 @@ As of 2026-03-12:
     validation issues needed a marker-aware scope short-circuit so
     `operator-doc-note` issues do not drift into `workflow-core` solely because
     their prose references queue or runtime behavior
+  - issue `#87` confirmed that the marker-aware scope fix works in a real
+    refreshed-branch run artifact; the remaining blocker on that proof is now
+    provider `HTTP 400` failure during build rather than suitability drift
 
 ## Execution Loop
 
@@ -270,25 +273,27 @@ Preferred near-to-mid-term order:
    queue messaging under the real operator
 3. rerun the refreshed-branch low-risk proof after the marker-aware scope fix
    for seeded validation issues
-4. promote the refreshed sync branch back to `main`
-5. restart the long-lived operator on promoted `main`
-6. rerun a low-risk Feishu proof on promoted `main`
-7. close or refresh the remaining docs/operator validation issue `#60`
-8. finish the current command-layer JSON count series if any non-duplicative
+4. rerun proof issue `#87` when provider stability improves, or mint the next
+   equivalent low-risk validation issue if `#87` becomes noisy
+5. promote the refreshed sync branch back to `main`
+6. restart the long-lived operator on promoted `main`
+7. rerun a low-risk Feishu proof on promoted `main`
+8. close or refresh the remaining docs/operator validation issue `#60`
+9. finish the current command-layer JSON count series if any non-duplicative
    fields remain
-9. write the first explicit JSON contract reference doc for `openclaw code run --json`
-10. add clearer provider-pause history to `/occode-status` and `/occode-inbox`
-11. add pause-cleared signaling so operators can see when queue draining resumes
-12. add preview and edit steps for chat-native issue drafts before creation
-13. add clarification loops for ambiguous chat-native requests
-14. add explicit operator overrides for suitability-gated work
-15. tighten auto-merge eligibility into a documented narrow policy
-16. add rollback instructions for failed refreshed-branch promotions
-17. record recurring upstream merge conflict hotspots in the sync policy docs
-18. run another real PR-review-rerun proof after the next promotion
-19. add richer rerun lineage and reason summaries to operator surfaces
-20. add another copied-root fresh-operator live proof after the next major sync
-21. keep seeding and consuming low-risk validation issues so the proof pool
+10. write the first explicit JSON contract reference doc for `openclaw code run --json`
+11. add clearer provider-pause history to `/occode-status` and `/occode-inbox`
+12. add pause-cleared signaling so operators can see when queue draining resumes
+13. add preview and edit steps for chat-native issue drafts before creation
+14. add clarification loops for ambiguous chat-native requests
+15. add explicit operator overrides for suitability-gated work
+16. tighten auto-merge eligibility into a documented narrow policy
+17. add rollback instructions for failed refreshed-branch promotions
+18. record recurring upstream merge conflict hotspots in the sync policy docs
+19. run another real PR-review-rerun proof after the next promotion
+20. add richer rerun lineage and reason summaries to operator surfaces
+21. add another copied-root fresh-operator live proof after the next major sync
+22. keep seeding and consuming low-risk validation issues so the proof pool
     never goes empty
 
 ## Session Handoff
@@ -305,5 +310,5 @@ As of this revision:
 - active feature branch:
   - `sync/upstream-2026-03-12-refresh`
 - next planned slice after the current one:
-  - refreshed-branch live proof on the upgraded operator host, now rerun after
-    the marker-aware low-risk scope fix for seeded validation issues
+  - provider-resilience follow-up on top of refreshed-branch proof issue `#87`,
+    then rerun that proof once the build path is not blocked by provider `400`

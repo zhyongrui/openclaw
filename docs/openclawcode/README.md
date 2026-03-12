@@ -223,6 +223,12 @@ loop with:
     `operator-doc-note` issues like `#86` do not drift into
     `workflow-core`/`needs-human-review` classification just because the prose
     mentions queue or runtime behavior
+  - refreshed-branch live proof issue `#87` now confirms that fix in a real
+    run artifact:
+    - suitability reached `auto-run`
+    - classification stayed `command-layer`
+    - the run still failed later with provider `HTTP 400`, so the remaining
+      blocker there is provider stability rather than suitability drift
   - operator docs now include a refreshed-branch promotion checklist and
     copied-root teardown guidance
   - the next refreshed-branch ops slice is a real low-risk live proof on the

@@ -1221,11 +1221,14 @@ The next implementation slice should follow this order:
    an explicit marker-aware scope short-circuit on the refreshed branch
 4. use the new provider-pause queue messaging to distinguish "queued behind a
    pause" from "queue is stalled" during that live proof
-5. keep docs/operator issue `#60` open as the standing docs-side proof target
+5. use refreshed-branch proof issue `#87` as the standing rerun target once
+   provider stability improves; the classification side of that proof is now
+   green, while the remaining failure is provider `HTTP 400`
+6. keep docs/operator issue `#60` open as the standing docs-side proof target
    only until the copied-root teardown guidance is judged complete
-6. promote only after the refreshed branch can pass both strict setup checks
+7. promote only after the refreshed branch can pass both strict setup checks
    and a real low-risk live proof on the target runtime
-7. after promotion, rerun the same strict check and one chat-visible proof on
+8. after promotion, rerun the same strict check and one chat-visible proof on
    `main`
 
 ## Test Strategy
