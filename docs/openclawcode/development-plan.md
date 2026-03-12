@@ -126,11 +126,12 @@ turning the working loop into a cleanly operable product:
   edit bridge bug:
   - host and sandbox edit recovery both verify alias-based edit calls using
     `file_path`, `old_string`, and `new_string`
-  - `OpenClawAgentRunner` now applies a top-level runtime tool deny for
-    `edit` and `write`, keeping live issue runs on `read`, `exec`, and
-    `process`
-- the next engineering priority is now root-cause repair of the sandbox edit
-  bridge so the temporary runner-level tool deny can be removed
+  - `OpenClawAgentRunner` now keeps the default runtime tool deny focused on
+    `write` while sandbox `edit` stays enabled by default after live proof on
+    `sync/upstream-2026-03-12`
+- the next engineering priority is now staged `write` rollout plus cleanup for
+  sandbox directory reads that still emit boundary warnings during live issue
+  runs
 - packaging and installation are now documented locally, but still need more
   proof under a fresh operator environment
 - policy docs lag the implemented guarded auto-merge behavior and need to be
@@ -153,8 +154,8 @@ The short-term objective is:
   runner drift behind the latest integration work
 - keep the now-proven merged-PR path stable on refreshed `main` while removing
   temporary builder mitigations
-- repair the underlying sandbox edit bridge so `openclawcode` no longer needs
-  a runner-level `edit`/`write` deny
+- keep the repaired sandbox edit path stable while shrinking the remaining
+  runner-level filesystem deny down to `write` only
 - align the roadmap and setup docs with the behavior already proved in code
 
 ### Current Checkpoint
@@ -189,8 +190,9 @@ The current repository state already supports:
   - two failed reruns persisted cleanly as `failed` artifacts
   - recovery after runtime tool hardening
   - `PR #46` published, verified, auto-merged, and the issue closed
-- runner-level tool hardening that removes `edit` and `write` from live
-  `openclawcode` agent sessions until the sandbox edit bridge is repaired
+- runner-level tool hardening that originally removed `edit` and `write` from
+  live `openclawcode` agent sessions while the sandbox edit bridge was being
+  repaired
 - sandbox edit recovery that now:
   - verifies the real host-side worktree file instead of trusting the bridge
     readback alone
@@ -206,10 +208,12 @@ The current repository state already supports:
   rewritten sandbox edit path keeps large files visible through both
   `/workspace` and the absolute worktree mount shape used in live issue runs
 - a staged runner re-enable switch:
-  - default still denies `edit` and `write`
-  - `OPENCLAWCODE_ENABLE_FS_TOOLS=edit` allows a narrow live edit-only replay
-  - `OPENCLAWCODE_ENABLE_FS_TOOLS=edit,write` allows a fuller live fs-tool
-    replay without changing the default safe path
+  - default now allows `edit` after live proof on
+    `sync/upstream-2026-03-12`
+  - `OPENCLAWCODE_ENABLE_FS_TOOLS=write` allows the remaining full fs-tool
+    replay
+  - `OPENCLAWCODE_ENABLE_FS_TOOLS=edit,write` remains accepted as a
+    backward-compatible synonym for the same full fs-tool replay
 - a refreshed upstream integration branch, `sync/upstream-2026-03-12`, that
   cleanly merges `upstream/main` through `841ee24340` and still passes:
   - `pnpm build`
@@ -227,6 +231,12 @@ The current repository state already supports:
   through:
   - `src/agents/sandbox/fs-bridge.e2e-docker.test.ts`
   - `src/agents/pi-tools.read.sandbox-edit.e2e-docker.test.ts`
+- a follow-up sandbox edit verification repair that now compares the mounted
+  file contents against the exact expected post-edit text instead of requiring
+  `oldText` to disappear as a raw substring
+- a targeted sandbox edit recovery regression that proves exact replacements
+  still verify successfully when the inserted block embeds the old block as a
+  prefix
 
 The last local blockers found while preparing the live replay are now closed:
 
@@ -238,9 +248,19 @@ The last local blockers found while preparing the live replay are now closed:
 - local reconciliation can recover a tracked pull request number and URL from
   older run artifacts when the newest rerun record missed that metadata
 
-This means the next iteration can shift from local bridge/root-cause hunting to
-one final sync-branch live rerun after correcting `PR #47`'s base branch, then
-resume staged runner re-enable cleanup and broader operator hardening.
+The sync-branch live rerun gap is now closed:
+
+- `PR #47` was retargeted to `sync/upstream-2026-03-12` and collapsed back to
+  the expected one-file README diff
+- run `zhyongrui-openclawcode-36-1773282645164` reached
+  `ready-for-human-review` with deterministic sandbox `edit` succeeding end to
+  end under `OPENCLAWCODE_ENABLE_FS_TOOLS=edit`
+- run `zhyongrui-openclawcode-36-1773282908481` reached
+  `ready-for-human-review` again after `edit` was re-enabled by default in
+  `OpenClawAgentRunner`
+
+This means the next iteration can shift from edit-path repair to sandbox
+directory-read cleanup, staged `write` rollout, and broader operator hardening.
 
 ### Near-Term Delivery Streams
 

@@ -93,15 +93,18 @@ loop with:
   - replaces the sandbox-side edit write path with a deterministic bridge-backed
     exact-replace implementation instead of trusting the upstream sandbox edit
     mutation path
-  - temporarily denies `edit` and `write` in `OpenClawAgentRunner` sessions so
-    live issue runs stay on `read`/`exec`/`process` until the underlying
-    sandbox edit bridge is repaired
+  - verifies deterministic edits against the expected final file contents so
+    exact replacements no longer false-negative when the inserted block embeds
+    the old block as a prefix
+  - keeps the default `OpenClawAgentRunner` runtime deny focused on `write`
+    while the remaining filesystem-tool rollout continues
 - a staged runner re-enable switch for live validation:
-  - default behavior still denies `edit` and `write`
-  - `OPENCLAWCODE_ENABLE_FS_TOOLS=edit` removes only the runner-added `edit`
-    deny
-  - `OPENCLAWCODE_ENABLE_FS_TOOLS=edit,write` removes both runner-added fs
-    denies for controlled live validation
+  - default behavior now allows `edit` after live proof on
+    `sync/upstream-2026-03-12`
+  - `OPENCLAWCODE_ENABLE_FS_TOOLS=write` removes the remaining runner-added
+    `write` deny for controlled live validation
+  - `OPENCLAWCODE_ENABLE_FS_TOOLS=edit,write` remains accepted as a
+    backward-compatible synonym for the same full fs-tool replay
 - a refreshed upstream integration branch, `sync/upstream-2026-03-12`, that now
   merges `upstream/main` through `841ee24340` and still passes:
   - `pnpm build`
@@ -112,21 +115,29 @@ loop with:
 - a second docker-gated linked-worktree regression that proves the rewritten
   sandbox edit path keeps large mounted files non-empty and visible through
   both `/workspace` and the absolute worktree mount used by live issue runs
+- two fresh sync-branch live proofs on issue `#36`:
+  - `zhyongrui-openclawcode-36-1773282645164` reached
+    `ready-for-human-review` with deterministic sandbox `edit` succeeding
+    end to end under `OPENCLAWCODE_ENABLE_FS_TOOLS=edit`
+  - `zhyongrui-openclawcode-36-1773282908481` reached
+    `ready-for-human-review` again after `edit` was re-enabled by default in
+    `OpenClawAgentRunner`
 - a fresh direct live rerun of issue `#44` on refreshed `main` that completed
   as a no-op `ready-for-human-review` run instead of reproducing the earlier
   stalled-planning corruption path
 - a fresh live merged-PR validation on refreshed `main` through issue `#45`,
   including:
   - two failed reruns that were captured as persisted `failed` artifacts
-  - recovery through the runner-level `edit`/`write` deny mitigation
+  - recovery through the earlier runner-level `edit`/`write` deny mitigation
   - real PR publication to `PR #46`
   - automatic verification, merge, and issue closure on the live route
 
 Still pending for a fuller product loop:
 
-- one final sync-branch live rerun after correcting `PR #47`'s base branch, so
-  the deterministic sandbox edit path is proved end to end without falling back
-  to `exec`, followed by removal of the temporary `edit`/`write` deny
+- a fix for sandbox directory reads such as `/workspace/docs/openclawcode`,
+  which still emit boundary-check warnings during live issue runs
+- staged validation of the remaining runner-level `write` deny before broader
+  filesystem-tool rollout
 - stronger suitability/risk gating ahead of autonomous execution
 - proof under a fresh operator environment using docs and scripts only
 - broader policy-doc polish
