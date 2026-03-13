@@ -50,6 +50,8 @@ The program is not done until all of these are true:
 7. the refreshed upstream branch can be promoted back to `main` with a live
    proof and a rollback path
 8. the long-lived `main` operator baseline can be trusted as the real demo path
+9. provider or model instability is diagnosable from persisted workflow
+   artifacts instead of only raw CLI stderr
 
 ## Ordered Endgame Backlog
 
@@ -59,8 +61,13 @@ product. Each item should be consumed as one or more narrow slices.
 1. finish refreshed-branch provider resilience
    - keep issue-worktree builder and verifier runs inside the real prompt
      budget of the current model
+   - persist provider/model prompt diagnostics into workflow failure notes so
+     `/occode-status`, `/occode-inbox`, and saved run artifacts expose the
+     same failure signal without raw log digging
    - rerun or replace issue `#87` until a refreshed-branch low-risk proof can
      merge again
+   - if raw prompt trimming stops moving the live failure, shift to provider or
+     model fallback behavior instead of continuing local prompt surgery
    - keep recording the exact remaining live failure signal after each repair
 2. promote the refreshed branch back to `main`
    - require a green strict setup check, one real low-risk live proof, and a
@@ -141,6 +148,14 @@ As of 2026-03-12:
   - live `systemPromptReport.skills.promptChars` dropped from `4982` to `1245`
   - the remaining blocker is still provider `HTTP 400`, which now points more
     strongly at provider or model behavior than local prompt inflation
+- the next provider-resilience slice is now defined more narrowly:
+  - provider/model prompt diagnostics must persist into workflow failure notes
+    and chat-visible status snapshots
+  - the next live rerun on issue `#87` should prove those diagnostics are
+    visible without opening raw builder stdout
+  - if the failure remains unchanged after that proof, the next repair should
+    move to provider or model fallback behavior instead of more prompt-budget
+    trimming
 
 ## Execution Loop
 
@@ -302,11 +317,14 @@ Goal:
 
 Remaining work:
 
+- persist provider/model prompt diagnostics into workflow notes and chat status
 - keep one narrow provider or model follow-up ready now that prompt pressure is
   materially lower
 - explicit queue-start or queue-resume feedback after a pause window clears
 - another real rerun or low-risk proof on the refreshed branch now that the
   oversized bootstrap injection warning is gone
+- prepare a provider or model fallback plan if diagnostics prove the failure is
+  no longer driven by local prompt budget
 
 ### Track 5: Review And Rerun Loop
 
@@ -364,29 +382,32 @@ Preferred near-to-mid-term order:
 
 1. rerun refreshed-branch proof issue `#87` now that queued reruns can explain
    whether they are waiting behind an active pause or probing recovery after a
-   cleared pause
-2. if `#87` is still noisy, mint the next equivalent low-risk validation issue
-   and keep the same provider-aware rerun path
-3. run one more low-risk refreshed-branch live proof after that rerun-path
-   improvement lands
-4. promote the refreshed sync branch back to `main`
-5. restart the long-lived operator on promoted `main`
-6. rerun a low-risk Feishu proof on promoted `main`
-7. close or refresh the remaining docs/operator validation issue `#60`
-8. finish the current command-layer JSON count series if any non-duplicative
+   cleared pause, and confirm the new persisted diagnostics are visible in the
+   failed note itself
+2. if `#87` is still noisy, switch the next slice to provider or model
+   fallback behavior instead of more prompt trimming
+3. if needed, mint the next equivalent low-risk validation issue and keep the
+   same provider-aware rerun path
+4. run one more low-risk refreshed-branch live proof after that provider slice
+   lands
+5. promote the refreshed sync branch back to `main`
+6. restart the long-lived operator on promoted `main`
+7. rerun a low-risk Feishu proof on promoted `main`
+8. close or refresh the remaining docs/operator validation issue `#60`
+9. finish the current command-layer JSON count series if any non-duplicative
    fields remain
-9. write the first explicit JSON contract reference doc for `openclaw code run --json`
-10. add preview and edit steps for chat-native issue drafts before creation
-11. add clarification loops for ambiguous chat-native requests
-12. add explicit operator overrides for suitability-gated work
-13. tighten auto-merge eligibility into a documented narrow policy
-14. add rollback instructions for failed refreshed-branch promotions
-15. record recurring upstream merge conflict hotspots in the sync policy docs
-16. run another real PR-review-rerun proof after the next promotion
-17. add richer rerun lineage and reason summaries to operator surfaces
-18. add another copied-root fresh-operator live proof after the next major sync
-19. add a chat-native "request -> issue draft preview -> approve -> run" proof
-20. keep seeding and consuming low-risk validation issues so the proof pool
+10. write the first explicit JSON contract reference doc for `openclaw code run --json`
+11. add preview and edit steps for chat-native issue drafts before creation
+12. add clarification loops for ambiguous chat-native requests
+13. add explicit operator overrides for suitability-gated work
+14. tighten auto-merge eligibility into a documented narrow policy
+15. add rollback instructions for failed refreshed-branch promotions
+16. record recurring upstream merge conflict hotspots in the sync policy docs
+17. run another real PR-review-rerun proof after the next promotion
+18. add richer rerun lineage and reason summaries to operator surfaces
+19. add another copied-root fresh-operator live proof after the next major sync
+20. add a chat-native "request -> issue draft preview -> approve -> run" proof
+21. keep seeding and consuming low-risk validation issues so the proof pool
     never goes empty
 
 ## Session Handoff
@@ -403,5 +424,7 @@ As of this revision:
 - active feature branch:
   - `sync/upstream-2026-03-12-refresh`
 - next planned slice after the current one:
-  - rerun refreshed-branch proof issue `#87` with the new provider-aware rerun
-    summary path, then promote if the live proof is finally clean
+  - rerun refreshed-branch proof issue `#87` with persisted provider/model
+    diagnostics visible directly in the failed note
+  - if that proof still fails with the same compact diagnostics, move the next
+    slice to provider or model fallback instead of more prompt trimming

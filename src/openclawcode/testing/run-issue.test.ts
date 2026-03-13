@@ -18,7 +18,7 @@ import type { GitHubIssueClient, PullRequestRef, RepoRef } from "../github/index
 import { FileSystemWorkflowRunStore } from "../persistence/index.js";
 import type { Builder, Verifier } from "../roles/index.js";
 import { HeuristicPlanner } from "../roles/index.js";
-import type { ShellRunner } from "../runtime/index.js";
+import { AgentRunFailureError, type ShellRunner } from "../runtime/index.js";
 import type { WorkflowWorkspaceManager } from "../worktree/index.js";
 
 function createSequenceNow(startAt = Date.UTC(2026, 2, 9, 13, 0, 0)): () => string {
@@ -928,6 +928,72 @@ describe("runIssueWorkflow", () => {
       expect(savedRun?.history).toContain("Build started");
       expect(savedRun?.history.at(-1)).toContain(
         "Build failed: Builder workspace integrity check failed: existing tracked file(s) became empty in the isolated worktree.",
+      );
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("persists provider diagnostics in the build failure note when the builder surfaces them", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-87",
+        worktreePath: "/repo/.openclawcode/worktrees/run-87",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+
+      await expect(
+        runIssueWorkflow(
+          {
+            owner: "zhyongrui",
+            repo: "openclawcode",
+            issueNumber: 87,
+            repoRoot: "/repo",
+            stateDir,
+            baseBranch: "main",
+          },
+          {
+            github: new FakeGitHubClient(),
+            planner: new HeuristicPlanner(),
+            builder: new FailingBuilder(
+              new AgentRunFailureError("HTTP 400: Internal server error", {
+                provider: "crs",
+                model: "gpt-5.4",
+                systemPromptChars: 8629,
+                skillsPromptChars: 1245,
+                toolSchemaChars: 3030,
+                toolCount: 4,
+                skillCount: 1,
+                injectedWorkspaceFileCount: 0,
+                lastCallUsageTotal: 0,
+                bootstrapWarningShown: false,
+              }),
+            ),
+            verifier: new FakeVerifier({
+              decision: "approve-for-human-review",
+              summary: "Looks good.",
+              findings: [],
+              missingCoverage: [],
+              followUps: [],
+            }),
+            store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+            worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+            shellRunner: new NoopShellRunner(),
+            now: createSequenceNow(),
+          },
+        ),
+      ).rejects.toThrow("HTTP 400: Internal server error");
+
+      const store = new FileSystemWorkflowRunStore(path.join(stateDir, "runs"));
+      const [savedRun] = await store.list();
+
+      expect(savedRun?.stage).toBe("failed");
+      expect(savedRun?.history.at(-1)).toBe(
+        "Build failed: HTTP 400: Internal server error (model=crs/gpt-5.4, prompt=8629, skillsPrompt=1245, schema=3030, tools=4, skills=1, files=0, usage=0, bootstrap=clean)",
       );
     } finally {
       await fs.rm(stateDir, { recursive: true, force: true });

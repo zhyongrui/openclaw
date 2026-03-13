@@ -99,6 +99,13 @@ loop with:
   - provider `HTTP 400: Internal server error` still remained after that drop,
     which makes the next slice provider/model-focused rather than prompt-budget
     focused
+- the next provider-resilience slice is now in place in code too:
+  - when the embedded runner surfaces `stopReason=error`, the workflow can now
+    preserve compact provider/model diagnostics with the failed note itself
+  - those compact diagnostics include provider/model id, prompt footprint,
+    tool-schema footprint, usage total, and bootstrap-warning state
+  - the next live rerun on refreshed-branch issue `#87` should therefore make
+    the remaining provider signal visible without opening raw builder stdout
 - operator-facing provider-pause messaging is now visible beyond
   `/occode-inbox` too:
   - `/occode-start` and `/occode-rerun` now tell the operator when work was

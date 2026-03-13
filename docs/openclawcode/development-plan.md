@@ -322,6 +322,12 @@ turning the working loop into a cleanly operable product:
   - provider `HTTP 400: Internal server error` still remained after that drop,
     so the next slice should move from prompt-budget trimming toward
     provider/model-specific diagnostics or fallback behavior
+- a provider-resilience follow-up is now defined around persisted failure
+  diagnostics instead of more blind reruns:
+  - compact provider/model/system-prompt diagnostics should live in the failed
+    workflow note itself
+  - the next rerun on refreshed-branch issue `#87` should make that compact
+    diagnostic line visible from the saved run artifact and chat status
 - policy docs are now in sync with the live-tested guarded auto-merge behavior
 - the next engineering priority is now consume-and-reseed workflow plus
   broader chat-native intake behavior
@@ -355,6 +361,8 @@ The short-term objective is:
   provider-side build failures after bootstrap-lightweight context and
   coding-only issue-worktree prompt trimming have already removed the obvious
   local prompt inflation signals
+- persist provider/model diagnostics in failed workflow notes before choosing
+  the next fallback behavior
 - keep the new openclawcode-worktree retry clamp stable so the outer workflow
   owns provider backoff instead of the embedded SDK
 - keep provider-pause activation observable and predictable after fresh
@@ -1256,15 +1264,17 @@ The next implementation slice should follow this order:
 2. keep direct rerun proof issue `#87` as the standing refreshed-branch probe
    until the post-trim failure signal is no longer just provider
    `HTTP 400`
-3. switch the next slice from prompt trimming to provider/model diagnostics or
-   fallback behavior now that live prompt size has already dropped sharply
+3. persist compact provider/model/system-prompt diagnostics into the failed
+   workflow note so the rerun can be interpreted without raw stdout inspection
 4. rerun `#87` again after each provider-resilience slice and record the new
    live signal rather than guessing
-5. promote only after the refreshed branch can pass both strict setup checks
+5. if that rerun still fails with the same compact diagnostic line, switch the
+   next slice from prompt trimming to provider/model fallback behavior
+6. promote only after the refreshed branch can pass both strict setup checks
    and a real low-risk live proof on the target runtime
-6. after promotion, rerun the same strict check and one chat-visible proof on
+7. after promotion, rerun the same strict check and one chat-visible proof on
    `main`
-7. keep docs/operator issue `#60` open as the standing docs-side proof target
+8. keep docs/operator issue `#60` open as the standing docs-side proof target
    only until the copied-root teardown guidance is judged complete
 
 ## Test Strategy

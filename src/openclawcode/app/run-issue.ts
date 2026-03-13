@@ -15,7 +15,11 @@ import {
   type Planner,
   type Verifier,
 } from "../roles/index.js";
-import type { ShellRunner } from "../runtime/index.js";
+import {
+  AgentRunFailureError,
+  formatAgentRunFailureDiagnostics,
+  type ShellRunner,
+} from "../runtime/index.js";
 import { transitionRun, type TimestampFactory } from "../workflow/index.js";
 import type { WorkflowWorkspaceManager } from "../worktree/index.js";
 
@@ -69,7 +73,14 @@ function trimSingleLine(value: string | undefined): string | undefined {
 
 function formatWorkflowFailureNote(stageLabel: string, error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  return `${stageLabel} failed: ${trimSingleLine(message) ?? `${stageLabel} failed.`}`;
+  const summary = trimSingleLine(message) ?? `${stageLabel} failed.`;
+  const diagnostics =
+    error instanceof AgentRunFailureError
+      ? formatAgentRunFailureDiagnostics(error.diagnostics)
+      : undefined;
+  return diagnostics
+    ? `${stageLabel} failed: ${summary} (${diagnostics})`
+    : `${stageLabel} failed: ${summary}`;
 }
 
 function attachRerunContext(

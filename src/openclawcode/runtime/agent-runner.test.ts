@@ -164,19 +164,80 @@ describe("OpenClawAgentRunner", () => {
   it("throws when the agent command ends with stopReason=error", async () => {
     mocks.agentCommand.mockResolvedValueOnce({
       payloads: [{ text: "HTTP 400: Internal server error" }],
-      meta: { stopReason: "error" },
+      meta: {
+        stopReason: "error",
+        agentMeta: {
+          provider: "crs",
+          model: "gpt-5.4",
+          lastCallUsage: {
+            total: 0,
+          },
+        },
+        systemPromptReport: {
+          source: "run",
+          generatedAt: 1,
+          provider: "crs",
+          model: "gpt-5.4",
+          systemPrompt: {
+            chars: 8629,
+            projectContextChars: 1000,
+            nonProjectContextChars: 7629,
+          },
+          injectedWorkspaceFiles: [],
+          skills: {
+            promptChars: 1245,
+            entries: [{ name: "coding-agent", blockChars: 876 }],
+          },
+          tools: {
+            listChars: 400,
+            schemaChars: 3030,
+            entries: [
+              { name: "read", summaryChars: 100, schemaChars: 200 },
+              { name: "edit", summaryChars: 100, schemaChars: 300 },
+              { name: "exec", summaryChars: 100, schemaChars: 400 },
+              { name: "process", summaryChars: 100, schemaChars: 500 },
+            ],
+          },
+          bootstrapTruncation: {
+            warningShown: false,
+          },
+        },
+      },
     });
-    const { OpenClawAgentRunner } = await import("./agent-runner.js");
+    const { AgentRunFailureError, OpenClawAgentRunner, formatAgentRunFailureDiagnostics } =
+      await import("./agent-runner.js");
 
     const runner = new OpenClawAgentRunner();
 
-    await expect(
-      runner.run({
+    let caught: unknown;
+    try {
+      await runner.run({
         prompt: "Implement the issue",
         workspaceDir: "/tmp/openclawcode-worktree",
         agentId: "main",
-      }),
-    ).rejects.toThrow("HTTP 400: Internal server error");
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AgentRunFailureError);
+    expect((caught as Error | undefined)?.message).toBe("HTTP 400: Internal server error");
+    expect((caught as AgentRunFailureError).diagnostics).toMatchObject({
+      stopReason: "error",
+      provider: "crs",
+      model: "gpt-5.4",
+      systemPromptChars: 8629,
+      skillsPromptChars: 1245,
+      toolSchemaChars: 3030,
+      toolCount: 4,
+      skillCount: 1,
+      injectedWorkspaceFileCount: 0,
+      bootstrapWarningShown: false,
+      lastCallUsageTotal: 0,
+    });
+    expect(formatAgentRunFailureDiagnostics((caught as AgentRunFailureError).diagnostics)).toBe(
+      "model=crs/gpt-5.4, prompt=8629, skillsPrompt=1245, schema=3030, tools=4, skills=1, files=0, usage=0, bootstrap=clean",
+    );
 
     expect(mocks.clearRuntimeConfigSnapshot).toHaveBeenCalledTimes(1);
   });

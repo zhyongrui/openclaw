@@ -11,6 +11,7 @@ import {
   setRuntimeConfigSnapshot,
 } from "../../config/config.js";
 import type { OpenClawConfig } from "../../config/config.js";
+import type { SessionSystemPromptReport } from "../../config/sessions/types.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
 import { createNonExitingRuntime } from "../../runtime.js";
 
@@ -30,6 +31,31 @@ export interface AgentRunResult {
 
 export interface AgentRunner {
   run(request: AgentRunRequest): Promise<AgentRunResult>;
+}
+
+export interface AgentRunFailureDiagnostics {
+  stopReason?: string;
+  provider?: string;
+  model?: string;
+  systemPromptChars?: number;
+  skillsPromptChars?: number;
+  toolSchemaChars?: number;
+  toolCount?: number;
+  skillCount?: number;
+  injectedWorkspaceFileCount?: number;
+  bootstrapWarningShown?: boolean;
+  lastCallUsageTotal?: number;
+}
+
+export class AgentRunFailureError extends Error {
+  constructor(
+    message: string,
+    readonly diagnostics: AgentRunFailureDiagnostics,
+    readonly raw?: unknown,
+  ) {
+    super(message);
+    this.name = "AgentRunFailureError";
+  }
 }
 
 const OPENCLAWCODE_DEFAULT_DENIED_TOOLS = ["write"] as const;
@@ -100,13 +126,119 @@ function extractStopReason(raw: unknown): string | undefined {
   return typeof stopReason === "string" && stopReason.trim() ? stopReason.trim() : undefined;
 }
 
+function extractSystemPromptReport(raw: unknown): SessionSystemPromptReport | undefined {
+  const report = (raw as { meta?: { systemPromptReport?: unknown } } | null | undefined)?.meta
+    ?.systemPromptReport;
+  return report && typeof report === "object" ? (report as SessionSystemPromptReport) : undefined;
+}
+
+function extractAgentRunFailureDiagnostics(
+  raw: unknown,
+  stopReason?: string,
+): AgentRunFailureDiagnostics {
+  const meta = (
+    raw as
+      | {
+          meta?: {
+            agentMeta?: {
+              provider?: unknown;
+              model?: unknown;
+              lastCallUsage?: { total?: unknown };
+            };
+            systemPromptReport?: unknown;
+          };
+        }
+      | null
+      | undefined
+  )?.meta;
+  const report = extractSystemPromptReport(raw);
+  const provider =
+    typeof meta?.agentMeta?.provider === "string"
+      ? meta.agentMeta.provider
+      : typeof report?.provider === "string"
+        ? report.provider
+        : undefined;
+  const model =
+    typeof meta?.agentMeta?.model === "string"
+      ? meta.agentMeta.model
+      : typeof report?.model === "string"
+        ? report.model
+        : undefined;
+  const lastCallUsageTotal =
+    typeof meta?.agentMeta?.lastCallUsage?.total === "number"
+      ? meta.agentMeta.lastCallUsage.total
+      : undefined;
+
+  return {
+    stopReason,
+    provider,
+    model,
+    systemPromptChars:
+      typeof report?.systemPrompt?.chars === "number" ? report.systemPrompt.chars : undefined,
+    skillsPromptChars:
+      typeof report?.skills?.promptChars === "number" ? report.skills.promptChars : undefined,
+    toolSchemaChars:
+      typeof report?.tools?.schemaChars === "number" ? report.tools.schemaChars : undefined,
+    toolCount: Array.isArray(report?.tools?.entries) ? report.tools.entries.length : undefined,
+    skillCount: Array.isArray(report?.skills?.entries) ? report.skills.entries.length : undefined,
+    injectedWorkspaceFileCount: Array.isArray(report?.injectedWorkspaceFiles)
+      ? report.injectedWorkspaceFiles.length
+      : undefined,
+    bootstrapWarningShown:
+      typeof report?.bootstrapTruncation?.warningShown === "boolean"
+        ? report.bootstrapTruncation.warningShown
+        : undefined,
+    lastCallUsageTotal,
+  };
+}
+
+export function formatAgentRunFailureDiagnostics(
+  diagnostics: AgentRunFailureDiagnostics | undefined,
+): string | undefined {
+  if (!diagnostics) {
+    return undefined;
+  }
+
+  const modelId =
+    diagnostics.provider && diagnostics.model
+      ? `${diagnostics.provider}/${diagnostics.model}`
+      : (diagnostics.provider ?? diagnostics.model);
+  const parts = [
+    modelId ? `model=${modelId}` : undefined,
+    typeof diagnostics.systemPromptChars === "number"
+      ? `prompt=${diagnostics.systemPromptChars}`
+      : undefined,
+    typeof diagnostics.skillsPromptChars === "number"
+      ? `skillsPrompt=${diagnostics.skillsPromptChars}`
+      : undefined,
+    typeof diagnostics.toolSchemaChars === "number"
+      ? `schema=${diagnostics.toolSchemaChars}`
+      : undefined,
+    typeof diagnostics.toolCount === "number" ? `tools=${diagnostics.toolCount}` : undefined,
+    typeof diagnostics.skillCount === "number" ? `skills=${diagnostics.skillCount}` : undefined,
+    typeof diagnostics.injectedWorkspaceFileCount === "number"
+      ? `files=${diagnostics.injectedWorkspaceFileCount}`
+      : undefined,
+    typeof diagnostics.lastCallUsageTotal === "number"
+      ? `usage=${diagnostics.lastCallUsageTotal}`
+      : undefined,
+    diagnostics.bootstrapWarningShown === true
+      ? "bootstrap=warned"
+      : diagnostics.bootstrapWarningShown === false
+        ? "bootstrap=clean"
+        : undefined,
+  ].filter((entry): entry is string => Boolean(entry));
+
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
 function assertSuccessfulAgentRun(raw: unknown): void {
   const stopReason = extractStopReason(raw);
   if (stopReason !== "error") {
     return;
   }
   const message = extractText(raw) || "Agent run failed.";
-  throw new Error(message);
+  throw new AgentRunFailureError(message, extractAgentRunFailureDiagnostics(raw, stopReason), raw);
 }
 
 function forceSessionScopedSandboxForAgent(
@@ -177,6 +309,8 @@ export const __testing = {
   forceSessionScopedSandboxForAgent,
   resolveOpenClawCodeDeniedTools,
   extractStopReason,
+  extractAgentRunFailureDiagnostics,
+  formatAgentRunFailureDiagnostics,
   assertSuccessfulAgentRun,
   resolveOpenClawCodeBootstrapContextMode,
   resolveOpenClawCodeWorktreeDeniedTools,
