@@ -265,8 +265,19 @@ Useful flags:
 Use `--strict` when you want warnings to fail the check.
 Use `--skip-route-probe` only during partial setup work when the local route is
 intentionally unavailable.
-Use `--json` when another script, CI job, or external operator host needs a
-machine-readable readiness report instead of human-readable shell lines.
+
+Additional operator notes:
+
+- if your default shell `node` is older than the CLI startup floor, run the
+  health check with:
+  - `OPENCLAWCODE_SETUP_NODE_BIN=/path/to/node>=22.16.0 ./scripts/openclawcode-setup-check.sh --strict`
+- the setup check now bounds direct CLI probes such as `models list --json` to
+  avoid hanging forever on a broken host
+- when the configured Node runtime is already below the CLI startup floor, the
+  setup check now reports that failure and skips the model-inventory probe
+  instead of trying to run the built CLI with a known-bad runtime
+  Use `--json` when another script, CI job, or external operator host needs a
+  machine-readable readiness report instead of human-readable shell lines.
 
 The JSON output now also includes:
 

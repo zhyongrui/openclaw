@@ -604,7 +604,13 @@ As of this revision:
     appears
   - direct no-lazy diagnostics through
     `OPENCLAW_DISABLE_LAZY_SUBCOMMANDS=1` now work against `dist/index.js`
+  - `scripts/openclawcode-setup-check.sh` now supports
+    `OPENCLAWCODE_SETUP_NODE_BIN` and bounds direct CLI probes so setup
+    diagnostics no longer hang indefinitely on a bad runtime
 - next planned slice after the current one:
+  - debug why the real `~/.openclaw` operator environment can still stall
+    before the listener appears, even though the generic built entrypoint is
+    healthy on `main`
   - restart the long-lived Feishu operator on the repaired build
   - run one more low-risk merged proof, one no-op completion proof, and one
     blocked or escalated proof on `main`

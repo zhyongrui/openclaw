@@ -15,6 +15,7 @@ readonly DEFAULT_TUNNEL_PID_FILE="/tmp/openclawcode-webhook-tunnel.pid"
 readonly DEFAULT_RETRY_ATTEMPTS="${OPENCLAWCODE_SETUP_RETRY_ATTEMPTS:-5}"
 readonly DEFAULT_RETRY_DELAY_SECONDS="${OPENCLAWCODE_SETUP_RETRY_DELAY_SECONDS:-1}"
 readonly DEFAULT_MINIMUM_NODE_VERSION="22.16.0"
+readonly DEFAULT_CLI_PROBE_TIMEOUT_SECONDS="${OPENCLAWCODE_SETUP_CLI_PROBE_TIMEOUT_SECONDS:-10}"
 
 REPO_ROOT="${OPENCLAWCODE_SETUP_REPO_ROOT:-$DEFAULT_REPO_ROOT}"
 OPERATOR_ROOT="${OPENCLAWCODE_SETUP_OPERATOR_ROOT:-${OPENCLAWCODE_OPERATOR_ROOT:-$DEFAULT_OPERATOR_ROOT}}"
@@ -29,6 +30,8 @@ GITHUB_HOOK_ID=""
 GITHUB_HOOK_EVENTS="$DEFAULT_GITHUB_HOOK_EVENTS"
 TUNNEL_LOG_FILE="${OPENCLAWCODE_TUNNEL_LOG_FILE:-$DEFAULT_TUNNEL_LOG_FILE}"
 TUNNEL_PID_FILE="${OPENCLAWCODE_TUNNEL_PID_FILE:-$DEFAULT_TUNNEL_PID_FILE}"
+NODE_BIN="${OPENCLAWCODE_SETUP_NODE_BIN:-node}"
+CLI_PROBE_TIMEOUT_SECONDS="$DEFAULT_CLI_PROBE_TIMEOUT_SECONDS"
 
 STRICT_MODE=0
 SKIP_ROUTE_PROBE=0
@@ -41,6 +44,7 @@ LAST_RETRY_ERROR=""
 RESULTS_FILE="${TMPDIR:-/tmp}/openclawcode-setup-check-results.$$"
 MODEL_INVENTORY_JSON='{"available":0,"keys":[],"configuredFallbacks":[],"fallbackReady":false}'
 READINESS_JSON='{"basic":false,"strict":false,"lowRiskProofReady":false,"fallbackProofReady":false,"promotionReady":false,"nextAction":"fix-failing-checks"}'
+NODE_VERSION_FLOOR_OK=0
 
 : >"$RESULTS_FILE"
 
@@ -79,6 +83,8 @@ Environment overrides:
   OPENCLAWCODE_SETUP_GITHUB_HOOK_EVENTS
   OPENCLAWCODE_SETUP_RETRY_ATTEMPTS
   OPENCLAWCODE_SETUP_RETRY_DELAY_SECONDS
+  OPENCLAWCODE_SETUP_NODE_BIN
+  OPENCLAWCODE_SETUP_CLI_PROBE_TIMEOUT_SECONDS
   OPENCLAWCODE_TUNNEL_LOG_FILE
   OPENCLAWCODE_TUNNEL_PID_FILE
   OPENCLAWCODE_OPERATOR_ROOT
@@ -285,8 +291,9 @@ PY
   fi
 
   local current_version_raw=""
-  if ! current_version_raw="$(node --version 2>/dev/null)"; then
-    fail "unable to read local Node version with node --version"
+  if ! current_version_raw="$("$NODE_BIN" --version 2>/dev/null)"; then
+    fail "unable to read local Node version with ${NODE_BIN} --version"
+    NODE_VERSION_FLOOR_OK=0
     return
   fi
 
@@ -308,10 +315,20 @@ required = parse(sys.argv[2])
 raise SystemExit(0 if current >= required else 1)
 PY
   then
-    pass "local Node ${current_version} satisfies CLI startup floor ${required_version} (${source_label})"
+    pass "local Node ${current_version} satisfies CLI startup floor ${required_version} (${source_label}) via ${NODE_BIN}"
+    NODE_VERSION_FLOOR_OK=1
   else
-    fail "local Node ${current_version} is below CLI startup floor ${required_version} (${source_label})"
+    fail "local Node ${current_version} is below CLI startup floor ${required_version} (${source_label}) via ${NODE_BIN}"
+    NODE_VERSION_FLOOR_OK=0
   fi
+}
+
+run_cli_probe() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout --signal=TERM "${CLI_PROBE_TIMEOUT_SECONDS}s" "$NODE_BIN" "$@"
+    return $?
+  fi
+  "$NODE_BIN" "$@"
 }
 
 check_config_file() {
@@ -560,9 +577,19 @@ check_model_inventory() {
     return
   fi
 
+  if [[ "$NODE_VERSION_FLOOR_OK" -ne 1 ]]; then
+    warn "skipping model inventory with ${NODE_BIN} because the configured Node runtime is below the CLI startup floor"
+    return
+  fi
+
   local inventory_raw
-  if ! inventory_raw="$(node "${REPO_ROOT}/dist/index.js" models list --json 2>/dev/null)"; then
-    warn "unable to inspect model inventory with models list --json"
+  if ! inventory_raw="$(run_cli_probe "${REPO_ROOT}/dist/index.js" models list --json 2>/dev/null)"; then
+    local code=$?
+    if [[ "$code" -eq 124 || "$code" -eq 137 || "$code" -eq 143 ]]; then
+      warn "model inventory probe timed out after ${CLI_PROBE_TIMEOUT_SECONDS}s via ${NODE_BIN}"
+    else
+      warn "unable to inspect model inventory with models list --json via ${NODE_BIN}"
+    fi
     return
   fi
 

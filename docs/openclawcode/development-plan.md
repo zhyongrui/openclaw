@@ -1600,3 +1600,20 @@ That moves the next `main`-specific work back to product behavior:
   repaired `main` build
 - continue provider fallback or diagnostics work without carrying a local CLI
   startup caveat in parallel
+
+One follow-up infrastructure hardening slice is now also complete:
+
+- `scripts/openclawcode-setup-check.sh` now accepts
+  `OPENCLAWCODE_SETUP_NODE_BIN=/path/to/node>=22.16.0`
+- the setup check now bounds direct CLI probes such as `models list --json`
+  instead of letting them hang indefinitely
+- if the selected Node runtime is already below the CLI startup floor, the
+  setup check now reports that failure and skips model-inventory probing
+  entirely
+
+The remaining live-ops startup gap is therefore narrower:
+
+- minimal direct built-entry proofs on `main` are healthy
+- the long-lived repo-local operator can still stall before binding when the
+  real `~/.openclaw` environment is sourced, so the next startup slice should
+  debug that real-config path rather than the generic built entrypoint

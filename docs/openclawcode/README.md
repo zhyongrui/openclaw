@@ -468,3 +468,15 @@ Additional rollout note from the latest refreshed-branch proof:
   - the first startup on this host may spend about five seconds printing
     `Control UI assets missing; building ...` before the gateway listener
     appears
+- operator preflight is now tighter too:
+  - `scripts/openclawcode-setup-check.sh` accepts
+    `OPENCLAWCODE_SETUP_NODE_BIN=/path/to/node>=22.16.0`
+  - direct CLI probes such as `models list --json` are now bounded, and the
+    script skips model inventory entirely when the selected Node runtime is
+    already below the CLI startup floor
+- the remaining live-ops blocker after that hardening is now narrower:
+  - the minimal direct `dist/index.js gateway run --allow-unconfigured` proofs
+    are healthy on `main`
+  - sourcing the real long-lived `~/.openclaw` operator environment can still
+    stall before the listener appears, so the next slice should debug that
+    real-config startup path rather than the generic built entrypoint

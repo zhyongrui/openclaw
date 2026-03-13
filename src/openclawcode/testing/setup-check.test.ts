@@ -127,9 +127,12 @@ describe("openclawcode-setup-check.sh source", () => {
     expect(script).toContain("OPENCLAWCODE_SETUP_CLI_STARTUP_METADATA_FILE");
     expect(script).toContain("OPENCLAWCODE_SETUP_RETRY_ATTEMPTS");
     expect(script).toContain("OPENCLAWCODE_SETUP_RETRY_DELAY_SECONDS");
+    expect(script).toContain("OPENCLAWCODE_SETUP_NODE_BIN");
+    expect(script).toContain("OPENCLAWCODE_SETUP_CLI_PROBE_TIMEOUT_SECONDS");
     expect(script).toContain("refresh_github_hook_settings");
     expect(script).toContain("retry_check");
     expect(script).toContain("models list --json");
+    expect(script).toContain("run_cli_probe");
     expect(script).toContain("pull_request_review");
     expect(script).toContain('"reason":"unconfigured-repo"');
     expect(script).toContain("repoBindingsByRepo");
@@ -138,7 +141,7 @@ describe("openclawcode-setup-check.sh source", () => {
     expect(script).toContain("GitHub webhook subscription check");
     expect(script).toContain("cli-startup-metadata.json");
     expect(script).toContain("minimumNodeVersion");
-    expect(script).toContain("node --version");
+    expect(script).toContain('"$NODE_BIN" --version');
     expect(script).toContain("vitest.openclawcode.config.mjs");
     expect(script).toContain("--pool threads");
     expect(script).toContain('"modelInventory":');
@@ -623,13 +626,29 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
     const envFile = path.join(rootDir, "openclawcode.env");
     const configFile = path.join(rootDir, "openclaw.json");
     const stateFile = path.join(rootDir, "chatops-state.json");
+    const modelProbeMarker = path.join(rootDir, "models-probe-called");
     const scriptPath = path.resolve("scripts/openclawcode-setup-check.sh");
     const realPythonPath = resolveRealPythonPath();
 
     await fs.mkdir(distDir, { recursive: true });
     await fs.mkdir(binDir, { recursive: true });
     await writeStubCliArtifacts(distDir, "22.16.0");
-    await writeStubNode(binDir, "22.12.0");
+    await writeExecutable(
+      path.join(binDir, "node"),
+      `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "--version" || "\${1:-}" == "-v" ]]; then
+  printf 'v22.12.0\\n'
+  exit 0
+fi
+if [[ "\${1:-}" == *"/dist/index.js" && "\${2:-}" == "models" && "\${3:-}" == "list" && "\${4:-}" == "--json" ]]; then
+  printf 'called\\n' >"${modelProbeMarker}"
+  exit 9
+fi
+printf 'stub node only supports --version\\n' >&2
+exit 1
+`,
+    );
     await fs.writeFile(
       envFile,
       "OPENCLAWCODE_GITHUB_WEBHOOK_SECRET=test-secret\nGH_TOKEN=dummy-token\n",
@@ -725,8 +744,137 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(1);
     expect(result.stdout).toContain(
-      `[FAIL] local Node 22.12.0 is below CLI startup floor 22.16.0 (${path.join(distDir, "cli-startup-metadata.json")})`,
+      `[FAIL] local Node 22.12.0 is below CLI startup floor 22.16.0 (${path.join(distDir, "cli-startup-metadata.json")}) via node`,
     );
+    expect(result.stdout).toContain(
+      "[WARN] skipping model inventory with node because the configured Node runtime is below the CLI startup floor",
+    );
+    await expect(fs.access(modelProbeMarker)).rejects.toThrow();
+  });
+
+  it("uses OPENCLAWCODE_SETUP_NODE_BIN for CLI probes when the default node is too old", async () => {
+    const rootDir = await createTempDir();
+    tempRoots.add(rootDir);
+    const repoRoot = path.join(rootDir, "repo");
+    const distDir = path.join(repoRoot, "dist");
+    const oldBinDir = path.join(rootDir, "old-bin");
+    const goodBinDir = path.join(rootDir, "good-bin");
+    const envFile = path.join(rootDir, "openclawcode.env");
+    const configFile = path.join(rootDir, "openclaw.json");
+    const stateFile = path.join(rootDir, "chatops-state.json");
+    const scriptPath = path.resolve("scripts/openclawcode-setup-check.sh");
+    const realPythonPath = resolveRealPythonPath();
+
+    await fs.mkdir(distDir, { recursive: true });
+    await fs.mkdir(oldBinDir, { recursive: true });
+    await fs.mkdir(goodBinDir, { recursive: true });
+    await writeStubCliArtifacts(distDir, "22.16.0");
+    await writeStubNode(oldBinDir, "22.12.0");
+    await writeStubNode(goodBinDir, "22.16.0", ["crs/gpt-5.4"]);
+    await fs.writeFile(
+      envFile,
+      "OPENCLAWCODE_GITHUB_WEBHOOK_SECRET=test-secret\nGH_TOKEN=dummy-token\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      configFile,
+      `${JSON.stringify(
+        {
+          plugins: {
+            entries: {
+              openclawcode: {
+                enabled: true,
+                config: {
+                  repos: [
+                    {
+                      owner: "zhyongrui",
+                      repo: "openclawcode",
+                      repoRoot,
+                      baseBranch: "main",
+                      triggerMode: "approve",
+                      notifyChannel: "feishu",
+                      notifyTarget: "user:node-override",
+                      builderAgent: "main",
+                      verifierAgent: "main",
+                      testCommands: [
+                        "pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads",
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await fs.writeFile(
+      stateFile,
+      `${JSON.stringify(
+        {
+          repoBindingsByRepo: {
+            "zhyongrui/openclawcode": {
+              repoKey: "zhyongrui/openclawcode",
+              notifyChannel: "feishu",
+              notifyTarget: "user:node-override",
+              updatedAt: "2026-03-13T17:00:00.000Z",
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await writeExecutable(
+      path.join(oldBinDir, "python3"),
+      `#!/usr/bin/env bash
+set -euo pipefail
+script="$(cat)"
+if [[ "$script" == *"socket.create_connection"* ]]; then
+  exit 0
+fi
+if [[ "$script" == *"hmac.new"* ]]; then
+  printf 'sha256=test-signature\\n'
+  exit 0
+fi
+printf '%s' "$script" | "${realPythonPath}" "$@"
+`,
+    );
+    await writeExecutable(
+      path.join(oldBinDir, "curl"),
+      '#!/usr/bin/env bash\nset -euo pipefail\nprintf \'{"accepted":false,"reason":"unconfigured-repo"}\\n202\'\n',
+    );
+
+    const result = runSetupCheck(
+      scriptPath,
+      {
+        PATH: `${oldBinDir}:${process.env.PATH ?? ""}`,
+        OPENCLAWCODE_SETUP_NODE_BIN: path.join(goodBinDir, "node"),
+        OPENCLAWCODE_SETUP_REPO_ROOT: repoRoot,
+        OPENCLAWCODE_SETUP_ENV_FILE: envFile,
+        OPENCLAWCODE_SETUP_CONFIG_FILE: configFile,
+        OPENCLAWCODE_SETUP_STATE_FILE: stateFile,
+        OPENCLAWCODE_SETUP_GATEWAY_URL: "http://127.0.0.1:18789",
+        OPENCLAWCODE_SETUP_WEBHOOK_ROUTE: "/plugins/openclawcode/github",
+        OPENCLAWCODE_GITHUB_REPO: "zhyongrui/openclawcode",
+        OPENCLAWCODE_TUNNEL_LOG_FILE: path.join(rootDir, "tunnel.log"),
+        OPENCLAWCODE_TUNNEL_PID_FILE: path.join(rootDir, "tunnel.pid"),
+      },
+      ["--json"],
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      ok: boolean;
+      modelInventory: { available: number };
+    };
+    expect(payload.ok).toBe(true);
+    expect(payload.modelInventory.available).toBe(1);
   });
 
   it("retries transient gateway and route-probe failures during restart windows", async () => {
