@@ -368,7 +368,8 @@ Goal:
 Remaining work:
 
 - finish any remaining non-duplicative JSON convenience fields
-- document the supported JSON contract once the surface stabilizes
+- keep `contractVersion` and the contract reference doc in sync as the surface
+  grows
 
 Immediate queue:
 
@@ -533,6 +534,9 @@ Preferred near-to-mid-term order:
 26. run one copied-root or fresh-host proof from the public operator docs after
     the next promotion
 27. publish the first stable `openclaw code run --json` contract reference
+    - initial `contractVersion: 1` reference now exists
+    - future slices should update the doc and bump version only for breaking
+      changes
 28. package the minimum external operator environment variables and config
     knobs into one supported section of the runbook
 29. run a public-beta style proof on a repo other than `zhyongrui/openclawcode`

@@ -14,10 +14,11 @@ Recommended reading order:
 8. `specs.md`
 9. `openclaw-strategy.md`
 10. `openclaw-implementation-plan.md`
-11. `upstream-sync-policy.md`
-12. `operator-setup.md`
-13. `mvp-runbook.md`
-14. `webhook-operations.md`
+11. `run-json-contract.md`
+12. `upstream-sync-policy.md`
+13. `operator-setup.md`
+14. `mvp-runbook.md`
+15. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
@@ -43,6 +44,8 @@ loop with:
 - a local builder/verifier runtime adapter built on top of OpenClaw's embedded
   agent entrypoint
 - an `openclaw code run ...` CLI path for issue-driven execution
+- a versioned top-level JSON contract for `openclaw code run --json`, anchored
+  by `contractVersion: 1` and documented in `run-json-contract.md`
 - draft PR publishing and guarded merge hooks in the workflow service layer
 - event-driven `pull_request` / `pull_request_review` webhook intake with chat
   notifications for tracked lifecycle changes

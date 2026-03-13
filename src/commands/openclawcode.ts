@@ -65,6 +65,8 @@ export interface OpenClawCodeListValidationIssuesOpts {
   json?: boolean;
 }
 
+export const OPENCLAWCODE_RUN_JSON_CONTRACT_VERSION = 1;
+
 function parseIssueNumber(value: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 1) {
@@ -346,6 +348,7 @@ function toWorkflowRunJson(run: WorkflowRun) {
     run.rerunContext?.reviewUrl != null;
   return {
     ...run,
+    contractVersion: OPENCLAWCODE_RUN_JSON_CONTRACT_VERSION,
     stageLabel: formatWorkflowStageLabel(run.stage),
     totalAttemptCount: run.attempts?.total ?? null,
     planningAttemptCount: run.attempts?.planning ?? null,

@@ -1310,6 +1310,8 @@ The next implementation slice should follow this order:
 11. keep setup-check output machine-readable so rollout can plug into CI or
     other operator automation, and use the same release path to drive external
     operator rollout later
+12. keep `run-json-contract.md` aligned with `contractVersion` so external
+    automation has one explicit reference point instead of scraping dev logs
 
 ## Test Strategy
 

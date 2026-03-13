@@ -112,6 +112,7 @@ describe("openclawCodeRunCommand", () => {
 
     expect(runtime.log).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.contractVersion).toBe(1);
     expect(payload.stage).toBe("ready-for-human-review");
     expect(payload.stageLabel).toBe("Ready For Human Review");
     expect(payload.totalAttemptCount).toBe(1);
@@ -208,6 +209,7 @@ describe("openclawCodeRunCommand", () => {
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.contractVersion).toBe(1);
     expect(payload.totalAttemptCount).toBe(1);
     expect(payload.planningAttemptCount).toBe(1);
     expect(payload.buildAttemptCount).toBe(1);
