@@ -336,8 +336,13 @@ loop with:
 - the next refreshed integration branch,
   `sync/upstream-2026-03-12-refresh`, now merges `upstream/main` through
   `c965049dc6` and still passes the same validation set
-- that refreshed branch is now the active feature branch while `main` remains
-  the long-lived Feishu operator baseline until the next live promotion
+- the latest sync branch, `sync/upstream-2026-03-13`, now cleanly merges
+  `upstream/main` through `80e7da92ce` and still passes:
+  - `pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads --maxWorkers 1`
+  - `pnpm build`
+- `sync/upstream-2026-03-13` is now the active feature branch while `main`
+  remains the long-lived Feishu operator baseline until the next live
+  promotion
 - upstream now expects Node `>=22.16.0` for CLI startup:
   - this workstation still runs targeted tests and `pnpm build` under
     `22.12.0` with warnings

@@ -247,8 +247,13 @@ turning the working loop into a cleanly operable product:
   `c965049dc6` and still passes:
   - `pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads`
   - `pnpm build`
-- that refreshed branch is now the active feature branch while `main` stays as
-  the long-lived Feishu operator baseline until the next live proof promotion
+- the next sync branch, `sync/upstream-2026-03-13`, now cleanly merges
+  `upstream/main` through `80e7da92ce` and still passes:
+  - `pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads --maxWorkers 1`
+  - `pnpm build`
+- `sync/upstream-2026-03-13` is now the active feature branch while `main`
+  stays as the long-lived Feishu operator baseline until the next live proof
+  promotion
 - upstream also raised the runtime floor to Node `>=22.16.0`:
   - this workstation now runs local Node `22.16.0`
   - the built CLI entrypoint refuses to start below that floor
@@ -342,7 +347,7 @@ system that can keep shipping on the same branch that the live runner uses.
 
 The short-term objective is:
 
-- keep `sync/upstream-2026-03-12-refresh` as the active engineering branch
+- keep `sync/upstream-2026-03-13` as the active engineering branch
   until the next live operator proof is complete
 - keep `main` as the stable long-lived Feishu operator baseline rather than
   mixing in unproven upstream-sync work immediately

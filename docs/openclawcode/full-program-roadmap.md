@@ -132,7 +132,7 @@ product. Each item should be consumed as one or more narrow slices.
 As of 2026-03-12:
 
 - active feature branch:
-  - `sync/upstream-2026-03-12-refresh`
+  - `sync/upstream-2026-03-13`
 - long-lived live operator baseline:
   - `main`
 - long-lived local operator root:
@@ -196,6 +196,11 @@ As of 2026-03-12:
     - `crs/gpt-5.4`
     - fallback override support is now ready in code, but a real live fallback
       proof still needs another discoverable model on that host
+- a new sync branch, `sync/upstream-2026-03-13`, now cleanly merges
+  `upstream/main` through `80e7da92ce` and still passes:
+  - `pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads --maxWorkers 1`
+  - `pnpm build`
+  - no merge conflicts were encountered on this sync
 
 ## Execution Loop
 
@@ -555,10 +560,10 @@ If a new session starts cold, it should read:
 As of this revision:
 
 - active feature branch:
-  - `sync/upstream-2026-03-12-refresh`
+  - `sync/upstream-2026-03-13`
 - next planned slice after the current one:
-  - add explicit issue-worktree model fallback overrides and retry refreshed-
-    branch proof issue `#87` with a configured fallback chain
-  - if that proof still fails with the same compact diagnostics, move the next
-    slice to deeper provider or model diagnostics instead of more prompt
+  - use the freshly synced branch to continue provider/model follow-up for
+    issue `#87`
+  - either add another discoverable model for a real fallback proof or move
+    straight to deeper provider/model diagnostics instead of more prompt
     trimming
