@@ -239,7 +239,7 @@ turning the working loop into a cleanly operable product:
 - current live inventory is now:
   - docs/operator issue `#60`
   - docs/operator issue `#86`
-  - command-layer issue `#100` for `failureDiagnosticBootstrapWarningShown`
+  - command-layer issue `#101` for `failureDiagnosticProvider`
 - duplicate seeding attempts now reuse an existing open issue with the same
   template and title instead of creating a fresh duplicate
 - duplicate issue `#59` was detected via the new inventory command and then
@@ -273,8 +273,11 @@ turning the working loop into a cleanly operable product:
 - command-layer issue `#99` for `failureDiagnosticInjectedWorkspaceFileCount`
   has now also been implemented, documented, and auto-closed through the same
   path
-- the replenished command-layer pool now continues with issue `#100` for
-  `failureDiagnosticBootstrapWarningShown`
+- command-layer issue `#100` for `failureDiagnosticBootstrapWarningShown` has
+  now also been implemented, documented, and auto-closed through the same path
+- validation-pool tooling now also supports `command-json-string`, so the
+  replenished command-layer pool continues with issue `#101` for
+  `failureDiagnosticProvider`
 - a fresh explicit chat-intake live proof is now complete through issue `#70`:
   - `/occode-intake` created the GitHub issue and queued it from chat-facing
     operator state

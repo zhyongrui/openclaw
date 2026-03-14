@@ -84,6 +84,7 @@ those nested objects.
 - `failureDiagnosticToolSchemaChars`
 - `failureDiagnosticSkillCount`
 - `failureDiagnosticInjectedWorkspaceFileCount`
+- `failureDiagnosticBootstrapWarningShown`
 - `failureDiagnosticToolCount`
 - `failureDiagnosticUsageTotal`
 
@@ -162,6 +163,8 @@ those nested objects.
 - derived numeric fields such as `failureDiagnosticSystemPromptChars`, `failureDiagnosticSkillsPromptChars`, `failureDiagnosticToolSchemaChars`, `failureDiagnosticSkillCount`, `failureDiagnosticInjectedWorkspaceFileCount`, and `failureDiagnosticToolCount` mirror documented nested metadata when present and otherwise use `null`
 - boolean summary fields such as `verificationHasFindings` default to `false`
   when the corresponding section is absent
+- derived boolean fields such as `failureDiagnosticBootstrapWarningShown`
+  default to `false` when the nested diagnostic signal is absent
 - string or timestamp fields use `null` when the underlying value is absent
 - `failureDiagnostics` uses `null` when no structured workflow failure metadata
   was recorded for the run

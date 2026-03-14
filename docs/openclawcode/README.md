@@ -55,6 +55,7 @@ loop with:
   - `failureDiagnosticToolSchemaChars`
   - `failureDiagnosticSkillCount`
   - `failureDiagnosticInjectedWorkspaceFileCount`
+  - `failureDiagnosticBootstrapWarningShown`
 - draft PR publishing and guarded merge hooks in the workflow service layer
 - event-driven `pull_request` / `pull_request_review` webhook intake with chat
   notifications for tracked lifecycle changes
@@ -275,13 +276,15 @@ loop with:
   - `openclaw code reconcile-validation-issues` now classifies validation
     issues as `implemented`, `pending`, or `manual-review` and can close
     already-implemented command-layer issues directly from the repo-local CLI
+  - `openclaw code seed-validation-issue` now also supports
+    `command-json-string` for low-risk string-or-null convenience fields
   - seeded issue creation now reuses an existing open match instead of creating
     a duplicate
   - current live inventory is visible without opening GitHub manually and
     includes:
     - docs/operator issue `#60`
     - docs/operator issue `#86`
-    - command-layer issue `#100`
+    - command-layer issue `#101`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
   - stale command-layer issues `#74` through `#82` are now also auto-closable
@@ -303,6 +306,9 @@ loop with:
   - command-layer issue `#99` has now also been consumed and auto-closed
     through the same reconcile path after
     `failureDiagnosticInjectedWorkspaceFileCount` landed
+  - command-layer issue `#100` has now also been consumed and auto-closed
+    through the same reconcile path after
+    `failureDiagnosticBootstrapWarningShown` landed
   - command-layer issues `#54` and `#50` have now been consumed and closed on
     `main`
   - command-layer issue `#55` has now been consumed and closed on `main`, and
@@ -333,6 +339,8 @@ loop with:
   - `openclaw code run --json` now exposes `failureDiagnosticSkillCount`
   - `openclaw code run --json` now exposes
     `failureDiagnosticInjectedWorkspaceFileCount`
+  - `openclaw code run --json` now exposes
+    `failureDiagnosticBootstrapWarningShown`
   - `scripts/openclawcode-setup-check.sh` now reads `minimumNodeVersion` from
     `dist/cli-startup-metadata.json` and checks the local Node runtime against
     the CLI startup floor

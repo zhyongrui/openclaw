@@ -1,6 +1,7 @@
 export type ValidationIssueTemplateId =
   | "command-json-boolean"
   | "command-json-number"
+  | "command-json-string"
   | "operator-doc-note"
   | "webhook-precheck-high-risk";
 
@@ -58,12 +59,18 @@ const VALIDATION_ISSUE_TEMPLATES: readonly ValidationIssueTemplateSummary[] = [
   {
     id: "command-json-boolean",
     issueClass: "command-layer",
-    description: "Seed a low-risk JSON boolean field issue derived from a nested array path.",
+    description:
+      "Seed a low-risk JSON boolean field issue derived from a nested boolean or array signal.",
   },
   {
     id: "command-json-number",
     issueClass: "command-layer",
     description: "Seed a low-risk JSON number-or-null field issue derived from nested metadata.",
+  },
+  {
+    id: "command-json-string",
+    issueClass: "command-layer",
+    description: "Seed a low-risk JSON string-or-null field issue derived from nested metadata.",
   },
   {
     id: "operator-doc-note",
@@ -142,7 +149,7 @@ function buildCommandJsonBooleanDraft(input: ValidationIssueDraftInput): Validat
         "",
         "Proposed solution",
         `Update \`src/commands/openclawcode.ts\` so the JSON output includes \`${fieldName}: boolean\`.`,
-        `- \`true\` when \`${sourcePath}\` contains at least one entry`,
+        `- \`true\` when \`${sourcePath}\` resolves to \`true\` or contains at least one entry`,
         "- `false` otherwise",
         "",
         "Add or adjust unit tests in `src/commands/openclawcode.test.ts` to cover both cases.",
@@ -155,10 +162,10 @@ function buildCommandJsonBooleanDraft(input: ValidationIssueDraftInput): Validat
         "Low.",
         "",
         "Frequency",
-        "Whenever downstream tooling needs a stable boolean instead of a nested array inspection.",
+        "Whenever downstream tooling needs a stable boolean instead of reimplementing nested truthiness or array-length checks.",
         "",
         "Consequence",
-        "Without the derived boolean, simple consumers keep reimplementing the same array-length check logic.",
+        "Without the derived boolean, simple consumers keep reimplementing the same nested truthiness or array-length check logic.",
       ].join("\n"),
     }),
   };
@@ -198,6 +205,48 @@ function buildCommandJsonNumberDraft(input: ValidationIssueDraftInput): Validati
         "",
         "Frequency",
         "Whenever downstream tooling wants this numeric value without unpacking nested workflow metadata.",
+        "",
+        "Consequence",
+        "Without the derived field, simple consumers keep reimplementing the same nested null-check logic.",
+      ].join("\n"),
+    }),
+  };
+}
+
+function buildCommandJsonStringDraft(input: ValidationIssueDraftInput): ValidationIssueDraft {
+  const fieldName = requireTrimmedOption("--field-name", input.fieldName);
+  const sourcePath = requireTrimmedOption("--source-path", input.sourcePath);
+  return {
+    template: "command-json-string",
+    issueClass: "command-layer",
+    title: `[Feature]: Expose ${fieldName} in openclaw code run --json output`,
+    body: formatValidationIssueBody({
+      template: "command-json-string",
+      issueClass: "command-layer",
+      title: `[Feature]: Expose ${fieldName} in openclaw code run --json output`,
+      body: [
+        "Summary",
+        `Add one stable top-level string field to \`openclaw code run --json\` named \`${fieldName}\`.`,
+        "",
+        "Problem to solve",
+        `Downstream tooling currently has to inspect \`${sourcePath}\` directly just to read this nested string value. That is awkward for simple JSON consumers.`,
+        "",
+        "Proposed solution",
+        `Update \`src/commands/openclawcode.ts\` so the JSON output includes \`${fieldName}: string | null\`.`,
+        `- set it to the nested \`${sourcePath}\` value when present`,
+        "- otherwise emit `null`",
+        "",
+        "Add or adjust unit tests in `src/commands/openclawcode.test.ts` to cover both cases.",
+        "",
+        "Impact",
+        "Affected users/systems/channels",
+        "Tools and scripts that read `openclaw code run --json`.",
+        "",
+        "Severity",
+        "Low.",
+        "",
+        "Frequency",
+        "Whenever downstream tooling wants this string value without unpacking nested workflow metadata.",
         "",
         "Consequence",
         "Without the derived field, simple consumers keep reimplementing the same nested null-check logic.",
@@ -296,6 +345,12 @@ export function classifyValidationIssue(
         issueClass: "command-layer",
       };
     }
+    if (body.includes(": string | null`.") || body.includes(": string | null`.\n")) {
+      return {
+        template: "command-json-string",
+        issueClass: "command-layer",
+      };
+    }
   }
 
   if (
@@ -340,7 +395,8 @@ export function parseValidationIssue(
 
   if (
     classified.template === "command-json-boolean" ||
-    classified.template === "command-json-number"
+    classified.template === "command-json-number" ||
+    classified.template === "command-json-string"
   ) {
     return {
       ...classified,
@@ -355,7 +411,11 @@ export function assessValidationIssueImplementation(
   issue: ParsedValidationIssue,
   context: ValidationIssueImplementationContext,
 ): ValidationIssueImplementationAssessment {
-  if (issue.template !== "command-json-boolean" && issue.template !== "command-json-number") {
+  if (
+    issue.template !== "command-json-boolean" &&
+    issue.template !== "command-json-number" &&
+    issue.template !== "command-json-string"
+  ) {
     return {
       state: "manual-review",
       summary:
@@ -426,6 +486,8 @@ export function buildValidationIssueDraft(input: ValidationIssueDraftInput): Val
       return buildCommandJsonBooleanDraft(input);
     case "command-json-number":
       return buildCommandJsonNumberDraft(input);
+    case "command-json-string":
+      return buildCommandJsonStringDraft(input);
     case "operator-doc-note":
       return buildOperatorDocNoteDraft(input);
     case "webhook-precheck-high-risk":

@@ -306,10 +306,13 @@ As of 2026-03-14:
     `failureDiagnosticSkillCount` landed
   - the same reconcile path has now also auto-closed `#99` after
     `failureDiagnosticInjectedWorkspaceFileCount` landed
+  - the same reconcile path has now also auto-closed `#100` after
+    `failureDiagnosticBootstrapWarningShown` landed
+  - validation tooling now also supports `command-json-string`, so the next
+    command-layer proof no longer has to be forced into number/boolean shape
   - current open validation pool is now narrower and more honest:
     - docs/operator issues `#60`, `#86`
-    - command-layer issue `#100` for
-      `failureDiagnosticBootstrapWarningShown`
+    - command-layer issue `#101` for `failureDiagnosticProvider`
 - the remaining startup blocker is now narrower than "openclawcode plugin
   startup":
   - the built openclawcode-only path is healthy

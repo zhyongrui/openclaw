@@ -8,6 +8,25 @@ import {
 } from "./validation-issues.js";
 
 describe("validation issue templates", () => {
+  it("builds command-json-boolean drafts for scalar boolean paths too", () => {
+    const draft = buildValidationIssueDraft({
+      template: "command-json-boolean",
+      fieldName: "failureDiagnosticBootstrapWarningShown",
+      sourcePath: "failureDiagnostics.bootstrapWarningShown",
+    });
+
+    expect(draft).toMatchObject({
+      template: "command-json-boolean",
+      issueClass: "command-layer",
+      title:
+        "[Feature]: Expose failureDiagnosticBootstrapWarningShown in openclaw code run --json output",
+    });
+    expect(draft.body).toContain(
+      "`failureDiagnostics.bootstrapWarningShown` resolves to `true` or contains at least one entry",
+    );
+    expect(draft.body).toContain("nested truthiness or array-length checks");
+  });
+
   it("builds command-json-number drafts from the required field metadata", () => {
     const draft = buildValidationIssueDraft({
       template: "command-json-number",
@@ -27,6 +46,27 @@ describe("validation issue templates", () => {
     ).toBe(true);
     expect(draft.body).toContain("`publishedPullRequestNumber: number | null`");
     expect(draft.body).toContain("`draftPullRequest.number`");
+  });
+
+  it("builds command-json-string drafts from the required field metadata", () => {
+    const draft = buildValidationIssueDraft({
+      template: "command-json-string",
+      fieldName: "failureDiagnosticProvider",
+      sourcePath: "failureDiagnostics.provider",
+    });
+
+    expect(draft).toMatchObject({
+      template: "command-json-string",
+      issueClass: "command-layer",
+      title: "[Feature]: Expose failureDiagnosticProvider in openclaw code run --json output",
+    });
+    expect(
+      draft.body.startsWith(
+        "<!-- openclawcode-validation template=command-json-string class=command-layer -->",
+      ),
+    ).toBe(true);
+    expect(draft.body).toContain("`failureDiagnosticProvider: string | null`");
+    expect(draft.body).toContain("`failureDiagnostics.provider`");
   });
 
   it("builds high-risk webhook precheck drafts with the default summary", () => {
@@ -103,6 +143,25 @@ describe("validation issue templates", () => {
       template: "command-json-number",
       issueClass: "command-layer",
       fieldName: "riskCount",
+    });
+  });
+
+  it("parses command-json-string issues too", () => {
+    expect(
+      parseValidationIssue({
+        title: "[Feature]: Expose failureDiagnosticProvider in openclaw code run --json output",
+        body: [
+          "Summary",
+          "Add one stable top-level string field to `openclaw code run --json` named `failureDiagnosticProvider`.",
+          "",
+          "Proposed solution",
+          "Update `src/commands/openclawcode.ts` so the JSON output includes `failureDiagnosticProvider: string | null`.",
+        ].join("\n"),
+      }),
+    ).toEqual({
+      template: "command-json-string",
+      issueClass: "command-layer",
+      fieldName: "failureDiagnosticProvider",
     });
   });
 
@@ -193,13 +252,20 @@ describe("validation issue templates", () => {
       {
         id: "command-json-boolean",
         issueClass: "command-layer",
-        description: "Seed a low-risk JSON boolean field issue derived from a nested array path.",
+        description:
+          "Seed a low-risk JSON boolean field issue derived from a nested boolean or array signal.",
       },
       {
         id: "command-json-number",
         issueClass: "command-layer",
         description:
           "Seed a low-risk JSON number-or-null field issue derived from nested metadata.",
+      },
+      {
+        id: "command-json-string",
+        issueClass: "command-layer",
+        description:
+          "Seed a low-risk JSON string-or-null field issue derived from nested metadata.",
       },
       {
         id: "operator-doc-note",

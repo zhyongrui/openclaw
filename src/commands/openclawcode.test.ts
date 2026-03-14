@@ -868,6 +868,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.failureDiagnosticToolSchemaChars).toBeNull();
     expect(payload.failureDiagnosticSkillCount).toBeNull();
     expect(payload.failureDiagnosticInjectedWorkspaceFileCount).toBeNull();
+    expect(payload.failureDiagnosticBootstrapWarningShown).toBe(false);
     expect(payload.failureDiagnosticToolCount).toBeNull();
     expect(payload.failureDiagnosticUsageTotal).toBeNull();
   });
@@ -905,6 +906,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.failureDiagnosticToolSchemaChars).toBe(3030);
     expect(payload.failureDiagnosticSkillCount).toBe(1);
     expect(payload.failureDiagnosticInjectedWorkspaceFileCount).toBe(0);
+    expect(payload.failureDiagnosticBootstrapWarningShown).toBe(false);
     expect(payload.failureDiagnosticToolCount).toBe(4);
     expect(payload.failureDiagnosticUsageTotal).toBe(0);
     expect(payload.failureDiagnostics).toEqual({
@@ -922,6 +924,23 @@ describe("openclawCodeRunCommand", () => {
     });
     expect(payload.failureDiagnosticToolCount).toBe(4);
     expect(payload.failureDiagnosticUsageTotal).toBe(0);
+  });
+
+  it("prints failureDiagnosticBootstrapWarningShown as true when diagnostics flagged bootstrap warnings", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        stage: "failed",
+        failureDiagnostics: {
+          summary: "HTTP 400: Internal server error",
+          bootstrapWarningShown: true,
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.failureDiagnosticBootstrapWarningShown).toBe(true);
   });
 
   it("prints failed auto-merge disposition when merge execution fails", async () => {
@@ -1020,7 +1039,36 @@ describe("openclawCodeRunCommand", () => {
       dryRun: true,
       title: "[Feature]: Expose verificationHasSignals in openclaw code run --json output",
     });
-    expect(payload.body).toContain("`verificationReport.followUps` contains at least one entry");
+    expect(payload.body).toContain(
+      "`verificationReport.followUps` resolves to `true` or contains at least one entry",
+    );
+  });
+
+  it("renders a dry-run string validation issue template without creating a GitHub issue", async () => {
+    await openclawCodeSeedValidationIssueCommand(
+      {
+        template: "command-json-string",
+        repoRoot: "/repo",
+        fieldName: "failureDiagnosticProvider",
+        sourcePath: "failureDiagnostics.provider",
+        dryRun: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      template: "command-json-string",
+      issueClass: "command-layer",
+      owner: "openclaw",
+      repo: "openclaw",
+      dryRun: true,
+      title: "[Feature]: Expose failureDiagnosticProvider in openclaw code run --json output",
+    });
+    expect(payload.body).toContain("`failureDiagnosticProvider: string | null`");
+    expect(payload.body).toContain("`failureDiagnostics.provider`");
   });
 
   it("creates a validation issue from the selected template", async () => {
@@ -1085,6 +1133,7 @@ describe("openclawCodeRunCommand", () => {
     expect(openclawCodeSeedValidationIssueTemplateIds()).toEqual([
       "command-json-boolean",
       "command-json-number",
+      "command-json-string",
       "operator-doc-note",
       "webhook-precheck-high-risk",
     ]);
