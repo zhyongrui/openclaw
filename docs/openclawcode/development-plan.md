@@ -239,7 +239,7 @@ turning the working loop into a cleanly operable product:
 - current live inventory is now:
   - docs/operator issue `#60`
   - docs/operator issue `#86`
-  - command-layer issue `#103` for `draftPullRequestTitle`
+  - command-layer issue `#104` for `draftPullRequestOpenedAt`
 - duplicate seeding attempts now reuse an existing open issue with the same
   template and title instead of creating a fresh duplicate
 - duplicate issue `#59` was detected via the new inventory command and then
@@ -276,10 +276,12 @@ turning the working loop into a cleanly operable product:
 - command-layer issue `#100` for `failureDiagnosticBootstrapWarningShown` has
   now also been implemented, documented, and auto-closed through the same path
 - validation-pool tooling now also supports `command-json-string`, so the
-  replenished command-layer pool continues with issue `#103` for
-  `draftPullRequestTitle`
+  replenished command-layer pool continues with issue `#104` for
+  `draftPullRequestOpenedAt`
 - command-layer issues `#101` and `#102` have now also been implemented,
   documented, and auto-closed through the same path
+- command-layer issue `#103` for `draftPullRequestTitle` has now also been
+  implemented, documented, and auto-closed through the same path
 - the `failureDiagnostics` family is now effectively mirrored at the top level
   for:
   - summary
@@ -288,6 +290,8 @@ turning the working loop into a cleanly operable product:
   - prompt footprint
   - tool/schema footprint
   - skill/file counts
+- stable draft PR metadata mirroring now also includes the nested
+  `draftPullRequest.title` field at the top level via `draftPullRequestTitle`
   - bootstrap-warning signal
   - usage total
 - a fresh explicit chat-intake live proof is now complete through issue `#70`:

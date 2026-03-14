@@ -314,9 +314,11 @@ As of 2026-03-14:
     `failureDiagnosticProvider` landed
   - the same reconcile path has now also auto-closed `#102` after
     `failureDiagnosticModel` landed
+  - the same reconcile path has now also auto-closed `#103` after
+    `draftPullRequestTitle` landed
   - current open validation pool is now narrower and more honest:
     - docs/operator issues `#60`, `#86`
-    - command-layer issue `#103` for `draftPullRequestTitle`
+    - command-layer issue `#104` for `draftPullRequestOpenedAt`
 - the remaining startup blocker is now narrower than "openclawcode plugin
   startup":
   - the built openclawcode-only path is healthy

@@ -114,6 +114,7 @@ those nested objects.
 
 - `draftPullRequestBranchName`
 - `draftPullRequestBaseBranch`
+- `draftPullRequestTitle`
 - `draftPullRequestNumber`
 - `draftPullRequestUrl`
 - `draftPullRequestDisposition`
