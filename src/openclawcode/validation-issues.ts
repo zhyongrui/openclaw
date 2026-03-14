@@ -37,6 +37,23 @@ export interface ClassifiedValidationIssue {
   issueClass: ValidationIssueClass;
 }
 
+export interface ParsedValidationIssue extends ClassifiedValidationIssue {
+  fieldName?: string;
+}
+
+export interface ValidationIssueImplementationContext {
+  commandJsonSource?: string;
+  commandJsonTests?: string;
+  runJsonContractDoc?: string;
+}
+
+export interface ValidationIssueImplementationAssessment {
+  state: "implemented" | "pending" | "manual-review";
+  summary: string;
+  autoClosable: boolean;
+  fieldName?: string;
+}
+
 const VALIDATION_ISSUE_TEMPLATES: readonly ValidationIssueTemplateSummary[] = [
   {
     id: "command-json-boolean",
@@ -304,6 +321,103 @@ export function classifyValidationIssue(
   }
 
   return undefined;
+}
+
+function parseCommandJsonFieldName(title: string): string | undefined {
+  const match = title.match(
+    /^\[Feature\]: Expose ([A-Za-z0-9_]+) in openclaw code run --json output$/,
+  );
+  return match?.[1];
+}
+
+export function parseValidationIssue(
+  candidate: ValidationIssueCandidate,
+): ParsedValidationIssue | undefined {
+  const classified = classifyValidationIssue(candidate);
+  if (!classified) {
+    return undefined;
+  }
+
+  if (
+    classified.template === "command-json-boolean" ||
+    classified.template === "command-json-number"
+  ) {
+    return {
+      ...classified,
+      fieldName: parseCommandJsonFieldName(candidate.title),
+    };
+  }
+
+  return classified;
+}
+
+export function assessValidationIssueImplementation(
+  issue: ParsedValidationIssue,
+  context: ValidationIssueImplementationContext,
+): ValidationIssueImplementationAssessment {
+  if (issue.template !== "command-json-boolean" && issue.template !== "command-json-number") {
+    return {
+      state: "manual-review",
+      summary:
+        "Automatic local implementation detection is only supported for command-layer JSON validation issues.",
+      autoClosable: false,
+    };
+  }
+
+  if (!issue.fieldName) {
+    return {
+      state: "manual-review",
+      summary: "Could not determine the requested JSON field name from the issue title.",
+      autoClosable: false,
+    };
+  }
+
+  const contextPresent =
+    context.commandJsonSource != null ||
+    context.commandJsonTests != null ||
+    context.runJsonContractDoc != null;
+  if (!contextPresent) {
+    return {
+      state: "manual-review",
+      summary: "Local repo sources were unavailable for automatic implementation detection.",
+      autoClosable: false,
+      fieldName: issue.fieldName,
+    };
+  }
+
+  const commandFieldPresent = context.commandJsonSource?.includes(`${issue.fieldName}:`) ?? false;
+  const commandTestPresent =
+    context.commandJsonTests?.includes(`payload.${issue.fieldName}`) ?? false;
+  const contractDocPresent =
+    context.runJsonContractDoc?.includes(`- \`${issue.fieldName}\``) ?? false;
+
+  if (commandFieldPresent && commandTestPresent && contractDocPresent) {
+    return {
+      state: "implemented",
+      summary:
+        "Field is already present in command output, covered by tests, and documented in the JSON contract.",
+      autoClosable: true,
+      fieldName: issue.fieldName,
+    };
+  }
+
+  const missing: string[] = [];
+  if (!commandFieldPresent) {
+    missing.push("command output");
+  }
+  if (!commandTestPresent) {
+    missing.push("command tests");
+  }
+  if (!contractDocPresent) {
+    missing.push("JSON contract docs");
+  }
+
+  return {
+    state: "pending",
+    summary: `Still missing from ${missing.join(", ")}.`,
+    autoClosable: false,
+    fieldName: issue.fieldName,
+  };
 }
 
 export function buildValidationIssueDraft(input: ValidationIssueDraftInput): ValidationIssueDraft {

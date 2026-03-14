@@ -261,26 +261,24 @@ loop with:
 - a repo-native validation-pool CLI surface:
   - `openclaw code seed-validation-issue`
   - `openclaw code list-validation-issues`
+  - `openclaw code reconcile-validation-issues`
   - `openclaw code list-validation-issues` now reports template-level counts in
     both text and JSON output
+  - `openclaw code reconcile-validation-issues` now classifies validation
+    issues as `implemented`, `pending`, or `manual-review` and can close
+    already-implemented command-layer issues directly from the repo-local CLI
   - seeded issue creation now reuses an existing open match instead of creating
     a duplicate
   - current live inventory is visible without opening GitHub manually and
     includes:
-    - command-layer issue `#74`
-    - command-layer issue `#75`
-    - command-layer issue `#76`
-    - command-layer issue `#77`
-    - command-layer issue `#78`
-    - command-layer issue `#79`
-    - command-layer issue `#80`
-    - command-layer issue `#81`
-    - command-layer issue `#82`
-    - ops issue `#83`
-    - ops issue `#84`
     - docs/operator issue `#60`
+    - docs/operator issue `#86`
+    - docs/operator issue `#87`
+    - command-layer issue `#91`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
+  - stale command-layer issues `#74` through `#82` are now also auto-closable
+    through the new reconcile path once their fields have already landed
   - command-layer issues `#54` and `#50` have now been consumed and closed on
     `main`
   - command-layer issue `#55` has now been consumed and closed on `main`, and
@@ -302,6 +300,7 @@ loop with:
   - `openclaw code run --json` now exposes `testResultCount`
   - `openclaw code run --json` now exposes `noteCount`
   - `openclaw code run --json` now exposes `changedFileCount`
+  - `openclaw code run --json` now exposes `failureDiagnosticToolCount`
   - `scripts/openclawcode-setup-check.sh` now reads `minimumNodeVersion` from
     `dist/cli-startup-metadata.json` and checks the local Node runtime against
     the CLI startup floor

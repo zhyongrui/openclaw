@@ -228,19 +228,19 @@ turning the working loop into a cleanly operable product:
     template metadata
 - `openclaw code list-validation-issues` now reports template-level counts in
   both text and JSON output, so pool upkeep no longer requires manual counting
-- live inventory proof now shows the current open pool directly:
-  - command-layer issue `#74`
-  - command-layer issue `#75`
-  - command-layer issue `#76`
-  - command-layer issue `#77`
-  - command-layer issue `#78`
-  - command-layer issue `#79`
-  - command-layer issue `#80`
-  - command-layer issue `#81`
-  - command-layer issue `#82`
-  - ops issue `#83`
-  - ops issue `#84`
+- `openclaw code reconcile-validation-issues` now turns validation-pool drift
+  into a first-class surface:
+  - it classifies open validation issues as `implemented`, `pending`, or
+    `manual-review`
+  - it can close already-implemented command-layer issues directly from the
+    repo-local CLI
+  - it emits a next-step hint so later sessions know whether to close stale
+    issues or seed a fresh command-layer proof
+- current live inventory is now:
   - docs/operator issue `#60`
+  - docs/operator issue `#86`
+  - docs/operator issue `#87`
+  - command-layer issue `#91` for `failureDiagnosticUsageTotal`
 - duplicate seeding attempts now reuse an existing open issue with the same
   template and title instead of creating a fresh duplicate
 - duplicate issue `#59` was detected via the new inventory command and then
@@ -257,19 +257,12 @@ turning the working loop into a cleanly operable product:
 - command-layer issue `#66` has now also been implemented on `main` and closed
 - command-layer issue `#72` has now also been implemented on `main` and closed
 - command-layer issue `#73` has now also been implemented on `main` and closed
-- the command-layer pool is now replenished with:
-  - issue `#74` for `riskCount`
-  - issue `#75` for `assumptionCount`
-  - issue `#76` for `testPlanCount`
-  - issue `#77` for `scopeItemCount`
-  - issue `#78` for `outOfScopeCount`
-  - issue `#79` for `testCommandCount`
-  - issue `#80` for `testResultCount`
-  - issue `#81` for `noteCount`
-  - issue `#82` for `changedFileCount`
-  - ops issue `#83` for the Node floor setup-check gate
-  - ops issue `#84` for the refreshed-branch promotion checklist
-  - docs/operator issue `#60`
+- stale command-layer validation issues `#74` through `#82` are now closed via
+  the reconcile command rather than left hanging after their fields landed
+- command-layer issue `#89` for `failureDiagnosticToolCount` has now also been
+  implemented, documented, and auto-closed through that same reconcile path
+- the replenished command-layer pool now continues with issue `#91` for
+  `failureDiagnosticUsageTotal`
 - a fresh explicit chat-intake live proof is now complete through issue `#70`:
   - `/occode-intake` created the GitHub issue and queued it from chat-facing
     operator state

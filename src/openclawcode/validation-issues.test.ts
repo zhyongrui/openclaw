@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  assessValidationIssueImplementation,
   buildValidationIssueDraft,
   classifyValidationIssue,
   listValidationIssueTemplates,
+  parseValidationIssue,
 } from "./validation-issues.js";
 
 describe("validation issue templates", () => {
@@ -82,6 +84,107 @@ describe("validation issue templates", () => {
     ).toEqual({
       template: "command-json-boolean",
       issueClass: "command-layer",
+    });
+  });
+
+  it("parses the requested field name from command-json validation issues", () => {
+    expect(
+      parseValidationIssue({
+        title: "[Feature]: Expose riskCount in openclaw code run --json output",
+        body: [
+          "Summary",
+          "Add one stable top-level numeric field to `openclaw code run --json` named `riskCount`.",
+          "",
+          "Proposed solution",
+          "Update `src/commands/openclawcode.ts` so the JSON output includes `riskCount: number | null`.",
+        ].join("\n"),
+      }),
+    ).toEqual({
+      template: "command-json-number",
+      issueClass: "command-layer",
+      fieldName: "riskCount",
+    });
+  });
+
+  it("marks command-json issues implemented when code, tests, and docs all carry the field", () => {
+    const issue = parseValidationIssue({
+      title: "[Feature]: Expose riskCount in openclaw code run --json output",
+      body: [
+        "Summary",
+        "Add one stable top-level numeric field to `openclaw code run --json` named `riskCount`.",
+        "",
+        "Proposed solution",
+        "Update `src/commands/openclawcode.ts` so the JSON output includes `riskCount: number | null`.",
+      ].join("\n"),
+    });
+
+    expect(issue).toBeDefined();
+    expect(
+      assessValidationIssueImplementation(issue!, {
+        commandJsonSource: "riskCount: run.executionSpec?.risks.length ?? null,",
+        commandJsonTests: "expect(payload.riskCount).toBe(2);",
+        runJsonContractDoc: "- `riskCount`",
+      }),
+    ).toEqual({
+      state: "implemented",
+      summary:
+        "Field is already present in command output, covered by tests, and documented in the JSON contract.",
+      autoClosable: true,
+      fieldName: "riskCount",
+    });
+  });
+
+  it("marks command-json issues pending when one or more implementation surfaces are missing", () => {
+    const issue = parseValidationIssue({
+      title: "[Feature]: Expose riskCount in openclaw code run --json output",
+      body: [
+        "Summary",
+        "Add one stable top-level numeric field to `openclaw code run --json` named `riskCount`.",
+        "",
+        "Proposed solution",
+        "Update `src/commands/openclawcode.ts` so the JSON output includes `riskCount: number | null`.",
+      ].join("\n"),
+    });
+
+    expect(issue).toBeDefined();
+    expect(
+      assessValidationIssueImplementation(issue!, {
+        commandJsonSource: "",
+        commandJsonTests: "expect(payload.riskCount).toBe(2);",
+        runJsonContractDoc: "",
+      }),
+    ).toEqual({
+      state: "pending",
+      summary: "Still missing from command output, JSON contract docs.",
+      autoClosable: false,
+      fieldName: "riskCount",
+    });
+  });
+
+  it("falls back to manual review for non-command validation issues", () => {
+    const issue = parseValidationIssue({
+      title: "[Docs]: Clarify copied-root teardown expectations after fresh-operator validation",
+      body: [
+        "Summary",
+        "copied-root teardown expectations after fresh-operator validation",
+        "",
+        "- keep the change docs-only",
+        "- avoid broad rewrites outside the named document",
+      ].join("\n"),
+    });
+
+    expect(issue).toBeDefined();
+    expect(
+      assessValidationIssueImplementation(issue!, {
+        commandJsonSource: "",
+        commandJsonTests: "",
+        runJsonContractDoc: "",
+      }),
+    ).toEqual({
+      state: "manual-review",
+      summary:
+        "Automatic local implementation detection is only supported for command-layer JSON validation issues.",
+      autoClosable: false,
     });
   });
 

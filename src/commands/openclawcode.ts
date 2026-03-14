@@ -1,6 +1,8 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { WorkflowRerunContext, WorkflowRun } from "../openclawcode/index.js";
 import {
+  assessValidationIssueImplementation,
   classifyValidationIssue,
   FileSystemWorkflowRunStore,
   buildValidationIssueDraft,
@@ -12,6 +14,7 @@ import {
   HostShellRunner,
   listValidationIssueTemplates,
   OpenClawAgentRunner,
+  parseValidationIssue,
   AgentBackedBuilder,
   AgentBackedVerifier,
   resolveGitHubRepoFromGit,
@@ -65,12 +68,42 @@ export interface OpenClawCodeListValidationIssuesOpts {
   json?: boolean;
 }
 
+export interface OpenClawCodeReconcileValidationIssuesOpts {
+  owner?: string;
+  repo?: string;
+  repoRoot?: string;
+  closeImplemented?: boolean;
+  json?: boolean;
+}
+
 export const OPENCLAWCODE_RUN_JSON_CONTRACT_VERSION = 1;
 export const DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS = 300;
 export const DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS = 180;
 
 const OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS_ENV = "OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS";
 const OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS_ENV = "OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS";
+
+interface ValidationIssueAssessmentContext {
+  commandJsonSource?: string;
+  commandJsonTests?: string;
+  runJsonContractDoc?: string;
+}
+
+interface ValidationIssueInventoryEntry {
+  issueNumber: number;
+  title: string;
+  url: string;
+  state: "open" | "closed";
+  createdAt: string | null;
+  updatedAt: string | null;
+  ageDays: number | null;
+  template: ValidationIssueTemplateId;
+  issueClass: "command-layer" | "operator-docs" | "high-risk-validation";
+  fieldName: string | null;
+  implementationState: "implemented" | "pending" | "manual-review";
+  implementationSummary: string;
+  autoClosable: boolean;
+}
 
 function parseIssueNumber(value: string): number {
   const parsed = Number.parseInt(value, 10);
@@ -318,6 +351,103 @@ function resolveValidationIssueAgeDays(
     return null;
   }
   return Math.round(((now - parsed) / 86_400_000) * 10) / 10;
+}
+
+async function readOptionalTextFile(filePath: string): Promise<string | undefined> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+async function loadValidationIssueAssessmentContext(
+  repoRoot: string,
+): Promise<ValidationIssueAssessmentContext> {
+  const [commandJsonSource, commandJsonTests, runJsonContractDoc] = await Promise.all([
+    readOptionalTextFile(path.join(repoRoot, "src/commands/openclawcode.ts")),
+    readOptionalTextFile(path.join(repoRoot, "src/commands/openclawcode.test.ts")),
+    readOptionalTextFile(path.join(repoRoot, "docs/openclawcode/run-json-contract.md")),
+  ]);
+  return {
+    commandJsonSource,
+    commandJsonTests,
+    runJsonContractDoc,
+  };
+}
+
+function summarizeValidationIssueImplementationCounts(issues: ValidationIssueInventoryEntry[]) {
+  return {
+    implemented: issues.filter((issue) => issue.implementationState === "implemented").length,
+    pending: issues.filter((issue) => issue.implementationState === "pending").length,
+    manualReview: issues.filter((issue) => issue.implementationState === "manual-review").length,
+  };
+}
+
+function resolveValidationPoolNextAction(params: {
+  issues: ValidationIssueInventoryEntry[];
+  closeImplemented: boolean;
+}): string {
+  const closableOpenIssues = params.issues.filter(
+    (issue) => issue.state === "open" && issue.autoClosable,
+  );
+  const remainingOpenCommandLayer = params.issues.filter(
+    (issue) =>
+      issue.state === "open" && issue.issueClass === "command-layer" && !issue.autoClosable,
+  ).length;
+
+  if (!params.closeImplemented && closableOpenIssues.length > 0) {
+    return "close-implemented-validation-issues";
+  }
+  if (remainingOpenCommandLayer === 0) {
+    return "seed-command-layer-validation-issue";
+  }
+  return "validation-pool-actionable";
+}
+
+async function listValidationIssueInventory(params: {
+  owner: string;
+  repo: string;
+  repoRoot: string;
+  state: "open" | "closed" | "all";
+  github: GitHubRestClient;
+}): Promise<ValidationIssueInventoryEntry[]> {
+  const assessmentContext = await loadValidationIssueAssessmentContext(params.repoRoot);
+  return (
+    await params.github.listIssues({
+      owner: params.owner,
+      repo: params.repo,
+      state: params.state,
+    })
+  )
+    .flatMap((issue) => {
+      const parsed = parseValidationIssue({
+        title: issue.title,
+        body: issue.body,
+      });
+      if (!parsed) {
+        return [];
+      }
+      const assessment = assessValidationIssueImplementation(parsed, assessmentContext);
+      return [
+        {
+          issueNumber: issue.number,
+          title: issue.title,
+          url: issue.url,
+          state: issue.state,
+          createdAt: issue.createdAt ?? null,
+          updatedAt: issue.updatedAt ?? null,
+          ageDays: resolveValidationIssueAgeDays(issue.createdAt),
+          template: parsed.template,
+          issueClass: parsed.issueClass,
+          fieldName: parsed.fieldName ?? null,
+          implementationState: assessment.state,
+          implementationSummary: assessment.summary,
+          autoClosable: assessment.autoClosable,
+        },
+      ];
+    })
+    .toSorted((left, right) => left.issueNumber - right.issueNumber);
 }
 
 function resolveRunSummary(run: WorkflowRun): string {
@@ -687,36 +817,13 @@ export async function openclawCodeListValidationIssuesCommand(
     repoRoot,
   });
   const github = new GitHubRestClient();
-  const issues = (
-    await github.listIssues({
-      owner: repoRef.owner,
-      repo: repoRef.repo,
-      state: opts.state ?? "open",
-    })
-  )
-    .flatMap((issue) => {
-      const classified = classifyValidationIssue({
-        title: issue.title,
-        body: issue.body,
-      });
-      if (!classified) {
-        return [];
-      }
-      return [
-        {
-          issueNumber: issue.number,
-          title: issue.title,
-          url: issue.url,
-          state: issue.state,
-          createdAt: issue.createdAt ?? null,
-          updatedAt: issue.updatedAt ?? null,
-          ageDays: resolveValidationIssueAgeDays(issue.createdAt),
-          template: classified.template,
-          issueClass: classified.issueClass,
-        },
-      ];
-    })
-    .toSorted((left, right) => left.issueNumber - right.issueNumber);
+  const issues = await listValidationIssueInventory({
+    owner: repoRef.owner,
+    repo: repoRef.repo,
+    repoRoot,
+    state: opts.state ?? "open",
+    github,
+  });
 
   const counts = {
     commandLayer: issues.filter((issue) => issue.issueClass === "command-layer").length,
@@ -724,6 +831,7 @@ export async function openclawCodeListValidationIssuesCommand(
     highRiskValidation: issues.filter((issue) => issue.issueClass === "high-risk-validation")
       .length,
   };
+  const implementationCounts = summarizeValidationIssueImplementationCounts(issues);
   const templateCounts = issues.reduce<Partial<Record<ValidationIssueTemplateId, number>>>(
     (summary, issue) => {
       summary[issue.template] = (summary[issue.template] ?? 0) + 1;
@@ -741,6 +849,7 @@ export async function openclawCodeListValidationIssuesCommand(
           state: opts.state ?? "open",
           totalValidationIssues: issues.length,
           counts,
+          implementationCounts,
           templateCounts,
           issues,
         },
@@ -757,6 +866,9 @@ export async function openclawCodeListValidationIssuesCommand(
   runtime.log(`- command-layer: ${counts.commandLayer}`);
   runtime.log(`- operator-docs: ${counts.operatorDocs}`);
   runtime.log(`- high-risk-validation: ${counts.highRiskValidation}`);
+  runtime.log(`- implemented: ${implementationCounts.implemented}`);
+  runtime.log(`- pending: ${implementationCounts.pending}`);
+  runtime.log(`- manual-review: ${implementationCounts.manualReview}`);
   for (const [template, count] of Object.entries(templateCounts).toSorted(([left], [right]) =>
     left.localeCompare(right),
   )) {
@@ -765,9 +877,115 @@ export async function openclawCodeListValidationIssuesCommand(
   for (const issue of issues) {
     const age = issue.ageDays == null ? "unknown age" : `${issue.ageDays.toFixed(1)}d`;
     runtime.log(
-      `#${issue.issueNumber} [${issue.issueClass}/${issue.template}] ${age} ${issue.title}`,
+      `#${issue.issueNumber} [${issue.issueClass}/${issue.template}/${issue.implementationState}] ${age} ${issue.title}`,
     );
+    if (issue.fieldName) {
+      runtime.log(`field: ${issue.fieldName}`);
+    }
+    runtime.log(issue.implementationSummary);
     runtime.log(issue.url);
+  }
+}
+
+export async function openclawCodeReconcileValidationIssuesCommand(
+  opts: OpenClawCodeReconcileValidationIssuesOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const repoRef = await resolveRepoRef({
+    owner: opts.owner,
+    repo: opts.repo,
+    repoRoot,
+  });
+  const github = new GitHubRestClient();
+  const issues = await listValidationIssueInventory({
+    owner: repoRef.owner,
+    repo: repoRef.repo,
+    repoRoot,
+    state: "open",
+    github,
+  });
+  const closable = issues.filter((issue) => issue.autoClosable);
+  const actions: Array<{
+    issueNumber: number;
+    title: string;
+    action: "would-close" | "closed" | "left-open";
+    implementationState: ValidationIssueInventoryEntry["implementationState"];
+    implementationSummary: string;
+  }> = [];
+
+  for (const issue of issues) {
+    if (!issue.autoClosable) {
+      actions.push({
+        issueNumber: issue.issueNumber,
+        title: issue.title,
+        action: "left-open",
+        implementationState: issue.implementationState,
+        implementationSummary: issue.implementationSummary,
+      });
+      continue;
+    }
+
+    if (opts.closeImplemented) {
+      await github.closeIssue({
+        owner: repoRef.owner,
+        repo: repoRef.repo,
+        issueNumber: issue.issueNumber,
+      });
+      actions.push({
+        issueNumber: issue.issueNumber,
+        title: issue.title,
+        action: "closed",
+        implementationState: issue.implementationState,
+        implementationSummary: issue.implementationSummary,
+      });
+      continue;
+    }
+
+    actions.push({
+      issueNumber: issue.issueNumber,
+      title: issue.title,
+      action: "would-close",
+      implementationState: issue.implementationState,
+      implementationSummary: issue.implementationSummary,
+    });
+  }
+
+  const nextAction = resolveValidationPoolNextAction({
+    issues,
+    closeImplemented: Boolean(opts.closeImplemented),
+  });
+  const closedCount = actions.filter((action) => action.action === "closed").length;
+  const closableCount = closable.length;
+
+  if (opts.json) {
+    runtime.log(
+      JSON.stringify(
+        {
+          owner: repoRef.owner,
+          repo: repoRef.repo,
+          closeImplemented: Boolean(opts.closeImplemented),
+          totalValidationIssues: issues.length,
+          closableImplementedIssues: closableCount,
+          closedIssues: closedCount,
+          nextAction,
+          actions,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  runtime.log(`Repo: ${repoRef.owner}/${repoRef.repo}`);
+  runtime.log(`Validation issues inspected: ${issues.length}`);
+  runtime.log(`Closable implemented issues: ${closableCount}`);
+  runtime.log(`Closed issues: ${closedCount}`);
+  runtime.log(`Next action: ${nextAction}`);
+  for (const action of actions) {
+    runtime.log(`#${action.issueNumber} [${action.action}] ${action.title}`);
+    runtime.log(action.implementationSummary);
   }
 }
 

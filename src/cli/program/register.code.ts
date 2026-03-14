@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import {
   openclawCodeListValidationIssuesCommand,
+  openclawCodeReconcileValidationIssuesCommand,
   openclawCodeRunCommand,
   openclawCodeSeedValidationIssueCommand,
   openclawCodeSeedValidationIssueTemplateIds,
@@ -41,6 +42,10 @@ ${formatHelpExamples([
   [
     "openclaw code list-validation-issues --json",
     "Inspect the current validation-pool inventory for the current repo.",
+  ],
+  [
+    "openclaw code reconcile-validation-issues --close-implemented --json",
+    "Close already-implemented validation issues and report the next pool action.",
   ],
 ])}
 
@@ -180,6 +185,33 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             repo: opts.repo as string | undefined,
             repoRoot: opts.repoRoot as string | undefined,
             state: opts.state as "open" | "closed" | "all" | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("reconcile-validation-issues")
+    .description("Close already-implemented validation issues and summarize the next pool action")
+    .option("--owner <owner>", "GitHub owner")
+    .option("--repo <repo>", "GitHub repository name")
+    .option("--repo-root <dir>", "Local repository root")
+    .option(
+      "--close-implemented",
+      "Close command-layer validation issues already satisfied by the repo",
+      false,
+    )
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeReconcileValidationIssuesCommand(
+          {
+            owner: opts.owner as string | undefined,
+            repo: opts.repo as string | undefined,
+            repoRoot: opts.repoRoot as string | undefined,
+            closeImplemented: Boolean(opts.closeImplemented),
             json: Boolean(opts.json),
           },
           defaultRuntime,

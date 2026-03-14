@@ -1,9 +1,13 @@
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowRun } from "../openclawcode/index.js";
 import {
   DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS,
   DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS,
   openclawCodeListValidationIssuesCommand,
+  openclawCodeReconcileValidationIssuesCommand,
   openclawCodeRunCommand,
   openclawCodeSeedValidationIssueCommand,
   openclawCodeSeedValidationIssueTemplateIds,
@@ -16,6 +20,7 @@ const mocks = vi.hoisted(() => {
     runIssueWorkflow: vi.fn(),
     createIssue: vi.fn(),
     listIssues: vi.fn(),
+    closeIssue: vi.fn(),
     builderCtorArgs: [] as unknown[],
     verifierCtorArgs: [] as unknown[],
   };
@@ -26,6 +31,7 @@ vi.mock("../openclawcode/index.js", async (importOriginal) => {
   class MockGitHubRestClient {
     createIssue = mocks.createIssue;
     listIssues = mocks.listIssues;
+    closeIssue = mocks.closeIssue;
   }
   return {
     ...actual,
@@ -117,6 +123,7 @@ describe("openclawCodeRunCommand", () => {
         updatedAt: "2026-03-12T00:00:00.000Z",
       },
     ]);
+    mocks.closeIssue.mockResolvedValue(undefined);
     mocks.builderCtorArgs.length = 0;
     mocks.verifierCtorArgs.length = 0;
     vi.unstubAllEnvs();
@@ -887,6 +894,7 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.failureDiagnosticsSummary).toBe("HTTP 400: Internal server error");
+    expect(payload.failureDiagnosticToolCount).toBe(4);
     expect(payload.failureDiagnostics).toEqual({
       summary: "HTTP 400: Internal server error",
       provider: "crs",
@@ -1070,9 +1078,13 @@ describe("openclawCodeRunCommand", () => {
   });
 
   it("lists the current validation issue pool in JSON form", async () => {
+    const repoRoot = await createValidationAssessmentRepoRoot({
+      fieldName: "verificationHasMissingCoverage",
+    });
+
     await openclawCodeListValidationIssuesCommand(
       {
-        repoRoot: "/repo",
+        repoRoot,
         json: true,
       },
       runtime,
@@ -1094,6 +1106,11 @@ describe("openclawCodeRunCommand", () => {
         operatorDocs: 1,
         highRiskValidation: 0,
       },
+      implementationCounts: {
+        implemented: 1,
+        pending: 0,
+        manualReview: 1,
+      },
       templateCounts: {
         "command-json-boolean": 1,
         "operator-doc-note": 1,
@@ -1104,19 +1121,29 @@ describe("openclawCodeRunCommand", () => {
         issueNumber: 99,
         template: "command-json-boolean",
         issueClass: "command-layer",
+        fieldName: "verificationHasMissingCoverage",
+        implementationState: "implemented",
+        autoClosable: true,
       }),
       expect.objectContaining({
         issueNumber: 100,
         template: "operator-doc-note",
         issueClass: "operator-docs",
+        fieldName: null,
+        implementationState: "manual-review",
+        autoClosable: false,
       }),
     ]);
   });
 
   it("lists validation issue class and template summaries in text form", async () => {
+    const repoRoot = await createValidationAssessmentRepoRoot({
+      fieldName: "verificationHasMissingCoverage",
+    });
+
     await openclawCodeListValidationIssuesCommand(
       {
-        repoRoot: "/repo",
+        repoRoot,
       },
       runtime,
     );
@@ -1128,15 +1155,109 @@ describe("openclawCodeRunCommand", () => {
       "- command-layer: 1",
       "- operator-docs: 1",
       "- high-risk-validation: 0",
+      "- implemented: 1",
+      "- pending: 0",
+      "- manual-review: 1",
       "- template command-json-boolean: 1",
       "- template operator-doc-note: 1",
-      expect.stringContaining("#99 [command-layer/command-json-boolean]"),
+      expect.stringContaining("#99 [command-layer/command-json-boolean/implemented]"),
+      "field: verificationHasMissingCoverage",
+      "Field is already present in command output, covered by tests, and documented in the JSON contract.",
       "https://github.com/openclaw/openclaw/issues/99",
-      expect.stringContaining("#100 [operator-docs/operator-doc-note]"),
+      expect.stringContaining("#100 [operator-docs/operator-doc-note/manual-review]"),
+      "Automatic local implementation detection is only supported for command-layer JSON validation issues.",
       "https://github.com/openclaw/openclaw/issues/100",
     ]);
   });
+
+  it("reconciles implemented validation issues in dry-run mode", async () => {
+    const repoRoot = await createValidationAssessmentRepoRoot({
+      fieldName: "verificationHasMissingCoverage",
+    });
+
+    await openclawCodeReconcileValidationIssuesCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    expect(mocks.closeIssue).not.toHaveBeenCalled();
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      owner: "openclaw",
+      repo: "openclaw",
+      closeImplemented: false,
+      totalValidationIssues: 2,
+      closableImplementedIssues: 1,
+      closedIssues: 0,
+      nextAction: "close-implemented-validation-issues",
+    });
+    expect(payload.actions).toEqual([
+      expect.objectContaining({
+        issueNumber: 99,
+        action: "would-close",
+        implementationState: "implemented",
+      }),
+      expect.objectContaining({
+        issueNumber: 100,
+        action: "left-open",
+        implementationState: "manual-review",
+      }),
+    ]);
+  });
+
+  it("closes implemented validation issues and requests a fresh command-layer seed when none remain", async () => {
+    const repoRoot = await createValidationAssessmentRepoRoot({
+      fieldName: "verificationHasMissingCoverage",
+    });
+
+    await openclawCodeReconcileValidationIssuesCommand(
+      {
+        repoRoot,
+        closeImplemented: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    expect(mocks.closeIssue).toHaveBeenCalledWith({
+      owner: "openclaw",
+      repo: "openclaw",
+      issueNumber: 99,
+    });
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      closeImplemented: true,
+      closableImplementedIssues: 1,
+      closedIssues: 1,
+      nextAction: "seed-command-layer-validation-issue",
+    });
+  });
 });
+
+async function createValidationAssessmentRepoRoot(params: { fieldName: string }): Promise<string> {
+  const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-validation-"));
+  await mkdir(path.join(repoRoot, "src/commands"), { recursive: true });
+  await mkdir(path.join(repoRoot, "docs/openclawcode"), { recursive: true });
+  await writeFile(
+    path.join(repoRoot, "src/commands/openclawcode.ts"),
+    `${params.fieldName}: true,\n`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(repoRoot, "src/commands/openclawcode.test.ts"),
+    `expect(payload.${params.fieldName}).toBe(true);\n`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(repoRoot, "docs/openclawcode/run-json-contract.md"),
+    `- \`${params.fieldName}\`\n`,
+    "utf8",
+  );
+  return repoRoot;
+}
 
 function createRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
   return {

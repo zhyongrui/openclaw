@@ -100,6 +100,9 @@ The remaining work should be consumed in this order:
      inventory stable enough for other AI sessions, CI, and operator tooling
    - keep those surfaces opinionated enough to say what the next rollout or
      proof action should be, not just dump raw counters
+   - keep validation-pool inventory able to distinguish `implemented`,
+     `pending`, and `manual-review` issues so stale low-risk proofs do not
+     masquerade as active backlog
    - specifically, keep setup-check able to distinguish "built startup proof
      passed" from "live gateway is still down" so promotion automation does
      not misclassify a route restart as a startup regression
@@ -254,6 +257,16 @@ As of 2026-03-14:
 - that built-startup proof is now repeatable through
   `./scripts/openclawcode-setup-check.sh --strict --probe-built-startup --json`,
   so promotion no longer depends on replaying the proof by hand
+- validation-pool reconciliation is now repo-native too:
+  - `openclaw code reconcile-validation-issues --close-implemented --json`
+    can close stale command-layer validation issues whose fields already exist
+    in command output, tests, and `run-json-contract.md`
+  - a real proof on `main` closed stale command-layer issues `#74` through
+    `#82`, then later auto-closed `#89` after `failureDiagnosticToolCount`
+    landed
+  - current open validation pool is now narrower and more honest:
+    - docs/operator issues `#60`, `#86`, `#87`
+    - command-layer issue `#91` for `failureDiagnosticUsageTotal`
 - the remaining startup blocker is now narrower than "openclawcode plugin
   startup":
   - the built openclawcode-only path is healthy
