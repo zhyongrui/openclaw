@@ -1,9 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { openBoundaryFileSync } from "../infra/boundary-file-read.js";
 import { resolveUserPath } from "../utils.js";
 import {
   DEFAULT_PLUGIN_ENTRY_CANDIDATES,
+  PLUGIN_MANIFEST_FILENAME,
   getPackageManifestMetadata,
   resolvePackageExtensionEntries,
   type OpenClawPackageManifest,
@@ -40,6 +42,20 @@ const DEFAULT_DISCOVERY_CACHE_MS = 1000;
 
 export function clearPluginDiscoveryCache(): void {
   discoveryCache.clear();
+}
+
+function shouldPreferBuiltBundledPlugins(env: NodeJS.ProcessEnv): boolean {
+  const override = env.OPENCLAW_PREFER_BUILT_BUNDLED_PLUGINS?.trim().toLowerCase();
+  if (override) {
+    return override === "1" || override === "true" || override === "yes" || override === "on";
+  }
+  try {
+    return fileURLToPath(import.meta.url)
+      .replace(/\\/g, "/")
+      .includes("/dist/");
+  } catch {
+    return false;
+  }
 }
 
 function resolveDiscoveryCacheMs(env: NodeJS.ProcessEnv): number {
@@ -423,6 +439,7 @@ function discoverInDirectory(params: {
   origin: PluginOrigin;
   ownershipUid?: number | null;
   workspaceDir?: string;
+  preferBuiltBundledPlugins?: boolean;
   candidates: PluginCandidate[];
   diagnostics: PluginDiagnostic[];
   seen: Set<string>;
@@ -508,22 +525,49 @@ function discoverInDirectory(params: {
     const indexFile = [...DEFAULT_PLUGIN_ENTRY_CANDIDATES]
       .map((candidate) => path.join(fullPath, candidate))
       .find((candidate) => fs.existsSync(candidate));
-    if (indexFile && isExtensionFile(indexFile)) {
+    const builtOverride =
+      params.origin === "bundled" && params.preferBuiltBundledPlugins
+        ? resolveBundledBuiltOverride({
+            bundledRoot: params.dir,
+            sourceRoot: fullPath,
+          })
+        : undefined;
+    const candidateSource = builtOverride?.source ?? indexFile;
+    const candidateRootDir = builtOverride?.rootDir ?? fullPath;
+    if (candidateSource && isExtensionFile(candidateSource)) {
       addCandidate({
         candidates: params.candidates,
         diagnostics: params.diagnostics,
         seen: params.seen,
         idHint: entry.name,
-        source: indexFile,
-        rootDir: fullPath,
+        source: candidateSource,
+        rootDir: candidateRootDir,
         origin: params.origin,
         ownershipUid: params.ownershipUid,
         workspaceDir: params.workspaceDir,
         manifest,
-        packageDir: fullPath,
+        packageDir: candidateRootDir,
       });
     }
   }
+}
+
+function resolveBundledBuiltOverride(params: {
+  bundledRoot: string;
+  sourceRoot: string;
+}): { source: string; rootDir: string } | undefined {
+  const relativeRoot = path.relative(params.bundledRoot, params.sourceRoot);
+  if (!relativeRoot || relativeRoot.startsWith("..") || path.isAbsolute(relativeRoot)) {
+    return undefined;
+  }
+  const packageRoot = path.dirname(params.bundledRoot);
+  const builtRoot = path.join(packageRoot, "dist", "extensions", relativeRoot);
+  const source = path.join(builtRoot, "index.js");
+  const manifest = path.join(builtRoot, PLUGIN_MANIFEST_FILENAME);
+  if (!fs.existsSync(source) || !fs.existsSync(manifest)) {
+    return undefined;
+  }
+  return { source, rootDir: builtRoot };
 }
 
 function discoverFromPath(params: {
@@ -671,6 +715,7 @@ export function discoverOpenClawPlugins(params: {
   const workspaceDir = params.workspaceDir?.trim();
   const workspaceRoot = workspaceDir ? resolveUserPath(workspaceDir, env) : undefined;
   const roots = resolvePluginSourceRoots({ workspaceDir: workspaceRoot, env });
+  const preferBuiltBundledPlugins = shouldPreferBuiltBundledPlugins(env);
 
   const extra = params.extraPaths ?? [];
   for (const extraPath of extra) {
@@ -698,6 +743,7 @@ export function discoverOpenClawPlugins(params: {
       origin: "workspace",
       ownershipUid: params.ownershipUid,
       workspaceDir: workspaceRoot,
+      preferBuiltBundledPlugins,
       candidates,
       diagnostics,
       seen,
@@ -709,6 +755,7 @@ export function discoverOpenClawPlugins(params: {
       dir: roots.stock,
       origin: "bundled",
       ownershipUid: params.ownershipUid,
+      preferBuiltBundledPlugins,
       candidates,
       diagnostics,
       seen,
@@ -721,6 +768,7 @@ export function discoverOpenClawPlugins(params: {
     dir: roots.global,
     origin: "global",
     ownershipUid: params.ownershipUid,
+    preferBuiltBundledPlugins,
     candidates,
     diagnostics,
     seen,

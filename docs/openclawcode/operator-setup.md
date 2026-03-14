@@ -160,6 +160,40 @@ If you use a service wrapper or local launcher script, keep these rules:
   `OPENCLAW_DISABLE_LAZY_SUBCOMMANDS=1 ... dist/index.js gateway run ...`
   against the same entrypoint without breaking command registration
 
+### Built Startup Isolation Proof
+
+When you need to prove that the built bundled `openclawcode` plugin can start
+under `dist/index.js` without the rest of the live operator config, constrain
+the proof config more aggressively than "disable Feishu":
+
+- set `channels = {}`
+- set `bindings = []`
+- keep only `plugins.entries.openclawcode`
+- add `plugins.allow = ["openclawcode"]`
+- add `plugins.slots.memory = "none"`
+
+That extra allowlist matters. Bundled defaults such as `device-pair`,
+`ollama`, `phone-control`, `sglang`, `talk-voice`, `vllm`, and `memory-core`
+still enable themselves by default unless plugin loading is constrained
+explicitly.
+
+As of 2026-03-14, the repaired built path was proven with:
+
+```bash
+OPENCLAW_SKIP_CANVAS_HOST=1 \
+OPENCLAW_CONFIG_PATH=/tmp/openclawcode-only-allowlist.json \
+OPENCLAW_STATE_DIR=/tmp/openclawcode-proof-state \
+/home/zyr/.local/node-v22.16.0/bin/node dist/index.js gateway run \
+  --bind loopback \
+  --port 18890 \
+  --allow-unconfigured \
+  --verbose
+```
+
+Expected proof signal:
+
+- `listening on ws://127.0.0.1:18890, ws://[::1]:18890`
+
 ## 5. Bind The Repo To The Real Chat Target
 
 Once the gateway is online in the desired chat surface, bind the repo from the

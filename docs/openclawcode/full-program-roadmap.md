@@ -160,7 +160,7 @@ product. Each item should be consumed as one or more narrow slices.
 
 ## Current Operating Baseline
 
-As of 2026-03-12:
+As of 2026-03-14:
 
 - active feature branch:
   - `sync/upstream-2026-03-13`
@@ -236,6 +236,23 @@ As of 2026-03-12:
   - `pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads --maxWorkers 1`
   - `pnpm build`
   - no merge conflicts were encountered on this sync
+- `main` now carries the built bundled startup repair for `openclawcode`:
+  - the build emits `dist/extensions/openclawcode/index.js`
+  - bundled manifest files are copied into `dist/extensions/*`
+  - bundled discovery now prefers `<packageRoot>/extensions` so partial
+    `dist/extensions` output does not shadow the full bundled plugin tree
+  - built runtime now selectively redirects bundled `openclawcode` to the
+    compiled dist entry
+- a real built `dist/index.js gateway run` proof is now complete on `main`
+  with a sanitized allowlisted config:
+  - `plugins.allow = ["openclawcode"]`
+  - `plugins.slots.memory = "none"`
+  - listener reached `ws://127.0.0.1:18890`
+- the remaining startup blocker is now narrower than "openclawcode plugin
+  startup":
+  - the built openclawcode-only path is healthy
+  - any remaining full-config stall should be debugged as another live-config
+    startup component instead of the bundled loader path itself
 
 ## Execution Loop
 

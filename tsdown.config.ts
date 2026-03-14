@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { defineConfig } from "tsdown";
 
 const env = {
@@ -37,6 +39,16 @@ function nodeBuildConfig(config: Record<string, unknown>) {
     fixedExtension: false,
     platform: "node",
     inputOptions: buildInputOptions,
+  };
+}
+
+function listBundledExtensionEntries(): Record<string, string> {
+  const entrySource = path.resolve("extensions", "openclawcode", "index.ts");
+  if (!fs.existsSync(entrySource)) {
+    return {};
+  }
+  return {
+    "extensions/openclawcode/index": entrySource,
   };
 }
 
@@ -87,6 +99,8 @@ const pluginSdkEntrypoints = [
   "keyed-async-queue",
 ] as const;
 
+const bundledExtensionEntries = listBundledExtensionEntries();
+
 export default defineConfig([
   nodeBuildConfig({
     entry: "src/index.ts",
@@ -128,4 +142,11 @@ export default defineConfig([
   nodeBuildConfig({
     entry: ["src/hooks/bundled/*/handler.ts", "src/hooks/llm-slug-generator.ts"],
   }),
+  ...(Object.keys(bundledExtensionEntries).length > 0
+    ? [
+        nodeBuildConfig({
+          entry: bundledExtensionEntries,
+        }),
+      ]
+    : []),
 ]);

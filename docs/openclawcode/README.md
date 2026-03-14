@@ -24,7 +24,7 @@ Development logs live in `dev-log/`.
 
 ## Current Status
 
-As of 2026-03-12, the repository includes a working `openclawcode` issue-driven
+As of 2026-03-14, the repository includes a working `openclawcode` issue-driven
 loop with:
 
 - workflow state, persistence, and isolated worktree management
@@ -175,6 +175,21 @@ loop with:
 - a strict copied-root operator proof that now passes
   `scripts/openclawcode-setup-check.sh --strict` when the fresh root keeps its
   webhook repo and hook metadata in `openclawcode.env`
+- a repaired built-runtime loader path for the bundled `openclawcode` plugin:
+  - the build now ships `dist/extensions/openclawcode/index.js`
+  - bundled plugin manifests are now copied into `dist/extensions`
+  - built runtime now selectively redirects bundled `openclawcode` to the
+    compiled dist entry without letting `dist/extensions` shadow the full
+    bundled plugin tree
+- a real built `dist/index.js gateway run` proof on `main` with an allowlisted
+  diagnostic config:
+  - the proof required `plugins.allow = ["openclawcode"]` and
+    `plugins.slots.memory = "none"`
+  - without that constraint, bundled defaults like `device-pair`, `ollama`,
+    `phone-control`, `sglang`, `talk-voice`, `vllm`, and `memory-core` still
+    join the load path
+  - with that constraint in place, the built gateway reached
+    `listening on ws://127.0.0.1:18890`
 - a copied-root fresh gateway startup proof that now:
   - starts a second local gateway from `OPENCLAWCODE_OPERATOR_ROOT` on a
     non-default port
@@ -187,6 +202,9 @@ loop with:
     `17 pass`, `0 warn`, and `0 fail`
   - after code changes, restarting the long-lived gateway is required before
     trusting chat-visible behavior updates
+  - for built-startup diagnostics, use an explicit plugin allowlist plus
+    `plugins.slots.memory = "none"` so you are proving `openclawcode` itself
+    instead of a bundle of default plugins
 - a refreshed `main` baseline promoted from `sync/upstream-2026-03-11`, pushed
   to `origin/main`, and restarted under the local live gateway
 - a repaired long-lived `main` merged proof through issue `#56`:

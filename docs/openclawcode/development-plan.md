@@ -77,7 +77,7 @@ observable artifacts.
 
 ## Current Baseline
 
-As of 2026-03-13, the repository already has a working issue-driven core plus a
+As of 2026-03-14, the repository already has a working issue-driven core plus a
 real bundled OpenClaw chatops adapter:
 
 - workflow contracts and stage transitions
@@ -133,6 +133,11 @@ real bundled OpenClaw chatops adapter:
   - temporary webhook ingress
 - a repo-local setup verification script for gateway, webhook, binding, tunnel
   health, and required GitHub webhook event subscriptions
+- a built bundled entry for `openclawcode` at
+  `dist/extensions/openclawcode/index.js`
+- copied bundled plugin manifests inside `dist/extensions/*` so the built
+  runtime can resolve bundled plugin schemas and metadata without falling back
+  to the source tree for everything
 - real live lifecycle replay for one tracked PR covering:
   - `pull_request_review` changes requested
   - `pull_request_review` approved
@@ -291,6 +296,29 @@ turning the working loop into a cleanly operable product:
   - the built CLI entrypoint refuses to start below that floor
   - refreshed-branch promotion planning now needs to keep that floor green in
     setup checks rather than treating it as a soft warning
+- the built-runtime startup blocker around the bundled `openclawcode` plugin is
+  now fixed on `main`:
+  - bundled plugin discovery now prefers `<packageRoot>/extensions`, so a
+    partial `dist/extensions` tree no longer shadows the full bundled plugin
+    set
+  - built runtime now selectively redirects bundled `openclawcode` to
+    `dist/extensions/openclawcode/index.js` when the compiled entry and
+    manifest are present
+  - direct `jiti()` loading of the compiled `openclawcode` entry now completes
+    instead of stalling in the old TS-loader path
+- a real built `dist/index.js gateway run` proof is now complete on `main`
+  with a sanitized allowlisted config:
+  - `channels = {}`
+  - `bindings = []`
+  - `plugins.allow = ["openclawcode"]`
+  - `plugins.slots.memory = "none"`
+  - `plugins.entries.openclawcode.enabled = true`
+  - listener reached `ws://127.0.0.1:18890`
+- the allowlist note matters:
+  - a naive "openclawcode-only" config still leaves bundled defaults like
+    `device-pair`, `ollama`, `phone-control`, `sglang`, `talk-voice`, `vllm`,
+    and `memory-core` enabled unless `plugins.allow` and the memory slot are
+    constrained explicitly
 - issue `#71` exposed a workflow-fidelity bug after a one-line chat intake
   proof:
   - builder accepted agent `stopReason=error` output as a successful build
@@ -370,10 +398,15 @@ turning the working loop into a cleanly operable product:
   broader chat-native intake behavior
 - packaging and installation are now documented locally, but still need more
   proof under a fresh operator environment
+- the next startup investigation is now narrower:
+  - the repaired built openclawcode-only startup path is healthy
+  - any remaining full-config startup stall should be debugged as another
+    live-config component rather than a regression in the bundled
+    `openclawcode` loader path
 
 ## Next Iteration Plan
 
-As of 2026-03-12, the immediate next stage is no longer workflow bring-up. The
+As of 2026-03-14, the immediate next stage is no longer workflow bring-up. The
 next stage is turning the already-working loop into a repeatable delivery
 system that can keep shipping on the same branch that the live runner uses.
 
@@ -410,6 +443,12 @@ The short-term objective is:
   transient failures
 - keep `main` usable as the live validation base instead of letting the real
   runner drift behind the latest integration work
+- keep the repaired built `dist/index.js` startup path healthy on `main`
+  instead of drifting back to a TS-only plugin-loading path
+- keep the startup-proof recipe explicit:
+  openclawcode-only diagnostics need an allowlist plus
+  `plugins.slots.memory = "none"` or bundled default plugins will pollute the
+  result
 - keep the now-proven merged-PR path stable on refreshed integration branches
   while proving fresh-operator reproducibility
 - keep the repaired sandbox edit and write paths stable without reintroducing
