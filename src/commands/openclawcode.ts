@@ -537,6 +537,8 @@ function toWorkflowRunJson(run: WorkflowRun) {
     failureDiagnostics: run.failureDiagnostics ?? null,
     failureDiagnosticsSummary: run.failureDiagnostics?.summary ?? null,
     failureDiagnosticSystemPromptChars: run.failureDiagnostics?.systemPromptChars ?? null,
+    failureDiagnosticSkillsPromptChars: run.failureDiagnostics?.skillsPromptChars ?? null,
+    failureDiagnosticToolSchemaChars: run.failureDiagnostics?.toolSchemaChars ?? null,
     failureDiagnosticToolCount: run.failureDiagnostics?.toolCount ?? null,
     failureDiagnosticUsageTotal: run.failureDiagnostics?.lastCallUsageTotal ?? null,
     suitabilityDecision: run.suitability?.decision ?? null,

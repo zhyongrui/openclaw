@@ -51,6 +51,8 @@ loop with:
   - `failureDiagnostics`
   - `failureDiagnosticsSummary`
   - `failureDiagnosticSystemPromptChars`
+  - `failureDiagnosticSkillsPromptChars`
+  - `failureDiagnosticToolSchemaChars`
 - draft PR publishing and guarded merge hooks in the workflow service layer
 - event-driven `pull_request` / `pull_request_review` webhook intake with chat
   notifications for tracked lifecycle changes
@@ -277,14 +279,22 @@ loop with:
     includes:
     - docs/operator issue `#60`
     - docs/operator issue `#86`
-    - docs/operator issue `#87`
-    - command-layer issue `#93`
+    - command-layer issue `#98`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
   - stale command-layer issues `#74` through `#82` are now also auto-closable
     through the new reconcile path once their fields have already landed
   - command-layer issue `#91` has now also been consumed and auto-closed
     through the same reconcile path after `failureDiagnosticUsageTotal` landed
+  - command-layer issue `#93` has now also been consumed and auto-closed
+    through the same reconcile path after `failureDiagnosticSystemPromptChars`
+    landed
+  - command-layer issue `#96` has now also been consumed and auto-closed
+    through the same reconcile path after `failureDiagnosticSkillsPromptChars`
+    landed
+  - command-layer issue `#97` has now also been consumed and auto-closed
+    through the same reconcile path after `failureDiagnosticToolSchemaChars`
+    landed
   - command-layer issues `#54` and `#50` have now been consumed and closed on
     `main`
   - command-layer issue `#55` has now been consumed and closed on `main`, and
@@ -308,6 +318,10 @@ loop with:
   - `openclaw code run --json` now exposes `changedFileCount`
   - `openclaw code run --json` now exposes `failureDiagnosticToolCount`
   - `openclaw code run --json` now exposes `failureDiagnosticUsageTotal`
+  - `openclaw code run --json` now exposes
+    `failureDiagnosticSkillsPromptChars`
+  - `openclaw code run --json` now exposes
+    `failureDiagnosticToolSchemaChars`
   - `scripts/openclawcode-setup-check.sh` now reads `minimumNodeVersion` from
     `dist/cli-startup-metadata.json` and checks the local Node runtime against
     the CLI startup floor

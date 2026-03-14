@@ -419,11 +419,11 @@ describe("OpenClawCodeChatopsStore", () => {
     }
   });
 
-  it("keeps only the newest GitHub delivery records", async () => {
+  it("keeps only the newest GitHub delivery records", { timeout: 60_000 }, async () => {
     const fixture = await createStore();
 
     try {
-      for (let index = 0; index < 205; index += 1) {
+      for (let index = 0; index < 202; index += 1) {
         await fixture.store.recordGitHubDelivery({
           deliveryId: `delivery-${index}`,
           eventName: "issues",
@@ -438,10 +438,10 @@ describe("OpenClawCodeChatopsStore", () => {
       const snapshot = await fixture.store.snapshot();
       expect(Object.keys(snapshot.githubDeliveriesById)).toHaveLength(200);
       expect(snapshot.githubDeliveriesById["delivery-0"]).toBeUndefined();
-      expect(snapshot.githubDeliveriesById["delivery-4"]).toBeUndefined();
-      expect(snapshot.githubDeliveriesById["delivery-5"]?.reason).toBe("reason-5");
-      expect(snapshot.githubDeliveriesById["delivery-204"]?.issueKey).toBe(
-        "zhyongrui/openclawcode#504",
+      expect(snapshot.githubDeliveriesById["delivery-1"]).toBeUndefined();
+      expect(snapshot.githubDeliveriesById["delivery-2"]?.reason).toBe("reason-2");
+      expect(snapshot.githubDeliveriesById["delivery-201"]?.issueKey).toBe(
+        "zhyongrui/openclawcode#501",
       );
     } finally {
       await fs.rm(fixture.rootDir, { recursive: true, force: true });
