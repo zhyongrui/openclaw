@@ -25,10 +25,9 @@ sequence of isolated fixes.
 
 The remaining program is:
 
-1. keep `main` green as the long-lived Feishu operator baseline while the next
-   refreshed branch, `sync/upstream-2026-03-14`, moves through proof and
-   promotion gates on Node `>=22.16.0`, including the first-start Control UI
-   auto-build path
+1. keep `main` green after the `sync/upstream-2026-03-14` promotion and keep
+   the documented repo-local gateway entrypoint healthy on Node `>=22.16.0`,
+   including the first-start Control UI auto-build path
 2. re-prove the long-lived `main` Feishu operator with one merged low-risk
    path, one no-op completion path, and one blocked or escalated path
 3. finish chat-native intake so a teammate can draft, confirm, and launch work
@@ -308,6 +307,9 @@ turning the working loop into a cleanly operable product:
 - the next promotion step is now concrete rather than speculative:
   - fast-forward `main` to `sync/upstream-2026-03-14`
   - re-prove the long-lived `main` baseline on the promoted build
+- that promotion is now complete:
+  - `main` fast-forwarded to `362374a0d0`
+  - `origin/main` now matches that promoted baseline
 - field note from that sync:
   - a clean merge can still leave the local dependency install stale enough to
     report missing packages or missing bins
@@ -439,10 +441,9 @@ system that can keep shipping on the same branch that the live runner uses.
 
 The short-term objective is:
 
-- keep `sync/upstream-2026-03-14` as the active engineering branch until the
-  next live operator proof is complete
-- keep `main` as the stable long-lived Feishu operator baseline rather than
-  mixing in unproven upstream-sync work immediately
+- keep `main` as both the active engineering baseline and the stable
+  long-lived Feishu operator target branch after the
+  `sync/upstream-2026-03-14` promotion
 - keep using real GitHub issues as the driver
 - keep validating each slice end-to-end against this repository
 - move from "observable workflow state" toward "live repository automation with

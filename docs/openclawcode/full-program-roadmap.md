@@ -169,7 +169,7 @@ product. Each item should be consumed as one or more narrow slices.
 As of 2026-03-14:
 
 - active feature branch:
-  - `sync/upstream-2026-03-14`
+  - `main`
 - long-lived live operator baseline:
   - `main`
 - long-lived local operator root:
@@ -268,6 +268,10 @@ As of 2026-03-14:
     findings and the issue remained policy-eligible
 - the next ordered step is now to promote `sync/upstream-2026-03-14` back to
   `main` and then re-prove the long-lived operator there
+- that promotion is now complete:
+  - `main` now points at `362374a0d0`
+  - the next ordered step is the long-lived operator re-proof on promoted
+    `main`
 - `main` now carries the built bundled startup repair for `openclawcode`:
   - the build emits `dist/extensions/openclawcode/index.js`
   - bundled manifest files are copied into `dist/extensions/*`

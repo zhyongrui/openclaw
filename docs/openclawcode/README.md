@@ -421,8 +421,10 @@ loop with:
     repo checks were recorded for the docs-only run
   - current policy still allowed auto-merge because the run had no findings
     and remained eligible under the low-risk policy
-- the next step is now to promote `sync/upstream-2026-03-14` back to `main`
-  and re-prove the long-lived Feishu operator baseline there
+- that promotion is now complete:
+  - `main` and `origin/main` now point at `362374a0d0`
+  - the next live slice is to re-prove the long-lived Feishu operator on that
+    promoted baseline
 - upstream now expects Node `>=22.16.0` for CLI startup:
   - this workstation now runs the refreshed branch under `22.16.0`
   - the built CLI entrypoint no longer starts below the new floor
