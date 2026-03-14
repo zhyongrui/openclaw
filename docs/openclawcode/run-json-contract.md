@@ -82,6 +82,7 @@ those nested objects.
 - `failureDiagnosticSystemPromptChars`
 - `failureDiagnosticSkillsPromptChars`
 - `failureDiagnosticToolSchemaChars`
+- `failureDiagnosticSkillCount`
 - `failureDiagnosticToolCount`
 - `failureDiagnosticUsageTotal`
 
@@ -157,7 +158,7 @@ those nested objects.
 ## Nullability Rules
 
 - count fields use `null` when the underlying metadata does not exist
-- derived numeric fields such as `failureDiagnosticSystemPromptChars`, `failureDiagnosticSkillsPromptChars`, `failureDiagnosticToolSchemaChars`, and `failureDiagnosticToolCount` mirror documented nested metadata when present and otherwise use `null`
+- derived numeric fields such as `failureDiagnosticSystemPromptChars`, `failureDiagnosticSkillsPromptChars`, `failureDiagnosticToolSchemaChars`, `failureDiagnosticSkillCount`, and `failureDiagnosticToolCount` mirror documented nested metadata when present and otherwise use `null`
 - boolean summary fields such as `verificationHasFindings` default to `false`
   when the corresponding section is absent
 - string or timestamp fields use `null` when the underlying value is absent

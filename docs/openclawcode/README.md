@@ -53,6 +53,7 @@ loop with:
   - `failureDiagnosticSystemPromptChars`
   - `failureDiagnosticSkillsPromptChars`
   - `failureDiagnosticToolSchemaChars`
+  - `failureDiagnosticSkillCount`
 - draft PR publishing and guarded merge hooks in the workflow service layer
 - event-driven `pull_request` / `pull_request_review` webhook intake with chat
   notifications for tracked lifecycle changes
@@ -279,7 +280,7 @@ loop with:
     includes:
     - docs/operator issue `#60`
     - docs/operator issue `#86`
-    - command-layer issue `#98`
+    - command-layer issue `#99`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
   - stale command-layer issues `#74` through `#82` are now also auto-closable
@@ -294,6 +295,9 @@ loop with:
     landed
   - command-layer issue `#97` has now also been consumed and auto-closed
     through the same reconcile path after `failureDiagnosticToolSchemaChars`
+    landed
+  - command-layer issue `#98` has now also been consumed and auto-closed
+    through the same reconcile path after `failureDiagnosticSkillCount`
     landed
   - command-layer issues `#54` and `#50` have now been consumed and closed on
     `main`
@@ -322,6 +326,7 @@ loop with:
     `failureDiagnosticSkillsPromptChars`
   - `openclaw code run --json` now exposes
     `failureDiagnosticToolSchemaChars`
+  - `openclaw code run --json` now exposes `failureDiagnosticSkillCount`
   - `scripts/openclawcode-setup-check.sh` now reads `minimumNodeVersion` from
     `dist/cli-startup-metadata.json` and checks the local Node runtime against
     the CLI startup floor
