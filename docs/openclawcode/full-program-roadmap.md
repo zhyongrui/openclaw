@@ -2,6 +2,9 @@
 
 This is the long-horizon backlog for `openclawcode`.
 
+For the checkbox-based master execution list that tracks completed versus open
+work at a finer granularity, see `master-delivery-checklist.md`.
+
 Use it to answer three questions quickly:
 
 1. what the finished product should do

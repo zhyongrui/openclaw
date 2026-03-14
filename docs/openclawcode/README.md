@@ -9,16 +9,17 @@ Recommended reading order:
 3. `mvp-spec-v1.md`
 4. `architecture.md`
 5. `development-plan.md`
-6. `full-program-roadmap.md`
-7. `workflows.md`
-8. `specs.md`
-9. `openclaw-strategy.md`
-10. `openclaw-implementation-plan.md`
-11. `run-json-contract.md`
-12. `upstream-sync-policy.md`
-13. `operator-setup.md`
-14. `mvp-runbook.md`
-15. `webhook-operations.md`
+6. `master-delivery-checklist.md`
+7. `full-program-roadmap.md`
+8. `workflows.md`
+9. `specs.md`
+10. `openclaw-strategy.md`
+11. `openclaw-implementation-plan.md`
+12. `run-json-contract.md`
+13. `upstream-sync-policy.md`
+14. `operator-setup.md`
+15. `mvp-runbook.md`
+16. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
