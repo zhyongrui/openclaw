@@ -867,6 +867,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.failureDiagnosticSkillsPromptChars).toBeNull();
     expect(payload.failureDiagnosticToolSchemaChars).toBeNull();
     expect(payload.failureDiagnosticSkillCount).toBeNull();
+    expect(payload.failureDiagnosticInjectedWorkspaceFileCount).toBeNull();
     expect(payload.failureDiagnosticToolCount).toBeNull();
     expect(payload.failureDiagnosticUsageTotal).toBeNull();
   });
@@ -903,6 +904,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.failureDiagnosticSkillsPromptChars).toBe(1245);
     expect(payload.failureDiagnosticToolSchemaChars).toBe(3030);
     expect(payload.failureDiagnosticSkillCount).toBe(1);
+    expect(payload.failureDiagnosticInjectedWorkspaceFileCount).toBe(0);
     expect(payload.failureDiagnosticToolCount).toBe(4);
     expect(payload.failureDiagnosticUsageTotal).toBe(0);
     expect(payload.failureDiagnostics).toEqual({

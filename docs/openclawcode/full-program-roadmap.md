@@ -304,10 +304,12 @@ As of 2026-03-14:
     `failureDiagnosticToolSchemaChars` landed
   - the same reconcile path has now also auto-closed `#98` after
     `failureDiagnosticSkillCount` landed
+  - the same reconcile path has now also auto-closed `#99` after
+    `failureDiagnosticInjectedWorkspaceFileCount` landed
   - current open validation pool is now narrower and more honest:
     - docs/operator issues `#60`, `#86`
-    - command-layer issue `#99` for
-      `failureDiagnosticInjectedWorkspaceFileCount`
+    - command-layer issue `#100` for
+      `failureDiagnosticBootstrapWarningShown`
 - the remaining startup blocker is now narrower than "openclawcode plugin
   startup":
   - the built openclawcode-only path is healthy
