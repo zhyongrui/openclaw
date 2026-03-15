@@ -46,6 +46,7 @@ those nested objects.
 - `id`
 - `issueNumber`
 - `issueLabelCount`
+- `issueHasLabels`
 - `issueUrl`
 - `issue`
 - `issueTitle`

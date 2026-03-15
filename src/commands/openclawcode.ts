@@ -515,6 +515,7 @@ function toWorkflowRunJson(run: WorkflowRun) {
     runUpdatedAt: run.updatedAt ?? null,
     issueNumber: run.issue.number ?? null,
     issueLabelCount: run.issue.labels?.length ?? null,
+    issueHasLabels: (run.issue.labels?.length ?? 0) > 0,
     issueUrl: run.issue.url ?? null,
     issueTitle: run.issue.title ?? null,
     issueRepo: run.issue.repo ?? null,
