@@ -484,6 +484,22 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.workspacePreparedAt).toBeNull();
   });
 
+  it("prints workspaceWorktreePath as null when workspace path metadata is unavailable", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        workspace: {
+          ...createRun().workspace,
+          worktreePath: undefined as unknown as WorkflowRun["workspace"]["worktreePath"],
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.workspaceWorktreePath).toBeNull();
+  });
+
   it("reports verificationHasFollowUps when verifier follow-up work exists", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
@@ -969,6 +985,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.workspaceBranchName).toBe("openclawcode/issue-2");
     expect(payload.workspaceRepoRoot).toBe("/repo");
     expect(payload.workspacePreparedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(payload.workspaceWorktreePath).toBe("/repo/.openclawcode/worktrees/issue-2");
     expect(payload.stageRecordCount).toBe(2);
     expect(payload.historyEntryCount).toBe(2);
   });

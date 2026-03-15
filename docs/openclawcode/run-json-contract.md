@@ -119,6 +119,7 @@ those nested objects.
 - `workspaceBranchName`
 - `workspaceRepoRoot`
 - `workspacePreparedAt`
+- `workspaceWorktreePath`
 
 ### Pull Request And Merge State
 

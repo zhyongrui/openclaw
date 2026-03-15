@@ -337,9 +337,11 @@ As of 2026-03-14:
     `workspaceRepoRoot` landed
   - the same reconcile path has now also auto-closed `#112` after
     `workspacePreparedAt` landed
+  - the same reconcile path has now also auto-closed `#113` after
+    `workspaceWorktreePath` landed
   - current open validation pool is now narrower and more honest:
     - docs/operator issues `#60`, `#86`
-    - command-layer issue `#113` for `workspaceWorktreePath`
+    - command-layer issue `#114` for `runCreatedAt`
 - the remaining startup blocker is now narrower than "openclawcode plugin
   startup":
   - the built openclawcode-only path is healthy
