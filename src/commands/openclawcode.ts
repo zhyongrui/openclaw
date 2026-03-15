@@ -234,6 +234,7 @@ function resolveAutoMergeDisposition(run: WorkflowRun): {
 function resolvePublishedPullRequest(run: WorkflowRun): {
   pullRequestPublished: boolean;
   publishedPullRequestNumber: number | null;
+  publishedPullRequestTitle: string | null;
   publishedPullRequestBranchName: string | null;
   publishedPullRequestBaseBranch: string | null;
   publishedPullRequestUrl: string | null;
@@ -245,6 +246,7 @@ function resolvePublishedPullRequest(run: WorkflowRun): {
   return {
     pullRequestPublished: published,
     publishedPullRequestNumber: published ? (run.draftPullRequest?.number ?? null) : null,
+    publishedPullRequestTitle: published ? (run.draftPullRequest?.title ?? null) : null,
     publishedPullRequestBranchName: published ? (run.draftPullRequest?.branchName ?? null) : null,
     publishedPullRequestBaseBranch: published ? (run.draftPullRequest?.baseBranch ?? null) : null,
     publishedPullRequestUrl: published ? (run.draftPullRequest?.url ?? null) : null,
@@ -593,6 +595,7 @@ function toWorkflowRunJson(run: WorkflowRun) {
     draftPullRequestDispositionReason:
       draftPullRequestDisposition.draftPullRequestDispositionReason,
     pullRequestPublished: publishedPullRequest.pullRequestPublished,
+    publishedPullRequestTitle: publishedPullRequest.publishedPullRequestTitle,
     publishedPullRequestBranchName: publishedPullRequest.publishedPullRequestBranchName,
     publishedPullRequestBaseBranch: publishedPullRequest.publishedPullRequestBaseBranch,
     publishedPullRequestUrl: publishedPullRequest.publishedPullRequestUrl,
