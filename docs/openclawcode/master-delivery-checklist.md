@@ -2,6 +2,9 @@
 
 This is the canonical long-running execution checklist for `openclawcode`.
 
+For a much longer list of seed-ready low-risk command-layer issue candidates,
+see `command-layer-backlog.md`.
+
 Use it when the goal is not just "finish the next slice", but "keep shipping
 until the product is genuinely usable by other people".
 

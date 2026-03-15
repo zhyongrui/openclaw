@@ -1,0 +1,224 @@
+# OpenClawCode Command-Layer Backlog
+
+This file is the long-form seed-ready backlog for low-risk command-layer work.
+
+Use it when the goal is to keep shipping many narrow slices without having to
+rediscover the next field family each time.
+
+Rules:
+
+- `[x]` means the field is already implemented, tested, documented, and the
+  corresponding validation issue has been consumed or proven equivalent.
+- `[ ]` means the field or slice is still open and can be seeded into GitHub.
+- Keep the live GitHub validation pool small. This file can be long even when
+  only one or two command-layer issues are open on GitHub at a time.
+- Prefer fields that are:
+  - stable
+  - low-risk
+  - useful to simple JSON consumers
+  - derivable from already-persisted workflow metadata
+
+## Current Live Queue
+
+- [x] `publishedPullRequestUrl`
+- [x] `publishedPullRequestBaseBranch`
+- [x] `publishedPullRequestBranchName`
+- [ ] `publishedPullRequestTitle`
+
+## Published Pull Request Mirrors
+
+- [x] `publishedPullRequestNumber`
+- [x] `publishedPullRequestOpenedAt`
+- [x] `publishedPullRequestUrl`
+- [x] `publishedPullRequestBaseBranch`
+- [x] `publishedPullRequestBranchName`
+- [ ] `publishedPullRequestTitle`
+- [ ] `publishedPullRequestBody`
+- [ ] `publishedPullRequestHasNumber`
+- [ ] `publishedPullRequestHasUrl`
+- [ ] `publishedPullRequestHasOpenedAt`
+- [ ] `publishedPullRequestHasTitle`
+- [ ] `publishedPullRequestHasBody`
+
+## Draft Pull Request Convenience Signals
+
+- [x] `draftPullRequestBranchName`
+- [x] `draftPullRequestBaseBranch`
+- [x] `draftPullRequestTitle`
+- [x] `draftPullRequestBody`
+- [x] `draftPullRequestOpenedAt`
+- [x] `draftPullRequestNumber`
+- [x] `draftPullRequestUrl`
+- [x] `draftPullRequestDisposition`
+- [x] `draftPullRequestDispositionReason`
+- [ ] `draftPullRequestHasNumber`
+- [ ] `draftPullRequestHasUrl`
+- [ ] `draftPullRequestHasOpenedAt`
+- [ ] `draftPullRequestHasTitle`
+- [ ] `draftPullRequestHasBody`
+
+## Issue Metadata Mirrors
+
+- [x] `issueNumber`
+- [x] `issueUrl`
+- [x] `issueTitle`
+- [x] `issueRepo`
+- [x] `issueOwner`
+- [x] `issueLabelCount`
+- [x] `issueHasLabels`
+- [ ] `issueHasBody`
+- [ ] `issueBodyLength`
+- [ ] `issueTitleLength`
+- [ ] `issueRepoOwnerPair`
+- [ ] `issueLabelListPresent`
+- [ ] `issueFirstLabel`
+- [ ] `issueLastLabel`
+
+## Workspace Metadata Mirrors
+
+- [x] `workspaceBaseBranch`
+- [x] `workspaceBranchName`
+- [x] `workspaceRepoRoot`
+- [x] `workspacePreparedAt`
+- [x] `workspaceWorktreePath`
+- [ ] `workspaceHasPreparedAt`
+- [ ] `workspaceHasWorktreePath`
+- [ ] `workspaceRepoRootPresent`
+- [ ] `workspaceBranchMatchesIssue`
+
+## Run Lifecycle Mirrors
+
+- [x] `runCreatedAt`
+- [x] `runUpdatedAt`
+- [ ] `runHasUpdatedAt`
+- [ ] `runAgeSeconds`
+- [ ] `runLastStageEnteredAt`
+- [ ] `runHasHistory`
+- [ ] `runHasStageRecords`
+- [ ] `runHistoryTextPresent`
+
+## Build Result Mirrors
+
+- [x] `changedFileCount`
+- [x] `testCommandCount`
+- [x] `testResultCount`
+- [x] `noteCount`
+- [ ] `buildSummary`
+- [ ] `buildSummaryPresent`
+- [ ] `changedFilesPresent`
+- [ ] `testCommandsPresent`
+- [ ] `testResultsPresent`
+- [ ] `notesPresent`
+- [ ] `changedFileListStable`
+
+## Scope Check Mirrors
+
+- [x] `scopeCheck`
+- [x] `scopeCheckSummary`
+- [x] `scopeCheckSummaryPresent`
+- [x] `scopeCheckPassed`
+- [x] `scopeCheckHasBlockedFiles`
+- [x] `scopeBlockedFileCount`
+- [ ] `scopeBlockedFilesPresent`
+- [ ] `scopeBlockedFirstFile`
+- [ ] `scopeBlockedLastFile`
+
+## Verification Mirrors
+
+- [x] `verificationDecision`
+- [x] `verificationApprovedForHumanReview`
+- [x] `verificationSummary`
+- [x] `verificationHasFindings`
+- [x] `verificationHasMissingCoverage`
+- [x] `verificationHasSignals`
+- [x] `verificationHasFollowUps`
+- [x] `verificationFindingCount`
+- [x] `verificationMissingCoverageCount`
+- [x] `verificationFollowUpCount`
+- [ ] `verificationSummaryPresent`
+- [ ] `verificationDecisionIsEscalate`
+- [ ] `verificationDecisionIsRequestChanges`
+- [ ] `verificationDecisionIsApprove`
+- [ ] `verificationFindingsPresent`
+- [ ] `verificationMissingCoveragePresent`
+- [ ] `verificationFollowUpsPresent`
+
+## Suitability Mirrors
+
+- [x] `suitabilityDecision`
+- [x] `suitabilitySummary`
+- [x] `suitabilityReasons`
+- [x] `suitabilityReasonCount`
+- [x] `suitabilityClassification`
+- [x] `suitabilityRiskLevel`
+- [x] `suitabilityEvaluatedAt`
+- [ ] `suitabilitySummaryPresent`
+- [ ] `suitabilityReasonsPresent`
+- [ ] `suitabilityDecisionIsAutoRun`
+- [ ] `suitabilityDecisionIsNeedsHumanReview`
+- [ ] `suitabilityDecisionIsEscalate`
+
+## Failure Diagnostic Mirrors
+
+- [x] `failureDiagnosticsSummary`
+- [x] `failureDiagnosticProvider`
+- [x] `failureDiagnosticModel`
+- [x] `failureDiagnosticSystemPromptChars`
+- [x] `failureDiagnosticSkillsPromptChars`
+- [x] `failureDiagnosticToolSchemaChars`
+- [x] `failureDiagnosticToolCount`
+- [x] `failureDiagnosticSkillCount`
+- [x] `failureDiagnosticInjectedWorkspaceFileCount`
+- [x] `failureDiagnosticBootstrapWarningShown`
+- [x] `failureDiagnosticUsageTotal`
+- [ ] `failureDiagnosticsPresent`
+- [ ] `failureDiagnosticProviderPresent`
+- [ ] `failureDiagnosticModelPresent`
+- [ ] `failureDiagnosticSummaryPresent`
+
+## Execution Spec Mirrors
+
+- [x] `acceptanceCriteriaCount`
+- [x] `openQuestionCount`
+- [x] `riskCount`
+- [x] `assumptionCount`
+- [x] `testPlanCount`
+- [x] `scopeItemCount`
+- [x] `outOfScopeCount`
+- [ ] `acceptanceCriteriaPresent`
+- [ ] `openQuestionsPresent`
+- [ ] `risksPresent`
+- [ ] `assumptionsPresent`
+- [ ] `testPlanPresent`
+- [ ] `scopeItemsPresent`
+- [ ] `outOfScopePresent`
+
+## History And Rerun Mirrors
+
+- [x] `stageRecordCount`
+- [x] `historyEntryCount`
+- [x] `rerunRequested`
+- [x] `rerunHasReviewContext`
+- [x] `rerunReason`
+- [x] `rerunRequestedAt`
+- [x] `rerunPriorRunId`
+- [x] `rerunPriorStage`
+- [x] `rerunReviewDecision`
+- [x] `rerunReviewSubmittedAt`
+- [x] `rerunReviewSummary`
+- [x] `rerunReviewUrl`
+- [ ] `rerunReasonPresent`
+- [ ] `rerunReviewSummaryPresent`
+- [ ] `rerunReviewUrlPresent`
+- [ ] `rerunReviewDecisionPresent`
+
+## Queueing Notes
+
+- [ ] keep one active command-layer GitHub issue open at a time unless a second
+      issue is needed to avoid idle operator time
+- [ ] prefer staying within one field family for 3-5 slices before switching
+      domains
+- [ ] when a family is nearly complete, seed the next family here before the
+      live GitHub pool runs dry
+- [ ] update this backlog whenever a future slice reveals a better low-risk
+      mirror candidate than the ones listed above

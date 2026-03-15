@@ -306,6 +306,8 @@ loop with:
     already-implemented command-layer issues directly from the repo-local CLI
   - `openclaw code seed-validation-issue` now also supports
     `command-json-string` for low-risk string-or-null convenience fields
+  - `docs/openclawcode/command-layer-backlog.md` now keeps a much longer
+    seed-ready queue than the tiny live GitHub validation pool
   - seeded issue creation now reuses an existing open match instead of creating
     a duplicate
   - current live inventory is visible without opening GitHub manually and

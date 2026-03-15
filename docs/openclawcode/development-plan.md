@@ -21,6 +21,9 @@ operator end-state, see `full-program-roadmap.md`.
 For the checkbox-driven master execution queue that is meant to survive many
 future sessions, see `master-delivery-checklist.md`.
 
+For the long seed-ready list of low-risk command-layer field mirrors that
+should not all be opened on GitHub at once, see `command-layer-backlog.md`.
+
 ## Final Delivery Plan
 
 The work should now converge on a public-usable operator, not an endless
