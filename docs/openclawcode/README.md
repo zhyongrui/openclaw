@@ -72,6 +72,9 @@ loop with:
 - stable workspace metadata now also includes a top-level
   `workspaceBaseBranch` mirror for consumers that should not unpack the nested
   `workspace` object
+- stable workspace metadata now also includes a top-level
+  `workspaceBranchName` mirror for consumers that should not unpack the nested
+  `workspace` object
 - draft PR publishing and guarded merge hooks in the workflow service layer
 - event-driven `pull_request` / `pull_request_review` webhook intake with chat
   notifications for tracked lifecycle changes
@@ -300,7 +303,7 @@ loop with:
     includes:
     - docs/operator issue `#60`
     - docs/operator issue `#86`
-    - command-layer issue `#110`
+    - command-layer issue `#111`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
   - stale command-layer issues `#74` through `#82` are now also auto-closable
@@ -341,6 +344,8 @@ loop with:
     through the same reconcile path after `issueOwner` landed
   - command-layer issue `#109` has now also been consumed and auto-closed
     through the same reconcile path after `workspaceBaseBranch` landed
+  - command-layer issue `#110` has now also been consumed and auto-closed
+    through the same reconcile path after `workspaceBranchName` landed
   - command-layer issues `#54` and `#50` have now been consumed and closed on
     `main`
   - command-layer issue `#55` has now been consumed and closed on `main`, and

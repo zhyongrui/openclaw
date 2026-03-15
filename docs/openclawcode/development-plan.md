@@ -242,7 +242,7 @@ turning the working loop into a cleanly operable product:
 - current live inventory is now:
   - docs/operator issue `#60`
   - docs/operator issue `#86`
-  - command-layer issue `#110` for `workspaceBranchName`
+  - command-layer issue `#111` for `workspaceRepoRoot`
 - duplicate seeding attempts now reuse an existing open issue with the same
   template and title instead of creating a fresh duplicate
 - duplicate issue `#59` was detected via the new inventory command and then
@@ -279,7 +279,7 @@ turning the working loop into a cleanly operable product:
 - command-layer issue `#100` for `failureDiagnosticBootstrapWarningShown` has
   now also been implemented, documented, and auto-closed through the same path
 - validation-pool tooling now also supports `command-json-string`, so the
-  replenished command-layer pool continues with issue `#110` for `workspaceBranchName`
+  replenished command-layer pool continues with issue `#111` for `workspaceRepoRoot`
 - command-layer issues `#101` and `#102` have now also been implemented,
   documented, and auto-closed through the same path
 - command-layer issue `#103` for `draftPullRequestTitle` has now also been
@@ -294,6 +294,8 @@ turning the working loop into a cleanly operable product:
 - command-layer issue `#108` for `issueOwner` has now also been implemented,
   documented, and auto-closed through the same path
 - command-layer issue `#109` for `workspaceBaseBranch` has now also been
+  implemented, documented, and auto-closed through the same path
+- command-layer issue `#110` for `workspaceBranchName` has now also been
   implemented, documented, and auto-closed through the same path
 - the `failureDiagnostics` family is now effectively mirrored at the top level
   for:
@@ -316,6 +318,8 @@ turning the working loop into a cleanly operable product:
   field at the top level via `issueOwner`
 - stable workspace mirroring now also includes the nested
   `workspace.baseBranch` field at the top level via `workspaceBaseBranch`
+- stable workspace mirroring now also includes the nested
+  `workspace.branchName` field at the top level via `workspaceBranchName`
   - bootstrap-warning signal
   - usage total
 - a fresh explicit chat-intake live proof is now complete through issue `#70`:

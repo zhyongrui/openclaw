@@ -116,6 +116,7 @@ those nested objects.
 ### Workspace Metadata
 
 - `workspaceBaseBranch`
+- `workspaceBranchName`
 
 ### Pull Request And Merge State
 
