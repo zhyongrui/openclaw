@@ -511,6 +511,7 @@ function toWorkflowRunJson(run: WorkflowRun) {
   return {
     ...run,
     contractVersion: OPENCLAWCODE_RUN_JSON_CONTRACT_VERSION,
+    runCreatedAt: run.createdAt ?? null,
     issueTitle: run.issue.title ?? null,
     issueRepo: run.issue.repo ?? null,
     issueOwner: run.issue.owner ?? null,

@@ -41,6 +41,7 @@ those nested objects.
 ### Identity And Stage
 
 - `contractVersion`
+- `runCreatedAt`
 - `id`
 - `issue`
 - `issueTitle`
