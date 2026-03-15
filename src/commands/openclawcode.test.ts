@@ -420,6 +420,22 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.issueOwner).toBeNull();
   });
 
+  it("prints workspaceBaseBranch as null when workspace metadata is unavailable", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        workspace: {
+          ...createRun().workspace,
+          baseBranch: undefined as unknown as WorkflowRun["workspace"]["baseBranch"],
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.workspaceBaseBranch).toBeNull();
+  });
+
   it("reports verificationHasFollowUps when verifier follow-up work exists", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
@@ -901,6 +917,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.testPlanCount).toBe(2);
     expect(payload.scopeItemCount).toBe(2);
     expect(payload.outOfScopeCount).toBe(2);
+    expect(payload.workspaceBaseBranch).toBe("main");
     expect(payload.stageRecordCount).toBe(2);
     expect(payload.historyEntryCount).toBe(2);
   });

@@ -564,6 +564,7 @@ function toWorkflowRunJson(run: WorkflowRun) {
     testPlanCount: run.executionSpec?.testPlan.length ?? null,
     scopeItemCount: run.executionSpec?.scope.length ?? null,
     outOfScopeCount: run.executionSpec?.outOfScope.length ?? null,
+    workspaceBaseBranch: run.workspace.baseBranch ?? null,
     draftPullRequestTitle: run.draftPullRequest?.title ?? null,
     draftPullRequestBody: run.draftPullRequest?.body ?? null,
     draftPullRequestOpenedAt: run.draftPullRequest?.openedAt ?? null,

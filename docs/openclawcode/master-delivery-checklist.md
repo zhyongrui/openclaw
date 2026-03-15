@@ -366,7 +366,8 @@ These are the next narrow slices that should be consumed from the current state.
 
 - [x] implement `#107` for `issueRepo`
 - [x] implement `#108` for `issueOwner`
-- [ ] implement `#109` for `workspaceBaseBranch`
+- [x] implement `#109` for `workspaceBaseBranch`
+- [ ] implement `#110` for `workspaceBranchName`
 - [ ] replenish the command-layer validation pool with the next low-risk string mirror
 - [ ] keep `run-json-contract.md` aligned with each new top-level field
 - [ ] keep `development-plan.md` and `full-program-roadmap.md` aligned with the latest pool state

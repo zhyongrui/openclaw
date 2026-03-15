@@ -113,6 +113,10 @@ those nested objects.
 - `scopeItemCount`
 - `outOfScopeCount`
 
+### Workspace Metadata
+
+- `workspaceBaseBranch`
+
 ### Pull Request And Merge State
 
 - `draftPullRequestBranchName`
