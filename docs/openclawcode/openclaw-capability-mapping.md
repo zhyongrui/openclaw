@@ -555,6 +555,7 @@ Tasks:
 - `[x]` persist gate decisions in a repo-local artifact
 - `[x]` expose stage-gate readiness and blockers through CLI
 - `[x]` persist current stage-gate snapshots into workflow run artifacts
+- `[x]` allow structured rerun-time coder/verifier overrides from chat and CLI
 - `[ ]` allow plan approval before code execution
 - `[ ]` allow plan editing before code execution
 - `[ ]` allow manual worktree takeover
@@ -566,6 +567,9 @@ Tasks:
 Acceptance:
 
 - a human can intervene at any important stage without breaking continuity
+- current foothold:
+  - a failed or review-blocked run can now be re-queued with an explicit
+    coder/verifier override and keep that override in the rerun artifact
 
 ### Phase M8: Chatops Integration
 

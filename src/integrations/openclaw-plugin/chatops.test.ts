@@ -1,0 +1,84 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildOpenClawCodeRunArgv,
+  buildRunRequestFromCommand,
+  type OpenClawCodeChatopsRepoConfig,
+} from "./chatops.js";
+
+function createRepoConfig(): OpenClawCodeChatopsRepoConfig {
+  return {
+    owner: "zhyongrui",
+    repo: "openclawcode",
+    repoRoot: "/repo",
+    baseBranch: "main",
+    notifyChannel: "telegram",
+    notifyTarget: "chat:primary",
+    builderAgent: "main-builder",
+    verifierAgent: "main-verifier",
+    testCommands: ["pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads"],
+    openPullRequest: true,
+    mergeOnApprove: false,
+  };
+}
+
+describe("openclawcode chatops run request plumbing", () => {
+  it("applies runtime reroute overrides to rerun requests", () => {
+    const request = buildRunRequestFromCommand({
+      command: {
+        action: "rerun",
+        issue: {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          number: 412,
+        },
+      },
+      config: createRepoConfig(),
+      rerunContext: {
+        reason: "Retry with a different runtime agent.",
+        requestedAt: "2026-03-16T12:00:00.000Z",
+        priorRunId: "run-411",
+        priorStage: "failed",
+      },
+      runtimeAgentOverrides: {
+        coderAgentId: "codex-reroute",
+        verifierAgentId: "claude-reroute",
+      },
+    });
+
+    expect(request.builderAgent).toBe("codex-reroute");
+    expect(request.verifierAgent).toBe("claude-reroute");
+    expect(request.rerunContext).toMatchObject({
+      requestedCoderAgentId: "codex-reroute",
+      requestedVerifierAgentId: "claude-reroute",
+    });
+  });
+
+  it("emits rerun runtime override flags in the CLI argv", () => {
+    const argv = buildOpenClawCodeRunArgv({
+      owner: "zhyongrui",
+      repo: "openclawcode",
+      issueNumber: 412,
+      repoRoot: "/repo",
+      baseBranch: "main",
+      branchName: "openclawcode/issue-412",
+      builderAgent: "codex-reroute",
+      verifierAgent: "claude-reroute",
+      testCommands: ["pnpm test"],
+      openPullRequest: true,
+      mergeOnApprove: false,
+      rerunContext: {
+        reason: "Retry with a different runtime agent.",
+        requestedAt: "2026-03-16T12:00:00.000Z",
+        priorRunId: "run-411",
+        priorStage: "failed",
+        requestedCoderAgentId: "codex-reroute",
+        requestedVerifierAgentId: "claude-reroute",
+      },
+    });
+
+    expect(argv).toContain("--rerun-coder-agent");
+    expect(argv).toContain("codex-reroute");
+    expect(argv).toContain("--rerun-verifier-agent");
+    expect(argv).toContain("claude-reroute");
+  });
+});

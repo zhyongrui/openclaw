@@ -94,6 +94,8 @@ export interface WorkflowRerunContext {
   reviewSubmittedAt?: string;
   reviewSummary?: string;
   reviewUrl?: string;
+  requestedCoderAgentId?: string;
+  requestedVerifierAgentId?: string;
 }
 
 export interface WorkflowAttemptSummary {
@@ -166,7 +168,7 @@ export interface WorkflowRuntimeRoleSelection {
   assignmentSource: string | null;
   configured: boolean;
   appliedAgentId: string | null;
-  agentSource: "cli-override" | "role-env" | "adapter-env" | "runner-default";
+  agentSource: "rerun-request" | "cli-override" | "role-env" | "adapter-env" | "runner-default";
 }
 
 export interface WorkflowRuntimeRoutingSnapshot {

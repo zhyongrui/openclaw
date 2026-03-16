@@ -151,6 +151,8 @@ function attachRerunContext(
     reason: normalizedReason,
     reviewSummary: rerunContext.reviewSummary?.trim() || undefined,
     reviewUrl: rerunContext.reviewUrl?.trim() || undefined,
+    requestedCoderAgentId: rerunContext.requestedCoderAgentId?.trim() || undefined,
+    requestedVerifierAgentId: rerunContext.requestedVerifierAgentId?.trim() || undefined,
   };
 
   const notes = [
@@ -176,6 +178,21 @@ function attachRerunContext(
 
   if (normalizedContext.reviewUrl) {
     notes.push(`Latest review URL: ${normalizedContext.reviewUrl}`);
+  }
+
+  if (normalizedContext.requestedCoderAgentId || normalizedContext.requestedVerifierAgentId) {
+    notes.push(
+      `Requested runtime reroute: ${[
+        normalizedContext.requestedCoderAgentId
+          ? `coder=${normalizedContext.requestedCoderAgentId}`
+          : undefined,
+        normalizedContext.requestedVerifierAgentId
+          ? `verifier=${normalizedContext.requestedVerifierAgentId}`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(", ")}`,
+    );
   }
 
   return {

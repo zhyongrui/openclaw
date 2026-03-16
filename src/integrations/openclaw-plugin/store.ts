@@ -46,6 +46,8 @@ export interface OpenClawCodeIssueStatusSnapshot {
   rerunRequestedAt?: string;
   rerunPriorRunId?: string;
   rerunPriorStage?: WorkflowStage;
+  rerunRequestedCoderAgentId?: string;
+  rerunRequestedVerifierAgentId?: string;
   suitabilityDecision?: SuitabilityDecision;
   suitabilitySummary?: string;
   failureDiagnostics?: WorkflowFailureDiagnostics;
@@ -179,6 +181,14 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
       typeof candidate.rerunPriorRunId === "string" ? candidate.rerunPriorRunId : undefined,
     rerunPriorStage:
       typeof candidate.rerunPriorStage === "string" ? candidate.rerunPriorStage : undefined,
+    rerunRequestedCoderAgentId:
+      typeof candidate.rerunRequestedCoderAgentId === "string"
+        ? candidate.rerunRequestedCoderAgentId
+        : undefined,
+    rerunRequestedVerifierAgentId:
+      typeof candidate.rerunRequestedVerifierAgentId === "string"
+        ? candidate.rerunRequestedVerifierAgentId
+        : undefined,
     suitabilityDecision:
       candidate.suitabilityDecision === "auto-run" ||
       candidate.suitabilityDecision === "needs-human-review" ||
@@ -401,6 +411,8 @@ function buildStatusSnapshot(params: {
     rerunRequestedAt: params.run.rerunContext?.requestedAt,
     rerunPriorRunId: params.run.rerunContext?.priorRunId,
     rerunPriorStage: params.run.rerunContext?.priorStage,
+    rerunRequestedCoderAgentId: params.run.rerunContext?.requestedCoderAgentId,
+    rerunRequestedVerifierAgentId: params.run.rerunContext?.requestedVerifierAgentId,
     suitabilityDecision: params.run.suitability?.decision,
     suitabilitySummary: params.run.suitability?.summary,
     failureDiagnostics: params.run.failureDiagnostics,

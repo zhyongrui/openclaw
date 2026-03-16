@@ -60,6 +60,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] define a provider-neutral role model for planner, coder, reviewer, verifier, and doc-writer
 - [x] map Codex and Claude Code into that shared role model
 - [x] persist runtime-applied coder and verifier routing selections in workflow artifacts
+- [x] allow structured rerun-time coder and verifier overrides from chat and CLI
 - [ ] support stage-level human handoff, edit, resume, and provider switching
 - [x] persist blueprint and stage-gate decisions in machine-readable artifacts
 

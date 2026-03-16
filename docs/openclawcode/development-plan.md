@@ -2024,3 +2024,28 @@ story yet:
 - routing can now affect pre-build and pre-verify execution
 - mid-run provider switching is still open
 - manual worktree takeover and structured resume are still open
+
+## Rerun-Time Runtime Agent Overrides
+
+The next runtime-routing slice now exists as a structured rerun path instead of
+only pre-run blueprint edits.
+
+- new chat command:
+  - `/occode-reroute-run owner/repo#123 <coder|verifier> <agent-id>`
+- new CLI flags:
+  - `--rerun-coder-agent`
+  - `--rerun-verifier-agent`
+- rerun context now persists:
+  - `requestedCoderAgentId`
+  - `requestedVerifierAgentId`
+- executable role routing now resolves those requested reroutes ahead of
+  ordinary explicit builder/verifier agent overrides, and records the applied
+  source as `rerun-request`
+- `openclaw code run --json` now mirrors those rerun-time runtime override
+  requests as stable top-level fields
+
+This still does not complete the full provider-switch story:
+
+- the override only applies when queueing a new rerun
+- it does not hot-swap an already running builder or verifier
+- manual worktree takeover and post-edit resume are still future slices

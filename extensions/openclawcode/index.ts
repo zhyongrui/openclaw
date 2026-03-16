@@ -477,8 +477,17 @@ function buildRerunLedgerLines(params: {
   priorStage?: string;
   requestedAt?: string;
   reason?: string;
+  requestedCoderAgentId?: string;
+  requestedVerifierAgentId?: string;
 }): string[] {
-  if (!params.priorRunId && !params.priorStage && !params.requestedAt && !params.reason) {
+  if (
+    !params.priorRunId &&
+    !params.priorStage &&
+    !params.requestedAt &&
+    !params.reason &&
+    !params.requestedCoderAgentId &&
+    !params.requestedVerifierAgentId
+  ) {
     return [];
   }
 
@@ -490,7 +499,17 @@ function buildRerunLedgerLines(params: {
     .filter(Boolean)
     .join(" | ")}`;
   const reason = trimToSingleLine(params.reason);
-  return reason ? [line, `  reason: ${reason}`] : [line];
+  const runtimeReroute = [
+    params.requestedCoderAgentId ? `coder=${params.requestedCoderAgentId}` : undefined,
+    params.requestedVerifierAgentId ? `verifier=${params.requestedVerifierAgentId}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return [
+    line,
+    ...(reason ? [`  reason: ${reason}`] : []),
+    ...(runtimeReroute ? [`  reroute: ${runtimeReroute}`] : []),
+  ];
 }
 
 function buildNotificationLedgerLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
@@ -877,6 +896,39 @@ function parseRoleRoutingSetArgs(params: {
   };
 }
 
+function parseRuntimeRerouteArgs(params: {
+  args: string;
+  defaults: { owner?: string; repo?: string };
+}):
+  | {
+      issue: { owner: string; repo: string; number: number };
+      roleId: "coder" | "verifier";
+      agentId: string;
+    }
+  | undefined {
+  const tokens = params.args
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (tokens.length < 3) {
+    return undefined;
+  }
+  const command = parseChatopsCommand(`/occode-status ${tokens[0] ?? ""}`, params.defaults);
+  const roleToken = tokens[1]?.trim().toLowerCase();
+  const agentId = tokens.slice(2).join(" ").trim();
+  if (!command || !roleToken || !agentId) {
+    return undefined;
+  }
+  if (roleToken !== "coder" && roleToken !== "verifier") {
+    throw new Error("Role must be one of: coder, verifier");
+  }
+  return {
+    issue: command.issue,
+    roleId: roleToken,
+    agentId,
+  };
+}
+
 function buildBlueprintSummaryMessage(params: {
   repo: { owner: string; repo: string };
   blueprint: Awaited<ReturnType<typeof readProjectBlueprintDocument>>;
@@ -1165,6 +1217,8 @@ function buildInboxMessage(params: {
           priorStage: entry.request.rerunContext?.priorStage,
           requestedAt: entry.request.rerunContext?.requestedAt,
           reason: entry.request.rerunContext?.reason,
+          requestedCoderAgentId: entry.request.rerunContext?.requestedCoderAgentId,
+          requestedVerifierAgentId: entry.request.rerunContext?.requestedVerifierAgentId,
         }),
       );
     }
@@ -1184,6 +1238,8 @@ function buildInboxMessage(params: {
           priorStage: entry.request.rerunContext?.priorStage,
           requestedAt: entry.request.rerunContext?.requestedAt,
           reason: entry.request.rerunContext?.reason,
+          requestedCoderAgentId: entry.request.rerunContext?.requestedCoderAgentId,
+          requestedVerifierAgentId: entry.request.rerunContext?.requestedVerifierAgentId,
         }),
       );
     }
@@ -1226,6 +1282,8 @@ function buildInboxMessage(params: {
           priorStage: entry.rerunPriorStage,
           requestedAt: entry.rerunRequestedAt,
           reason: entry.rerunReason,
+          requestedCoderAgentId: entry.rerunRequestedCoderAgentId,
+          requestedVerifierAgentId: entry.rerunRequestedVerifierAgentId,
         }),
       );
       lines.push(...buildProviderFailureContextLines({ snapshot: entry }));
@@ -2500,6 +2558,139 @@ export default {
         return {
           text: [
             `Queued rerun for ${issueKey} from ${stageLabel} state. I will post status updates here.`,
+            ...providerLines,
+          ].join("\n"),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-reroute-run",
+      description:
+        "Queue a rerun for a tracked openclawcode issue with a coder/verifier agent override.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        let parsed:
+          | {
+              issue: { owner: string; repo: string; number: number };
+              roleId: "coder" | "verifier";
+              agentId: string;
+            }
+          | undefined;
+        try {
+          parsed = parseRuntimeRerouteArgs({
+            args: ctx.args ?? "",
+            defaults: {
+              owner: defaultRepo?.owner,
+              repo: defaultRepo?.repo,
+            },
+          });
+        } catch (error) {
+          return {
+            text: (error as Error).message,
+          };
+        }
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-reroute-run owner/repo#123 <coder|verifier> <agent-id>\n" +
+              "Or, when exactly one repo is configured: /occode-reroute-run #123 <coder|verifier> <agent-id>",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.issue);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.issue.owner}/${parsed.issue.repo}.`,
+          };
+        }
+
+        const issueKey = formatIssueKey(parsed.issue);
+        const currentStatus = await store.getStatus(issueKey);
+        if (await store.isQueuedOrRunning(issueKey)) {
+          return { text: `${issueKey} is already in progress.\n${currentStatus ?? "Queued."}` };
+        }
+        if (await store.isPendingApproval(issueKey)) {
+          return {
+            text: [
+              `${issueKey} is still waiting for its initial approved run.`,
+              `Use /occode-start ${issueKey} to begin the first workflow execution.`,
+            ].join("\n"),
+          };
+        }
+
+        const snapshot = await store.getStatusSnapshot(issueKey);
+        if (!snapshot) {
+          return {
+            text: [
+              `No tracked openclawcode run found for ${issueKey}.`,
+              `Use /occode-start ${issueKey} for the first run.`,
+            ].join("\n"),
+          };
+        }
+
+        const binding = await store.getRepoBinding(formatRepoKey(parsed.issue));
+        const destination = resolveInteractiveNotificationDestination({
+          ctx,
+          repoConfig,
+          binding,
+          snapshot,
+        });
+        const rerunContext = {
+          reason: `${resolveRerunReason(snapshot)} Runtime reroute requested for ${parsed.roleId}.`,
+          requestedAt: new Date().toISOString(),
+          priorRunId: snapshot.runId,
+          priorStage: snapshot.stage,
+          reviewDecision: snapshot.latestReviewDecision,
+          reviewSubmittedAt: snapshot.latestReviewSubmittedAt,
+          reviewSummary: snapshot.latestReviewSummary,
+          reviewUrl: snapshot.latestReviewUrl,
+          requestedCoderAgentId:
+            parsed.roleId === "coder" ? parsed.agentId : snapshot.rerunRequestedCoderAgentId,
+          requestedVerifierAgentId:
+            parsed.roleId === "verifier" ? parsed.agentId : snapshot.rerunRequestedVerifierAgentId,
+        } as const;
+        const request = buildRunRequestFromCommand({
+          command: {
+            action: "rerun",
+            issue: parsed.issue,
+          },
+          config: repoConfig,
+          rerunContext,
+          runtimeAgentOverrides: {
+            coderAgentId: rerunContext.requestedCoderAgentId,
+            verifierAgentId: rerunContext.requestedVerifierAgentId,
+          },
+        });
+        const stageLabel = formatStageLabel(snapshot.stage);
+        const queued = await store.enqueue(
+          {
+            issueKey,
+            notifyChannel: destination.channel,
+            notifyTarget: destination.target,
+            request,
+          },
+          `Queued rerun from ${stageLabel} state with ${parsed.roleId} -> ${parsed.agentId}.`,
+        );
+        if (!queued) {
+          return { text: `${issueKey} is already queued or running.` };
+        }
+        const providerPause = await store.getActiveProviderPause();
+        kickQueueDrain(api, store);
+        const providerLines = buildProviderRerunLines({
+          snapshot: {
+            ...snapshot,
+            rerunRequestedCoderAgentId: rerunContext.requestedCoderAgentId,
+            rerunRequestedVerifierAgentId: rerunContext.requestedVerifierAgentId,
+          },
+          pause: providerPause,
+        });
+        return {
+          text: [
+            `Queued reroute rerun for ${issueKey} from ${stageLabel} state. I will post status updates here.`,
+            `Runtime override: ${parsed.roleId} -> ${parsed.agentId}`,
             ...providerLines,
           ].join("\n"),
         };

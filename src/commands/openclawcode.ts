@@ -69,6 +69,8 @@ export interface OpenClawCodeRunOpts {
   rerunReviewSubmittedAt?: string;
   rerunReviewSummary?: string;
   rerunReviewUrl?: string;
+  rerunRequestedCoderAgentId?: string;
+  rerunRequestedVerifierAgentId?: string;
   json?: boolean;
 }
 
@@ -800,6 +802,8 @@ function resolveRerunContext(opts: OpenClawCodeRunOpts): WorkflowRerunContext | 
     reviewSubmittedAt: opts.rerunReviewSubmittedAt,
     reviewSummary: opts.rerunReviewSummary,
     reviewUrl: opts.rerunReviewUrl,
+    requestedCoderAgentId: opts.rerunRequestedCoderAgentId,
+    requestedVerifierAgentId: opts.rerunRequestedVerifierAgentId,
   };
 }
 
@@ -982,6 +986,8 @@ function toWorkflowRunJson(run: WorkflowRun) {
     rerunReviewSubmittedAt: run.rerunContext?.reviewSubmittedAt ?? null,
     rerunReviewSummary: run.rerunContext?.reviewSummary ?? null,
     rerunReviewUrl: run.rerunContext?.reviewUrl ?? null,
+    rerunRequestedCoderAgentId: run.rerunContext?.requestedCoderAgentId ?? null,
+    rerunRequestedVerifierAgentId: run.rerunContext?.requestedVerifierAgentId ?? null,
     runSummary: resolveRunSummary(run),
     autoMergeDisposition: autoMergeDisposition.autoMergeDisposition,
     autoMergeDispositionReason: autoMergeDisposition.autoMergeDispositionReason,

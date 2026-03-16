@@ -398,6 +398,8 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .option("--rerun-review-submitted-at <iso>", "ISO timestamp for the latest GitHub review")
     .option("--rerun-review-summary <text>", "Latest GitHub review summary or body")
     .option("--rerun-review-url <url>", "URL for the latest GitHub review")
+    .option("--rerun-coder-agent <id>", "Requested coder agent id for this rerun")
+    .option("--rerun-verifier-agent <id>", "Requested verifier agent id for this rerun")
     .option("--json", "Output JSON", false)
     .action(async (opts) => {
       await runCommandWithRuntime(defaultRuntime, async () => {
@@ -438,6 +440,8 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             rerunReviewSubmittedAt: opts.rerunReviewSubmittedAt as string | undefined,
             rerunReviewSummary: opts.rerunReviewSummary as string | undefined,
             rerunReviewUrl: opts.rerunReviewUrl as string | undefined,
+            rerunRequestedCoderAgentId: opts.rerunCoderAgent as string | undefined,
+            rerunRequestedVerifierAgentId: opts.rerunVerifierAgent as string | undefined,
             json: Boolean(opts.json),
           },
           defaultRuntime,

@@ -220,6 +220,8 @@ those nested objects.
 - `rerunReviewSubmittedAt`
 - `rerunReviewSummary`
 - `rerunReviewUrl`
+- `rerunRequestedCoderAgentId`
+- `rerunRequestedVerifierAgentId`
 
 ## Nullability Rules
 

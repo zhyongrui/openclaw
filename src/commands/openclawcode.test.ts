@@ -747,6 +747,8 @@ describe("openclawCodeRunCommand", () => {
           reviewSubmittedAt: "2026-01-01T23:59:00.000Z",
           reviewSummary: "Please add a regression test for the rerun path.",
           reviewUrl: "https://github.com/openclaw/openclaw/pull/42#pullrequestreview-9",
+          requestedCoderAgentId: "codex-rerun",
+          requestedVerifierAgentId: "claude-rerun",
         },
       }),
     );
@@ -764,6 +766,8 @@ describe("openclawCodeRunCommand", () => {
         rerunReviewSubmittedAt: "2026-01-01T23:59:00.000Z",
         rerunReviewSummary: "Please add a regression test for the rerun path.",
         rerunReviewUrl: "https://github.com/openclaw/openclaw/pull/42#pullrequestreview-9",
+        rerunRequestedCoderAgentId: "codex-rerun",
+        rerunRequestedVerifierAgentId: "claude-rerun",
       },
       runtime,
     );
@@ -779,6 +783,8 @@ describe("openclawCodeRunCommand", () => {
           reviewSubmittedAt: "2026-01-01T23:59:00.000Z",
           reviewSummary: "Please add a regression test for the rerun path.",
           reviewUrl: "https://github.com/openclaw/openclaw/pull/42#pullrequestreview-9",
+          requestedCoderAgentId: "codex-rerun",
+          requestedVerifierAgentId: "claude-rerun",
         },
       }),
       expect.any(Object),
@@ -797,6 +803,8 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.rerunReviewUrl).toBe(
       "https://github.com/openclaw/openclaw/pull/42#pullrequestreview-9",
     );
+    expect(payload.rerunRequestedCoderAgentId).toBe("codex-rerun");
+    expect(payload.rerunRequestedVerifierAgentId).toBe("claude-rerun");
   });
 
   it("reports false when rerun context does not include review metadata", async () => {
@@ -818,6 +826,8 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.rerunHasReviewContext).toBe(false);
     expect(payload.rerunReviewDecision).toBeNull();
     expect(payload.rerunReviewSubmittedAt).toBeNull();
+    expect(payload.rerunRequestedCoderAgentId).toBeNull();
+    expect(payload.rerunRequestedVerifierAgentId).toBeNull();
     expect(payload.rerunReviewSummary).toBeNull();
     expect(payload.rerunReviewUrl).toBeNull();
   });

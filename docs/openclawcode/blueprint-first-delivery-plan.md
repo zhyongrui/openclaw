@@ -208,8 +208,14 @@ Current foothold:
   - role-routing and stage-gate artifacts refresh immediately after the change
 - runtime routing now reaches executable roles:
   - builder/coder and verifier roles resolve agent selection before execution
-  - routing honors explicit CLI overrides first, then role/env and adapter/env mappings
+  - routing honors structured rerun overrides first, then explicit CLI
+    overrides, then role/env and adapter/env mappings
   - the applied selections are persisted in workflow run artifacts and `openclaw code run --json`
+- rerun-time executable reroute now has a first structured path:
+  - chat users can queue `/occode-reroute-run owner/repo#123 <coder|verifier> <agent-id>`
+  - CLI callers can pass `--rerun-coder-agent` and `--rerun-verifier-agent`
+  - rerun context preserves requested coder/verifier agent ids
+  - executable runtime routing records those selections as `rerun-request`
 - the remaining gap is deeper runtime integration:
   - manual worktree takeover is still missing
   - provider switching mid-run is still missing

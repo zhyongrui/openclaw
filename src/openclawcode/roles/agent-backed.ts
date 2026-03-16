@@ -80,6 +80,21 @@ function deriveRuntimeRoleSelection(params: {
   env?: NodeJS.ProcessEnv;
 }): WorkflowRuntimeRoleSelection {
   const route = findRoleRoute(params.run, params.roleId);
+  const requestedRerouteAgentId = trimAgentId(
+    params.roleId === "coder"
+      ? params.run.rerunContext?.requestedCoderAgentId
+      : params.run.rerunContext?.requestedVerifierAgentId,
+  );
+  if (requestedRerouteAgentId) {
+    return {
+      roleId: params.roleId,
+      adapterId: route?.adapterId ?? null,
+      assignmentSource: route?.source ?? null,
+      configured: route?.configured ?? false,
+      appliedAgentId: requestedRerouteAgentId,
+      agentSource: "rerun-request",
+    };
+  }
   const explicitAgentId = trimAgentId(params.explicitAgentId);
   if (explicitAgentId) {
     return {

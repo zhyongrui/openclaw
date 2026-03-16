@@ -553,6 +553,10 @@ export function buildRunRequestFromCommand(params: {
   command: OpenClawCodeChatopsCommand;
   config: OpenClawCodeChatopsRepoConfig;
   rerunContext?: WorkflowRerunContext;
+  runtimeAgentOverrides?: {
+    coderAgentId?: string;
+    verifierAgentId?: string;
+  };
 }): OpenClawCodeChatopsRunRequest {
   const { command, config } = params;
   if (
@@ -569,12 +573,22 @@ export function buildRunRequestFromCommand(params: {
     repoRoot: config.repoRoot,
     baseBranch: config.baseBranch,
     branchName: defaultBranchName(command.issue.number),
-    builderAgent: config.builderAgent,
-    verifierAgent: config.verifierAgent,
+    builderAgent: params.runtimeAgentOverrides?.coderAgentId?.trim() || config.builderAgent,
+    verifierAgent: params.runtimeAgentOverrides?.verifierAgentId?.trim() || config.verifierAgent,
     testCommands: [...config.testCommands],
     openPullRequest: config.openPullRequest !== false,
     mergeOnApprove: config.mergeOnApprove === true,
-    rerunContext: params.rerunContext,
+    rerunContext: params.rerunContext
+      ? {
+          ...params.rerunContext,
+          requestedCoderAgentId:
+            params.runtimeAgentOverrides?.coderAgentId?.trim() ||
+            params.rerunContext.requestedCoderAgentId,
+          requestedVerifierAgentId:
+            params.runtimeAgentOverrides?.verifierAgentId?.trim() ||
+            params.rerunContext.requestedVerifierAgentId,
+        }
+      : undefined,
   };
 }
 
@@ -635,6 +649,12 @@ export function buildOpenClawCodeRunArgv(request: OpenClawCodeChatopsRunRequest)
   }
   if (request.rerunContext?.reviewUrl) {
     argv.push("--rerun-review-url", request.rerunContext.reviewUrl);
+  }
+  if (request.rerunContext?.requestedCoderAgentId) {
+    argv.push("--rerun-coder-agent", request.rerunContext.requestedCoderAgentId);
+  }
+  if (request.rerunContext?.requestedVerifierAgentId) {
+    argv.push("--rerun-verifier-agent", request.rerunContext.requestedVerifierAgentId);
   }
 
   argv.push("--json");

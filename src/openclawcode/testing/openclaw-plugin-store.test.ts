@@ -510,6 +510,8 @@ describe("OpenClawCodeChatopsStore", () => {
           reviewSubmittedAt: "2026-03-10T08:20:00.000Z",
           reviewSummary: "Please add a regression test for the rerun path.",
           reviewUrl: "https://github.com/zhyongrui/openclawcode/pull/209#pullrequestreview-2",
+          requestedCoderAgentId: "codex-reroute",
+          requestedVerifierAgentId: "claude-reroute",
         },
       });
 
@@ -536,6 +538,8 @@ describe("OpenClawCodeChatopsStore", () => {
         rerunRequestedAt: "2026-03-10T08:25:00.000Z",
         rerunPriorRunId: "run-108",
         rerunPriorStage: "changes-requested",
+        rerunRequestedCoderAgentId: "codex-reroute",
+        rerunRequestedVerifierAgentId: "claude-reroute",
         latestReviewDecision: "changes-requested",
         latestReviewSubmittedAt: "2026-03-10T08:20:00.000Z",
         latestReviewSummary: "Please add a regression test for the rerun path.",
