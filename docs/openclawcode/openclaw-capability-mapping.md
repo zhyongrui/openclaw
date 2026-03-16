@@ -571,16 +571,17 @@ Acceptance:
 
 Status:
 
-- `[ ]` issue-driven chatops exists
-- `[ ]` blueprint-first chatops not started
+- `[x]` issue-driven chatops exists
+- `[x]` first blueprint-first status slice has landed
+- `[ ]` blueprint-first chatops complete
 
 Tasks:
 
 - `[ ]` expose blueprint discussion in existing chat surfaces
-- `[ ]` expose blueprint status in operator status views
+- `[x]` expose blueprint status in operator status views
 - `[ ]` expose work-item backlog in chat
-- `[ ]` expose stage gates and pending approvals in chat
-- `[ ]` expose provider-role decisions in chat
+- `[x]` expose stage gates and pending approvals in chat
+- `[x]` expose provider-role decisions in chat
 - `[ ]` expose handoff and resume actions in chat
 
 Acceptance:

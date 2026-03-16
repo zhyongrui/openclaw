@@ -753,6 +753,72 @@ export function buildWorkflowFailureDiagnosticLines(params: {
   return [`${params.topLevel ? "Failure diagnostics" : "  diagnostics"}: ${compact}`];
 }
 
+function formatBlueprintStatus(run: WorkflowRun): string | undefined {
+  const blueprint = run.blueprintContext;
+  if (!blueprint) {
+    return undefined;
+  }
+
+  const parts = [
+    blueprint.status ? `status=${blueprint.status}` : undefined,
+    blueprint.revisionId ? `revision=${blueprint.revisionId}` : undefined,
+    `agreed=${blueprint.agreed ? "yes" : "no"}`,
+    `openQuestions=${blueprint.openQuestionCount}`,
+    `humanGates=${blueprint.humanGateCount}`,
+  ].filter((entry): entry is string => Boolean(entry));
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+function formatRoleRoutingStatus(run: WorkflowRun): string | undefined {
+  const routing = run.roleRouting;
+  if (!routing) {
+    return undefined;
+  }
+
+  const roleOrder = ["planner", "coder", "reviewer", "verifier", "doc-writer"];
+  const roleParts = roleOrder.map((roleId) => {
+    const route = routing.routes.find((entry) => entry.roleId === roleId);
+    return `${roleId}=${route?.adapterId ?? "unresolved"}`;
+  });
+
+  return [
+    ...roleParts,
+    `mixed=${routing.mixedMode ? "yes" : "no"}`,
+    `unresolved=${routing.unresolvedRoleCount}`,
+    `fallback=${routing.fallbackConfigured ? "configured" : "none"}`,
+  ].join(", ");
+}
+
+function resolveStageGateReadiness(run: WorkflowRun, gateId: string): string | undefined {
+  return run.stageGates?.gates.find((gate) => gate.gateId === gateId)?.readiness;
+}
+
+function formatStageGateStatus(run: WorkflowRun): string | undefined {
+  const stageGates = run.stageGates;
+  if (!stageGates) {
+    return undefined;
+  }
+
+  const parts = [
+    `blocked=${stageGates.blockedGateCount}`,
+    `needsHuman=${stageGates.needsHumanDecisionCount}`,
+    resolveStageGateReadiness(run, "goal-agreement")
+      ? `goal=${resolveStageGateReadiness(run, "goal-agreement")}`
+      : undefined,
+    resolveStageGateReadiness(run, "work-item-projection")
+      ? `projection=${resolveStageGateReadiness(run, "work-item-projection")}`
+      : undefined,
+    resolveStageGateReadiness(run, "execution-start")
+      ? `execution=${resolveStageGateReadiness(run, "execution-start")}`
+      : undefined,
+    resolveStageGateReadiness(run, "merge-promotion")
+      ? `merge=${resolveStageGateReadiness(run, "merge-promotion")}`
+      : undefined,
+  ].filter((entry): entry is string => Boolean(entry));
+
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
 export function buildRunStatusMessage(run: WorkflowRun): string {
   const lines = [
     `openclawcode status for ${formatIssueKey(run.issue)}`,
@@ -766,6 +832,21 @@ export function buildRunStatusMessage(run: WorkflowRun): string {
 
   if (run.suitability?.summary) {
     lines.push(`Suitability summary: ${run.suitability.summary}`);
+  }
+
+  const blueprintStatus = formatBlueprintStatus(run);
+  if (blueprintStatus) {
+    lines.push(`Blueprint: ${blueprintStatus}`);
+  }
+
+  const roleRoutingStatus = formatRoleRoutingStatus(run);
+  if (roleRoutingStatus) {
+    lines.push(`Role routing: ${roleRoutingStatus}`);
+  }
+
+  const stageGateStatus = formatStageGateStatus(run);
+  if (stageGateStatus) {
+    lines.push(`Stage gates: ${stageGateStatus}`);
   }
 
   lines.push(...buildWorkflowFailureDiagnosticLines({ diagnostics: run.failureDiagnostics }));

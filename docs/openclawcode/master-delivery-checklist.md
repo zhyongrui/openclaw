@@ -128,6 +128,9 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] show validation issue annotations in `/occode-status`
 - [x] show structured failure diagnostics in `/occode-status`
 - [x] show structured failure diagnostics in `/occode-inbox`
+- [x] show blueprint status and revision in `/occode-status`
+- [x] show provider-role routing decisions in `/occode-status`
+- [x] show stage-gate readiness summaries in `/occode-status`
 - [x] show provider pause information while a pause is active
 - [x] allow `/occode-intake` to accept a single-line request
 - [x] synthesize a minimal issue body from one-line intake

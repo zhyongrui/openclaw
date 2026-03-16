@@ -94,6 +94,114 @@ function createRun(): WorkflowRun {
       riskLevel: "medium",
       evaluatedAt: "2026-03-10T06:12:00.000Z",
     },
+    blueprintContext: {
+      path: "PROJECT-BLUEPRINT.md",
+      status: "agreed",
+      revisionId: "rev-2026-03-16",
+      agreed: true,
+      defaultedSectionCount: 1,
+      workstreamCandidateCount: 2,
+      openQuestionCount: 0,
+      humanGateCount: 1,
+    },
+    roleRouting: {
+      artifactExists: true,
+      blueprintRevisionId: "rev-2026-03-16",
+      mixedMode: true,
+      fallbackConfigured: true,
+      unresolvedRoleCount: 0,
+      routes: [
+        {
+          roleId: "planner",
+          adapterId: "claude-code",
+          source: "blueprint",
+          configured: true,
+          fallbackChain: [],
+        },
+        {
+          roleId: "coder",
+          adapterId: "codex",
+          source: "blueprint",
+          configured: true,
+          fallbackChain: ["claude-code"],
+        },
+        {
+          roleId: "reviewer",
+          adapterId: "claude-code",
+          source: "blueprint",
+          configured: true,
+          fallbackChain: [],
+        },
+        {
+          roleId: "verifier",
+          adapterId: "openclaw-default",
+          source: "default",
+          configured: false,
+          fallbackChain: [],
+        },
+        {
+          roleId: "doc-writer",
+          adapterId: "claude-code",
+          source: "blueprint",
+          configured: true,
+          fallbackChain: [],
+        },
+      ],
+    },
+    stageGates: {
+      artifactExists: true,
+      blueprintRevisionId: "rev-2026-03-16",
+      gateCount: 5,
+      blockedGateCount: 0,
+      needsHumanDecisionCount: 1,
+      gates: [
+        {
+          gateId: "goal-agreement",
+          readiness: "ready",
+          decisionRequired: false,
+          blockerCount: 0,
+          suggestionCount: 0,
+          latestDecision: {
+            decision: "approved",
+            note: "Goal is clear enough to proceed.",
+            actor: "user",
+            recordedAt: "2026-03-10T06:10:00.000Z",
+          },
+        },
+        {
+          gateId: "work-item-projection",
+          readiness: "ready",
+          decisionRequired: false,
+          blockerCount: 0,
+          suggestionCount: 1,
+          latestDecision: null,
+        },
+        {
+          gateId: "execution-routing",
+          readiness: "ready",
+          decisionRequired: false,
+          blockerCount: 0,
+          suggestionCount: 0,
+          latestDecision: null,
+        },
+        {
+          gateId: "execution-start",
+          readiness: "ready",
+          decisionRequired: false,
+          blockerCount: 0,
+          suggestionCount: 0,
+          latestDecision: null,
+        },
+        {
+          gateId: "merge-promotion",
+          readiness: "needs-human-decision",
+          decisionRequired: true,
+          blockerCount: 0,
+          suggestionCount: 1,
+          latestDecision: null,
+        },
+      ],
+    },
   };
 }
 
@@ -338,6 +446,15 @@ describe("openclaw plugin integration helpers", () => {
     expect(message).toContain("Suitability: auto-run");
     expect(message).toContain(
       "Suitability summary: Suitability accepted for autonomous execution. Issue stays within command-layer scope.",
+    );
+    expect(message).toContain(
+      "Blueprint: status=agreed, revision=rev-2026-03-16, agreed=yes, openQuestions=0, humanGates=1",
+    );
+    expect(message).toContain(
+      "Role routing: planner=claude-code, coder=codex, reviewer=claude-code, verifier=openclaw-default, doc-writer=claude-code, mixed=yes, unresolved=0, fallback=configured",
+    );
+    expect(message).toContain(
+      "Stage gates: blocked=0, needsHuman=1, goal=ready, projection=ready, execution=ready, merge=needs-human-decision",
     );
     expect(message).toContain("PR: https://github.com/zhyongrui/openclawcode/pull/35");
     expect(message).toContain("Verification: approve-for-human-review");

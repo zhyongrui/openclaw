@@ -227,3 +227,8 @@ The near-term implementation order is:
 - fixed the project blueprint path at `PROJECT-BLUEPRINT.md`
 - defined the first markdown schema and lifecycle statuses
 - added CLI commands to create, inspect, and update blueprint state
+- added repo-local work-item decomposition and discovery artifacts
+- added provider-neutral role routing and stage-gate artifacts
+- persisted blueprint-first snapshots into workflow run artifacts
+- surfaced blueprint status, role routing, and stage-gate summaries in
+  operator-facing status messages

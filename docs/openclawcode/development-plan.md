@@ -1891,3 +1891,17 @@ The remaining live-ops startup gap is therefore narrower:
 - the next code slice should therefore inspect `openclawcode` plugin startup
   under a missing or delayed live chat surface instead of treating this as a
   generic gateway bootstrap problem
+
+## Blueprint-First Operator Status Snapshot
+
+The refreshed blueprint-first sync branch now surfaces blueprint control-plane
+state directly in operator-visible status text instead of keeping it only in
+repo-local artifacts and `run --json`.
+
+- `buildRunStatusMessage(...)` now includes:
+  - blueprint status and revision
+  - provider-role routing decisions
+  - stage-gate readiness summaries
+- the run-status integration test now covers those new status lines
+- this gives `/occode-status` a first blueprint-first operator foothold without
+  changing the persisted plugin snapshot schema
