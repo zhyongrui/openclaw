@@ -233,3 +233,4 @@ The near-term implementation order is:
 - surfaced blueprint status, role routing, and stage-gate summaries in
   operator-facing status messages
 - surfaced blueprint work-item backlog summaries in `/occode-inbox`
+- exposed blueprint summary and clarification prompts through `/occode-blueprint`

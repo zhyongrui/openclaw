@@ -1919,3 +1919,20 @@ can see blueprint execution projection without leaving chat.
   - blocker/suggestion counts
 - when a blueprint exists but the work-item artifact is missing, inbox output
   now shows that gap explicitly instead of silently omitting blueprint context
+
+## Blueprint Discussion Chat Surface
+
+The operator surface now has a first explicit blueprint discussion entrypoint:
+`/occode-blueprint`.
+
+- the command reads `PROJECT-BLUEPRINT.md` directly
+- it shows:
+  - title, status, revision, and goal summary
+  - workstream/open-question/human-gate/defaulted counts
+  - provider-strategy assignments
+  - current clarification questions
+  - proactive suggestions such as missing `agreed` or unresolved role
+    assignments
+- clarification logic now treats unresolved `Open Questions` and partially
+  assigned provider roles as live discussion prompts instead of leaving them
+  implicit

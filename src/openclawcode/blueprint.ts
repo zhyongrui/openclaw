@@ -126,6 +126,14 @@ const PROJECT_BLUEPRINT_PROVIDER_ROLE_HEADINGS: Record<string, ProjectBlueprintR
   "Doc-writer": "docWriter",
 };
 
+const PROJECT_BLUEPRINT_PROVIDER_ROLE_LABELS: Record<ProjectBlueprintRoleId, string> = {
+  planner: "Planner",
+  coder: "Coder",
+  reviewer: "Reviewer",
+  verifier: "Verifier",
+  docWriter: "Doc-writer",
+};
+
 export interface CreateProjectBlueprintOptions {
   repoRoot: string;
   title?: string;
@@ -212,6 +220,16 @@ function extractSectionBodies(content: string): Partial<Record<string, string>> 
   }
 
   return sections;
+}
+
+function joinNaturalLanguageList(values: string[]): string {
+  if (values.length <= 1) {
+    return values[0] ?? "";
+  }
+  if (values.length === 2) {
+    return `${values[0]} and ${values[1]}`;
+  }
+  return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`;
 }
 
 function splitFrontmatter(content: string): { frontmatter: string | null; body: string } {
@@ -636,6 +654,25 @@ export async function inspectProjectBlueprintClarifications(
   if (!summary.hasAgreementCheckpoint) {
     suggestions.add(
       "When the team agrees on the target, record it with `openclaw code blueprint-set-status --status agreed`.",
+    );
+  }
+
+  if (summary.openQuestionCount > 0) {
+    questions.add(
+      "Confirm the remaining `Open Questions` entries or replace them with `- None.` when settled.",
+    );
+  }
+
+  const unresolvedProviderRoles = (
+    Object.entries(summary.providerRoleAssignments) as Array<
+      [ProjectBlueprintRoleId, string | null]
+    >
+  )
+    .filter(([, assignment]) => !assignment || assignment.trim().length === 0)
+    .map(([roleId]) => PROJECT_BLUEPRINT_PROVIDER_ROLE_LABELS[roleId]);
+  if (unresolvedProviderRoles.length > 0) {
+    suggestions.add(
+      `Record explicit assignments for ${joinNaturalLanguageList(unresolvedProviderRoles)} under \`Provider Strategy\` when you want a fixed multi-agent plan.`,
     );
   }
 

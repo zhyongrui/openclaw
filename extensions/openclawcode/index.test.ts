@@ -2860,7 +2860,102 @@ describe("openclawcode extension", () => {
         `- blueprint: agreed | revision ${inventory.blueprintRevisionId}`,
       );
       expect(result?.text).toContain(
-        "- issue projection: ready | execution: ready | blockers=0 | suggestions=0",
+        "- issue projection: ready | execution: ready | blockers=0 | suggestions=1",
+      );
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows blueprint summary and clarification prompts through /occode-blueprint", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Chat Blueprint",
+          "status: clarified",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:05:00.000Z",
+          "statusChangedAt: 2026-03-16T00:05:00.000Z",
+          "---",
+          "",
+          "# Chat Blueprint",
+          "",
+          "## Goal",
+          "Move the blueprint discussion loop into chat-visible operator flows.",
+          "",
+          "## Success Criteria",
+          "- Operators can inspect the blueprint summary from chat.",
+          "",
+          "## Scope",
+          "- In scope: read-only blueprint status and clarification output.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Keep the summary concise enough for chat.",
+          "",
+          "## Risks",
+          "- Operators may miss unresolved questions if the summary is too sparse.",
+          "",
+          "## Assumptions",
+          "- Chat users still need deterministic prompts.",
+          "",
+          "## Human Gates",
+          "- Goal agreement: required",
+          "- Merge promotion: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "",
+          "## Workstreams",
+          "- Add a read-only blueprint summary command for chat.",
+          "- Follow with a mutable chat discussion loop later.",
+          "",
+          "## Open Questions",
+          "- Who should be allowed to mark the blueprint as agreed from chat?",
+          "",
+          "## Change Log",
+          "- 2026-03-16: initial chat blueprint view.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await fixture.commands.get("occode-blueprint")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-blueprint",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain("openclawcode blueprint for zhyongrui/openclawcode");
+      expect(result?.text).toContain("Title: Chat Blueprint");
+      expect(result?.text).toContain("Status: clarified");
+      expect(result?.text).toContain(
+        "Goal: Move the blueprint discussion loop into chat-visible operator flows.",
+      );
+      expect(result?.text).toContain(
+        "Counts: workstreams=2 | openQuestions=1 | humanGates=2 | defaulted=0",
+      );
+      expect(result?.text).toContain("Provider strategy: planner=Claude Code, coder=Codex");
+      expect(result?.text).toContain("Clarifications: 1");
+      expect(result?.text).toContain(
+        "- Confirm the remaining `Open Questions` entries or replace them with `- None.` when settled.",
+      );
+      expect(result?.text).toContain("Suggestions: 2");
+      expect(result?.text).toContain(
+        "- When the team agrees on the target, record it with `openclaw code blueprint-set-status --status agreed`.",
+      );
+      expect(result?.text).toContain(
+        "- Record explicit assignments for Reviewer, Verifier, and Doc-writer under `Provider Strategy` when you want a fixed multi-agent plan.",
       );
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });

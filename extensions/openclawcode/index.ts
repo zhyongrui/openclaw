@@ -31,6 +31,10 @@ import {
   type OpenClawCodeGitHubDeliveryRecord,
   type OpenClawCodeIssueStatusSnapshot,
 } from "../../src/integrations/openclaw-plugin/index.js";
+import {
+  inspectProjectBlueprintClarifications,
+  readProjectBlueprintDocument,
+} from "../../src/openclawcode/blueprint.js";
 import type { GitHubIssueClient } from "../../src/openclawcode/github/index.js";
 import { GitHubRestClient } from "../../src/openclawcode/github/index.js";
 import {
@@ -666,6 +670,64 @@ function buildWorkItemBacklogLines(
     `- blueprint: ${inventory.blueprintStatus ?? "unknown"} | revision ${revisionId}`,
     `- issue projection: ${inventory.readyForIssueProjection ? "ready" : "blocked"} | execution: ${inventory.readyForExecution ? "ready" : "blocked"} | blockers=${inventory.blockerCount} | suggestions=${inventory.suggestionCount}`,
   ];
+}
+
+function buildBlueprintProviderStrategyLine(
+  blueprint: Awaited<ReturnType<typeof readProjectBlueprintDocument>>,
+): string | undefined {
+  const entries = [
+    ["planner", blueprint.providerRoleAssignments.planner],
+    ["coder", blueprint.providerRoleAssignments.coder],
+    ["reviewer", blueprint.providerRoleAssignments.reviewer],
+    ["verifier", blueprint.providerRoleAssignments.verifier],
+    ["doc-writer", blueprint.providerRoleAssignments.docWriter],
+  ]
+    .filter(([, value]) => value != null && value.trim().length > 0)
+    .map(([role, value]) => `${role}=${value}`);
+
+  return entries.length > 0 ? `Provider strategy: ${entries.join(", ")}` : undefined;
+}
+
+function buildBlueprintSummaryMessage(params: {
+  repo: { owner: string; repo: string };
+  blueprint: Awaited<ReturnType<typeof readProjectBlueprintDocument>>;
+  clarification: Awaited<ReturnType<typeof inspectProjectBlueprintClarifications>>;
+}): string {
+  const lines = [`openclawcode blueprint for ${formatRepoKey(params.repo)}`];
+
+  if (!params.blueprint.exists) {
+    lines.push("Blueprint: missing");
+  } else {
+    lines.push(`Title: ${params.blueprint.title ?? "Untitled blueprint"}`);
+    lines.push(`Status: ${params.blueprint.status ?? "unknown"}`);
+    if (params.blueprint.revisionId) {
+      lines.push(`Revision: ${params.blueprint.revisionId}`);
+    }
+    if (params.blueprint.goalSummary) {
+      lines.push(`Goal: ${params.blueprint.goalSummary}`);
+    }
+    lines.push(
+      `Counts: workstreams=${params.blueprint.workstreamCandidateCount} | openQuestions=${params.blueprint.openQuestionCount} | humanGates=${params.blueprint.humanGateCount} | defaulted=${params.blueprint.defaultedSectionCount}`,
+    );
+    const providerStrategy = buildBlueprintProviderStrategyLine(params.blueprint);
+    if (providerStrategy) {
+      lines.push(providerStrategy);
+    }
+  }
+
+  lines.push(`Clarifications: ${params.clarification.questionCount}`);
+  for (const question of params.clarification.questions.slice(0, 5)) {
+    lines.push(`- ${question}`);
+  }
+
+  if (params.clarification.suggestionCount > 0) {
+    lines.push(`Suggestions: ${params.clarification.suggestionCount}`);
+    for (const suggestion of params.clarification.suggestions.slice(0, 5)) {
+      lines.push(`- ${suggestion}`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 function buildInboxMessage(params: {
@@ -2224,6 +2286,48 @@ export default {
             state,
             validationPool,
             workItems,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-blueprint",
+      description:
+        "Show the current project blueprint summary and clarification prompts for an openclawcode repo.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const repo = parseChatopsRepoReference(ctx.args ?? "", {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!repo) {
+          return {
+            text:
+              "Usage: /occode-blueprint owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-blueprint",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+
+        const blueprint = await readProjectBlueprintDocument(repoConfig.repoRoot);
+        const clarification = await inspectProjectBlueprintClarifications(repoConfig.repoRoot);
+        return {
+          text: buildBlueprintSummaryMessage({
+            repo: {
+              owner: repoConfig.owner,
+              repo: repoConfig.repo,
+            },
+            blueprint,
+            clarification,
           }),
         };
       },

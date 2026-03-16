@@ -577,7 +577,7 @@ Status:
 
 Tasks:
 
-- `[ ]` expose blueprint discussion in existing chat surfaces
+- `[x]` expose blueprint discussion in existing chat surfaces
 - `[x]` expose blueprint status in operator status views
 - `[x]` expose work-item backlog in chat
 - `[x]` expose stage gates and pending approvals in chat
