@@ -27,7 +27,8 @@ Rules:
 - [x] `publishedPullRequestBody`
 - [x] `publishedPullRequestHasNumber`
 - [x] `publishedPullRequestHasUrl`
-- [ ] `publishedPullRequestHasOpenedAt`
+- [x] `publishedPullRequestHasOpenedAt`
+- [ ] `publishedPullRequestHasTitle`
 
 ## Published Pull Request Mirrors
 
@@ -40,7 +41,7 @@ Rules:
 - [x] `publishedPullRequestBody`
 - [x] `publishedPullRequestHasNumber`
 - [x] `publishedPullRequestHasUrl`
-- [ ] `publishedPullRequestHasOpenedAt`
+- [x] `publishedPullRequestHasOpenedAt`
 - [ ] `publishedPullRequestHasTitle`
 - [ ] `publishedPullRequestHasBody`
 

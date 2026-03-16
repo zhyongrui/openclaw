@@ -365,9 +365,11 @@ As of 2026-03-14:
     `publishedPullRequestHasNumber` landed
   - the same reconcile path has now also auto-closed `#127` after
     `publishedPullRequestHasUrl` landed
+  - the same reconcile path has now also auto-closed `#128` after
+    `publishedPullRequestHasOpenedAt` landed
   - current open validation pool is now narrower and more honest:
     - docs/operator issues `#60`, `#86`
-    - command-layer issue `#128` for `publishedPullRequestHasOpenedAt`
+    - command-layer issue `#129` for `publishedPullRequestHasTitle`
 - the remaining startup blocker is now narrower than "openclawcode plugin
   startup":
   - the built openclawcode-only path is healthy

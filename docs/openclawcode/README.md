@@ -314,10 +314,10 @@ loop with:
     includes:
     - docs/operator issue `#60`
     - docs/operator issue `#86`
-    - command-layer issue `#128`
+    - command-layer issue `#129`
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
-  - command-layer issues `#124`, `#126`, and `#127` have now also been
+  - command-layer issues `#124`, `#126`, `#127`, and `#128` have now also been
     consumed and auto-closed through the same reconcile path
   - stale command-layer issues `#74` through `#82` are now also auto-closable
     through the new reconcile path once their fields have already landed
