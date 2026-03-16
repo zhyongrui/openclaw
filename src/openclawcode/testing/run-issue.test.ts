@@ -1359,6 +1359,156 @@ describe("runIssueWorkflow", () => {
     }
   });
 
+  it("captures blueprint, role-routing, and stage-gate snapshots in workflow artifacts", async () => {
+    const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-blueprint-run-"));
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+    const previousFallbacks = process.env.OPENCLAWCODE_MODEL_FALLBACKS;
+
+    process.env.OPENCLAWCODE_MODEL_FALLBACKS = "openai/gpt-5.4";
+
+    try {
+      await fs.writeFile(
+        path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Runtime Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:00:00.000Z",
+          "statusChangedAt: 2026-03-16T00:00:00.000Z",
+          "agreedAt: 2026-03-16T00:00:00.000Z",
+          "---",
+          "",
+          "# Runtime Blueprint",
+          "",
+          "## Goal",
+          "Carry blueprint-first state into workflow runs.",
+          "",
+          "## Success Criteria",
+          "- Workflow artifacts include blueprint-first context.",
+          "",
+          "## Scope",
+          "- In scope: run artifact snapshots.",
+          "- Out of scope: chat surfaces.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Technical: stay repo-local.",
+          "",
+          "## Risks",
+          "- None.",
+          "",
+          "## Assumptions",
+          "- None.",
+          "",
+          "## Human Gates",
+          "- Goal agreement: required",
+          "- Execution start: operator may intervene",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: Codex",
+          "- Doc-writer: Codex",
+          "",
+          "## Workstreams",
+          "- Persist blueprint-backed workflow snapshots.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-16: runtime snapshot baseline.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const workspace: WorkflowWorkspace = {
+        repoRoot,
+        baseBranch: "main",
+        branchName: "openclawcode/issue-61",
+        worktreePath: path.join(repoRoot, ".openclawcode", "worktrees", "run-61"),
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 61,
+          repoRoot,
+          stateDir,
+          baseBranch: "main",
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder(),
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.blueprintContext).toMatchObject({
+        path: path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+        status: "agreed",
+        agreed: true,
+        openQuestionCount: 0,
+      });
+      expect(run.roleRouting).toMatchObject({
+        artifactExists: false,
+        mixedMode: true,
+        fallbackConfigured: true,
+        unresolvedRoleCount: 0,
+      });
+      expect(run.roleRouting?.routes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ roleId: "planner", adapterId: "claude-code" }),
+          expect.objectContaining({ roleId: "coder", adapterId: "codex" }),
+        ]),
+      );
+      expect(run.stageGates).toMatchObject({
+        artifactExists: false,
+        gateCount: 5,
+        blockedGateCount: 1,
+      });
+      expect(run.stageGates?.gates).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ gateId: "goal-agreement", readiness: "ready" }),
+          expect.objectContaining({ gateId: "work-item-projection", readiness: "blocked" }),
+          expect.objectContaining({ gateId: "execution-routing", readiness: "ready" }),
+        ]),
+      );
+
+      const store = new FileSystemWorkflowRunStore(path.join(stateDir, "runs"));
+      const savedRun = await store.get(run.id);
+      expect(savedRun?.blueprintContext?.revisionId).toBe(run.blueprintContext?.revisionId);
+      expect(savedRun?.roleRouting?.mixedMode).toBe(true);
+      expect(savedRun?.stageGates?.blockedGateCount).toBe(1);
+    } finally {
+      if (previousFallbacks == null) {
+        delete process.env.OPENCLAWCODE_MODEL_FALLBACKS;
+      } else {
+        process.env.OPENCLAWCODE_MODEL_FALLBACKS = previousFallbacks;
+      }
+      await fs.rm(repoRoot, { recursive: true, force: true });
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("stops at changes-requested when verification fails", async () => {
     const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
 

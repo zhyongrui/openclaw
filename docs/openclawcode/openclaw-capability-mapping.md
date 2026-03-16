@@ -282,8 +282,7 @@ Current status:
 - explicit `agreed` checkpoint exists
 - repo-local work-item decomposition now exists through
   `.openclawcode/work-items.json`
-- stage-gate persistence still needs to extend beyond the blueprint/work-item
-  artifact boundary
+- workflow runs now snapshot blueprint, routing, and stage-gate state too
 
 ### 3. Work Item Decomposition
 
@@ -392,7 +391,7 @@ Status:
 - `[x]` initial schema
 - `[x]` explicit `agreed` checkpoint
 - `[x]` richer machine-readable blueprint state
-- `[ ]` blueprint state propagation into downstream work items and runs
+- `[x]` blueprint state propagation into downstream work items and runs
 
 Tasks:
 
@@ -401,7 +400,7 @@ Tasks:
 - `[x]` add CLI commands to create, inspect, and update blueprint lifecycle
 - `[x]` add a stable machine-readable blueprint contract
 - `[x]` persist blueprint fingerprints or content hashes
-- `[ ]` persist blueprint revision metadata into work items and workflow runs
+- `[x]` persist blueprint revision metadata into work items and workflow runs
 - `[ ]` add validation for incomplete or contradictory blueprint states
 
 Acceptance:
@@ -519,7 +518,8 @@ Status:
 
 - `[x]` model access exists
 - `[x]` first repo-local role-routing plan landed
-- `[ ]` runtime integration and per-stage persistence still open
+- `[x]` first runtime artifact integration landed
+- `[ ]` per-stage runtime steering still open
 
 Tasks:
 
@@ -534,7 +534,7 @@ Tasks:
 - `[x]` implement Claude Code role adapters
 - `[ ]` support mixed-mode routing by stage
 - `[ ]` support fallback by role
-- `[ ]` persist selected role/provider decisions into run artifacts
+- `[x]` persist selected role/provider decisions into run artifacts
 
 Acceptance:
 
@@ -547,12 +547,14 @@ Status:
 
 - `[x]` coarse run controls already exist
 - `[x]` first repo-local stage-gate artifact landed
+- `[x]` first workflow-run stage-gate snapshot landed
 - `[ ]` runtime-aware handoff still open
 
 Tasks:
 
 - `[x]` persist gate decisions in a repo-local artifact
 - `[x]` expose stage-gate readiness and blockers through CLI
+- `[x]` persist current stage-gate snapshots into workflow run artifacts
 - `[ ]` allow plan approval before code execution
 - `[ ]` allow plan editing before code execution
 - `[ ]` allow manual worktree takeover

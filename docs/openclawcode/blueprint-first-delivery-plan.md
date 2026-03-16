@@ -189,6 +189,9 @@ Current foothold:
   - `approved`
   - `changes-requested`
   - `blocked`
+- issue-driven workflow runs now capture the current blueprint, role-routing,
+  and stage-gate snapshot so the first blueprint-first state also reaches
+  `.openclawcode/runs/*` and `openclaw code run --json`
 - the remaining gap is runtime integration:
   - decisions do not yet steer live workflow execution
   - chat surfaces do not yet expose these gates

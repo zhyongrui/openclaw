@@ -792,6 +792,14 @@ function resolveRerunContext(opts: OpenClawCodeRunOpts): WorkflowRerunContext | 
   };
 }
 
+function resolveRoleRouteAdapter(run: WorkflowRun, roleId: string): string | null {
+  return run.roleRouting?.routes.find((route) => route.roleId === roleId)?.adapterId ?? null;
+}
+
+function resolveStageGateReadiness(run: WorkflowRun, gateId: string): string | null {
+  return run.stageGates?.gates.find((gate) => gate.gateId === gateId)?.readiness ?? null;
+}
+
 function toWorkflowRunJson(run: WorkflowRun) {
   const autoMergePolicy = resolveAutoMergePolicy(run);
   const autoMergeDisposition = resolveAutoMergeDisposition(run);
@@ -852,6 +860,31 @@ function toWorkflowRunJson(run: WorkflowRun) {
     failureDiagnosticBootstrapWarningShown: run.failureDiagnostics?.bootstrapWarningShown ?? false,
     failureDiagnosticToolCount: run.failureDiagnostics?.toolCount ?? null,
     failureDiagnosticUsageTotal: run.failureDiagnostics?.lastCallUsageTotal ?? null,
+    blueprintContext: run.blueprintContext ?? null,
+    blueprintStatus: run.blueprintContext?.status ?? null,
+    blueprintRevisionId: run.blueprintContext?.revisionId ?? null,
+    blueprintAgreed: run.blueprintContext?.agreed ?? null,
+    blueprintDefaultedSectionCount: run.blueprintContext?.defaultedSectionCount ?? null,
+    blueprintWorkstreamCandidateCount: run.blueprintContext?.workstreamCandidateCount ?? null,
+    blueprintOpenQuestionCount: run.blueprintContext?.openQuestionCount ?? null,
+    blueprintHumanGateCount: run.blueprintContext?.humanGateCount ?? null,
+    roleRouting: run.roleRouting ?? null,
+    roleRoutingMixedMode: run.roleRouting?.mixedMode ?? null,
+    roleRoutingFallbackConfigured: run.roleRouting?.fallbackConfigured ?? null,
+    roleRoutingUnresolvedRoleCount: run.roleRouting?.unresolvedRoleCount ?? null,
+    roleRoutingPlannerAdapter: resolveRoleRouteAdapter(run, "planner"),
+    roleRoutingCoderAdapter: resolveRoleRouteAdapter(run, "coder"),
+    roleRoutingReviewerAdapter: resolveRoleRouteAdapter(run, "reviewer"),
+    roleRoutingVerifierAdapter: resolveRoleRouteAdapter(run, "verifier"),
+    roleRoutingDocWriterAdapter: resolveRoleRouteAdapter(run, "docWriter"),
+    stageGates: run.stageGates ?? null,
+    stageGateBlockedGateCount: run.stageGates?.blockedGateCount ?? null,
+    stageGateNeedsHumanDecisionCount: run.stageGates?.needsHumanDecisionCount ?? null,
+    goalAgreementStageGateReadiness: resolveStageGateReadiness(run, "goal-agreement"),
+    workItemProjectionStageGateReadiness: resolveStageGateReadiness(run, "work-item-projection"),
+    executionRoutingStageGateReadiness: resolveStageGateReadiness(run, "execution-routing"),
+    executionStartStageGateReadiness: resolveStageGateReadiness(run, "execution-start"),
+    mergePromotionStageGateReadiness: resolveStageGateReadiness(run, "merge-promotion"),
     suitabilityDecision: run.suitability?.decision ?? null,
     suitabilitySummary: run.suitability?.summary ?? null,
     suitabilityReasons: run.suitability?.reasons ?? null,

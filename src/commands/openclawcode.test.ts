@@ -187,6 +187,32 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.noteCount).toBe(1);
     expect(payload.buildResult.issueClassification).toBe(payload.issueClassification);
     expect(payload.buildResult.scopeCheck).toEqual(payload.scopeCheck);
+    expect(payload.blueprintStatus).toBe("agreed");
+    expect(payload.blueprintRevisionId).toBe("blueprint_rev_123");
+    expect(payload.blueprintAgreed).toBe(true);
+    expect(payload.blueprintDefaultedSectionCount).toBe(0);
+    expect(payload.blueprintWorkstreamCandidateCount).toBe(1);
+    expect(payload.blueprintOpenQuestionCount).toBe(0);
+    expect(payload.blueprintHumanGateCount).toBe(3);
+    expect(payload.blueprintContext.status).toBe(payload.blueprintStatus);
+    expect(payload.blueprintContext.revisionId).toBe(payload.blueprintRevisionId);
+    expect(payload.roleRoutingMixedMode).toBe(true);
+    expect(payload.roleRoutingFallbackConfigured).toBe(true);
+    expect(payload.roleRoutingUnresolvedRoleCount).toBe(0);
+    expect(payload.roleRoutingPlannerAdapter).toBe("claude-code");
+    expect(payload.roleRoutingCoderAdapter).toBe("codex");
+    expect(payload.roleRoutingReviewerAdapter).toBe("claude-code");
+    expect(payload.roleRoutingVerifierAdapter).toBe("codex");
+    expect(payload.roleRoutingDocWriterAdapter).toBe("codex");
+    expect(payload.roleRouting.routes).toHaveLength(5);
+    expect(payload.stageGateBlockedGateCount).toBe(0);
+    expect(payload.stageGateNeedsHumanDecisionCount).toBe(1);
+    expect(payload.goalAgreementStageGateReadiness).toBe("ready");
+    expect(payload.workItemProjectionStageGateReadiness).toBe("ready");
+    expect(payload.executionRoutingStageGateReadiness).toBe("ready");
+    expect(payload.executionStartStageGateReadiness).toBe("needs-human-decision");
+    expect(payload.mergePromotionStageGateReadiness).toBe("ready");
+    expect(payload.stageGates.gates).toHaveLength(5);
     expect(payload.suitabilityDecision).toBe("auto-run");
     expect(payload.suitabilitySummary).toBe(
       "Suitability accepted for autonomous execution. Issue stays within command-layer scope.",
@@ -306,6 +332,9 @@ describe("openclawCodeRunCommand", () => {
         buildResult: undefined,
         draftPullRequest: undefined,
         verificationReport: undefined,
+        blueprintContext: undefined,
+        roleRouting: undefined,
+        stageGates: undefined,
       }),
     );
 
@@ -332,6 +361,31 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.testCommandCount).toBeNull();
     expect(payload.testResultCount).toBeNull();
     expect(payload.noteCount).toBeNull();
+    expect(payload.blueprintContext).toBeNull();
+    expect(payload.blueprintStatus).toBeNull();
+    expect(payload.blueprintRevisionId).toBeNull();
+    expect(payload.blueprintAgreed).toBeNull();
+    expect(payload.blueprintDefaultedSectionCount).toBeNull();
+    expect(payload.blueprintWorkstreamCandidateCount).toBeNull();
+    expect(payload.blueprintOpenQuestionCount).toBeNull();
+    expect(payload.blueprintHumanGateCount).toBeNull();
+    expect(payload.roleRouting).toBeNull();
+    expect(payload.roleRoutingMixedMode).toBeNull();
+    expect(payload.roleRoutingFallbackConfigured).toBeNull();
+    expect(payload.roleRoutingUnresolvedRoleCount).toBeNull();
+    expect(payload.roleRoutingPlannerAdapter).toBeNull();
+    expect(payload.roleRoutingCoderAdapter).toBeNull();
+    expect(payload.roleRoutingReviewerAdapter).toBeNull();
+    expect(payload.roleRoutingVerifierAdapter).toBeNull();
+    expect(payload.roleRoutingDocWriterAdapter).toBeNull();
+    expect(payload.stageGates).toBeNull();
+    expect(payload.stageGateBlockedGateCount).toBeNull();
+    expect(payload.stageGateNeedsHumanDecisionCount).toBeNull();
+    expect(payload.goalAgreementStageGateReadiness).toBeNull();
+    expect(payload.workItemProjectionStageGateReadiness).toBeNull();
+    expect(payload.executionRoutingStageGateReadiness).toBeNull();
+    expect(payload.executionStartStageGateReadiness).toBeNull();
+    expect(payload.mergePromotionStageGateReadiness).toBeNull();
     expect(payload.suitabilityDecision).toBe("auto-run");
     expect(payload.suitabilitySummary).toBe(
       "Suitability accepted for autonomous execution. Issue stays within command-layer scope.",
@@ -2503,6 +2557,114 @@ function createRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
       classification: "command-layer",
       riskLevel: "medium",
       evaluatedAt: "2026-01-01T00:00:00.000Z",
+    },
+    blueprintContext: {
+      path: "/repo/PROJECT-BLUEPRINT.md",
+      status: "agreed",
+      revisionId: "blueprint_rev_123",
+      agreed: true,
+      defaultedSectionCount: 0,
+      workstreamCandidateCount: 1,
+      openQuestionCount: 0,
+      humanGateCount: 3,
+    },
+    roleRouting: {
+      artifactExists: true,
+      blueprintRevisionId: "blueprint_rev_123",
+      mixedMode: true,
+      fallbackConfigured: true,
+      unresolvedRoleCount: 0,
+      routes: [
+        {
+          roleId: "planner",
+          adapterId: "claude-code",
+          source: "blueprint",
+          configured: true,
+          fallbackChain: ["openai/gpt-5.4"],
+        },
+        {
+          roleId: "coder",
+          adapterId: "codex",
+          source: "blueprint",
+          configured: true,
+          fallbackChain: ["openai/gpt-5.4"],
+        },
+        {
+          roleId: "reviewer",
+          adapterId: "claude-code",
+          source: "blueprint",
+          configured: true,
+          fallbackChain: ["openai/gpt-5.4"],
+        },
+        {
+          roleId: "verifier",
+          adapterId: "codex",
+          source: "blueprint",
+          configured: true,
+          fallbackChain: ["openai/gpt-5.4"],
+        },
+        {
+          roleId: "docWriter",
+          adapterId: "codex",
+          source: "blueprint",
+          configured: true,
+          fallbackChain: ["openai/gpt-5.4"],
+        },
+      ],
+    },
+    stageGates: {
+      artifactExists: true,
+      blueprintRevisionId: "blueprint_rev_123",
+      gateCount: 5,
+      blockedGateCount: 0,
+      needsHumanDecisionCount: 1,
+      gates: [
+        {
+          gateId: "goal-agreement",
+          readiness: "ready",
+          decisionRequired: true,
+          blockerCount: 0,
+          suggestionCount: 1,
+          latestDecision: null,
+        },
+        {
+          gateId: "work-item-projection",
+          readiness: "ready",
+          decisionRequired: true,
+          blockerCount: 0,
+          suggestionCount: 0,
+          latestDecision: null,
+        },
+        {
+          gateId: "execution-routing",
+          readiness: "ready",
+          decisionRequired: true,
+          blockerCount: 0,
+          suggestionCount: 1,
+          latestDecision: null,
+        },
+        {
+          gateId: "execution-start",
+          readiness: "needs-human-decision",
+          decisionRequired: true,
+          blockerCount: 0,
+          suggestionCount: 1,
+          latestDecision: null,
+        },
+        {
+          gateId: "merge-promotion",
+          readiness: "ready",
+          decisionRequired: true,
+          blockerCount: 0,
+          suggestionCount: 1,
+          latestDecision: {
+            decision: "approved",
+            note: "Ready to promote once verification passes.",
+            actor: "operator",
+            recordedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      ],
     },
     verificationReport: {
       decision: "approve-for-human-review",

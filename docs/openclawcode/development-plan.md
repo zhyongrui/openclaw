@@ -104,6 +104,12 @@ That second step now has a first foothold in code too:
 - `openclaw code stage-gates-decide` now records structured human decisions
   against those gates so approval, changes-requested, and blocked outcomes are
   durable instead of staying in chat-only context
+- issue-driven workflow runs now also capture blueprint-first snapshots at run
+  start:
+  - blueprint status and revision metadata
+  - normalized planner/coder/reviewer/verifier/doc-writer routing
+  - stage-gate readiness counts and per-gate readiness mirrors in
+    `openclaw code run --json`
 
 The remaining program is:
 

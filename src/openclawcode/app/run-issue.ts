@@ -1,8 +1,12 @@
 import path from "node:path";
+import { readProjectBlueprintDocument } from "../blueprint.js";
 import type {
+  WorkflowBlueprintContext,
   WorkflowFailureDiagnostics,
+  WorkflowRoleRoutingSnapshot,
   WorkflowRerunContext,
   WorkflowRun,
+  WorkflowStageGateSnapshot,
   WorkflowWorkspace,
 } from "../contracts/index.js";
 import type { GitHubIssueClient, PullRequestRef, RepoRef } from "../github/index.js";
@@ -14,6 +18,7 @@ import {
   executeVerification,
 } from "../orchestrator/index.js";
 import type { WorkflowRunStore } from "../persistence/index.js";
+import { deriveProjectRoleRoutingPlan, readProjectRoleRoutingPlan } from "../role-routing.js";
 import {
   assessIssueSuitability,
   type Builder,
@@ -25,6 +30,7 @@ import {
   formatAgentRunFailureDiagnostics,
   type ShellRunner,
 } from "../runtime/index.js";
+import { deriveProjectStageGateArtifact, readProjectStageGateArtifact } from "../stage-gates.js";
 import { transitionRun, type TimestampFactory } from "../workflow/index.js";
 import type { WorkflowWorkspaceManager } from "../worktree/index.js";
 
@@ -183,6 +189,113 @@ function defaultBranchName(issueNumber: number): string {
   return `openclawcode/issue-${issueNumber}`;
 }
 
+function mapWorkflowBlueprintContext(
+  blueprint: Awaited<ReturnType<typeof readProjectBlueprintDocument>>,
+): WorkflowBlueprintContext | undefined {
+  if (!blueprint.exists) {
+    return undefined;
+  }
+
+  return {
+    path: blueprint.blueprintPath,
+    status: blueprint.status,
+    revisionId: blueprint.revisionId,
+    agreed: blueprint.hasAgreementCheckpoint,
+    defaultedSectionCount: blueprint.defaultedSectionCount,
+    workstreamCandidateCount: blueprint.workstreamCandidateCount,
+    openQuestionCount: blueprint.openQuestionCount,
+    humanGateCount: blueprint.humanGateCount,
+  };
+}
+
+function mapWorkflowRoleRoutingSnapshot(params: {
+  artifactExists: boolean;
+  plan: Awaited<ReturnType<typeof deriveProjectRoleRoutingPlan>>;
+}): WorkflowRoleRoutingSnapshot | undefined {
+  if (!params.plan.blueprintExists) {
+    return undefined;
+  }
+
+  return {
+    artifactExists: params.artifactExists,
+    blueprintRevisionId: params.plan.blueprintRevisionId,
+    mixedMode: params.plan.mixedMode,
+    fallbackConfigured: params.plan.fallbackConfigured,
+    unresolvedRoleCount: params.plan.unresolvedRoleCount,
+    routes: params.plan.routes.map((route) => ({
+      roleId: route.roleId,
+      adapterId: route.adapterId,
+      source: route.source,
+      configured: route.configured,
+      fallbackChain: route.fallbackChain,
+    })),
+  };
+}
+
+function mapWorkflowStageGateSnapshot(params: {
+  artifactExists: boolean;
+  artifact: Awaited<ReturnType<typeof deriveProjectStageGateArtifact>>;
+}): WorkflowStageGateSnapshot | undefined {
+  if (!params.artifact.blueprintExists) {
+    return undefined;
+  }
+
+  return {
+    artifactExists: params.artifactExists,
+    blueprintRevisionId: params.artifact.blueprintRevisionId,
+    gateCount: params.artifact.gateCount,
+    blockedGateCount: params.artifact.blockedGateCount,
+    needsHumanDecisionCount: params.artifact.needsHumanDecisionCount,
+    gates: params.artifact.gates.map((gate) => ({
+      gateId: gate.gateId,
+      readiness: gate.readiness,
+      decisionRequired: gate.decisionRequired,
+      blockerCount: gate.blockers.length,
+      suggestionCount: gate.suggestions.length,
+      latestDecision: gate.latestDecision
+        ? {
+            decision: gate.latestDecision.decision,
+            note: gate.latestDecision.note,
+            actor: gate.latestDecision.actor,
+            recordedAt: gate.latestDecision.recordedAt,
+          }
+        : null,
+    })),
+  };
+}
+
+async function captureWorkflowPlanningContext(
+  repoRootInput: string,
+): Promise<Pick<WorkflowRun, "blueprintContext" | "roleRouting" | "stageGates">> {
+  const repoRoot = path.resolve(repoRootInput);
+  const blueprint = await readProjectBlueprintDocument(repoRoot);
+
+  if (!blueprint.exists) {
+    return {};
+  }
+
+  const storedRoleRouting = await readProjectRoleRoutingPlan(repoRoot);
+  const roleRoutingPlan = storedRoleRouting.exists
+    ? storedRoleRouting
+    : await deriveProjectRoleRoutingPlan(repoRoot);
+  const storedStageGates = await readProjectStageGateArtifact(repoRoot);
+  const stageGateArtifact = storedStageGates.exists
+    ? storedStageGates
+    : await deriveProjectStageGateArtifact(repoRoot);
+
+  return {
+    blueprintContext: mapWorkflowBlueprintContext(blueprint),
+    roleRouting: mapWorkflowRoleRoutingSnapshot({
+      artifactExists: storedRoleRouting.exists,
+      plan: roleRoutingPlan,
+    }),
+    stageGates: mapWorkflowStageGateSnapshot({
+      artifactExists: storedStageGates.exists,
+      artifact: stageGateArtifact,
+    }),
+  };
+}
+
 function shouldAutoMerge(run: WorkflowRun): boolean {
   return (
     run.suitability?.decision === "auto-run" &&
@@ -334,7 +447,10 @@ export async function runIssueWorkflow(
     issueNumber: request.issueNumber,
   });
 
-  let run = createRun(issue, now);
+  let run = {
+    ...createRun(issue, now),
+    ...(await captureWorkflowPlanningContext(request.repoRoot)),
+  };
   if (request.rerunContext) {
     run = attachRerunContext(run, request.rerunContext, now);
   }

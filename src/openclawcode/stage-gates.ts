@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { readProjectBlueprintDocument } from "./blueprint.js";
 import { readProjectDiscoveryInventory } from "./discovery.js";
-import { readProjectRoleRoutingPlan } from "./role-routing.js";
+import { deriveProjectRoleRoutingPlan, readProjectRoleRoutingPlan } from "./role-routing.js";
 import { readProjectWorkItemInventory } from "./work-items.js";
 
 export const PROJECT_STAGE_GATE_SCHEMA_VERSION = 1;
@@ -195,7 +195,10 @@ export async function deriveProjectStageGateArtifact(
   const blueprint = await readProjectBlueprintDocument(repoRoot);
   const workItems = await readProjectWorkItemInventory(repoRoot);
   const discovery = await readProjectDiscoveryInventory(repoRoot);
-  const roleRouting = await readProjectRoleRoutingPlan(repoRoot);
+  const storedRoleRouting = await readProjectRoleRoutingPlan(repoRoot);
+  const roleRouting = storedRoleRouting.exists
+    ? storedRoleRouting
+    : await deriveProjectRoleRoutingPlan(repoRoot);
 
   if (!blueprint.exists) {
     return emptyProjectStageGateArtifact({
@@ -206,7 +209,7 @@ export async function deriveProjectStageGateArtifact(
       blueprintRevisionId: null,
       workItemInventoryExists: workItems.exists,
       discoveryInventoryExists: discovery.exists,
-      roleRoutingExists: roleRouting.exists,
+      roleRoutingExists: storedRoleRouting.exists,
     });
   }
 
@@ -250,10 +253,7 @@ export async function deriveProjectStageGateArtifact(
       title: "Execution routing",
       summary:
         "Provider-neutral planner/coder/reviewer/verifier/doc-writer routing should be resolved before autonomous execution.",
-      readiness:
-        roleRouting.unresolvedRoleCount === 0 && roleRouting.exists
-          ? "ready"
-          : "needs-human-decision",
+      readiness: roleRouting.unresolvedRoleCount === 0 ? "ready" : "needs-human-decision",
       decisionRequired: true,
       blockers: roleRouting.blockers,
       suggestions: roleRouting.suggestions,
@@ -305,7 +305,7 @@ export async function deriveProjectStageGateArtifact(
     blueprintRevisionId: blueprint.revisionId,
     workItemInventoryExists: workItems.exists,
     discoveryInventoryExists: discovery.exists,
-    roleRoutingExists: roleRouting.exists,
+    roleRoutingExists: storedRoleRouting.exists,
     gateCount: gates.length,
     blockedGateCount: gates.filter((gate) => gate.readiness === "blocked").length,
     needsHumanDecisionCount: gates.filter((gate) => gate.readiness === "needs-human-decision")
@@ -336,7 +336,7 @@ export async function readProjectStageGateArtifact(
   const blueprint = await readProjectBlueprintDocument(repoRoot);
   const workItems = await readProjectWorkItemInventory(repoRoot);
   const discovery = await readProjectDiscoveryInventory(repoRoot);
-  const roleRouting = await readProjectRoleRoutingPlan(repoRoot);
+  const storedRoleRouting = await readProjectRoleRoutingPlan(repoRoot);
 
   try {
     const raw = await readFile(artifactPath, "utf8");
@@ -350,7 +350,7 @@ export async function readProjectStageGateArtifact(
       blueprintRevisionId: blueprint.revisionId,
       workItemInventoryExists: workItems.exists,
       discoveryInventoryExists: discovery.exists,
-      roleRoutingExists: roleRouting.exists,
+      roleRoutingExists: storedRoleRouting.exists,
       decisions: Array.isArray(parsed.decisions) ? parsed.decisions : [],
       gates: Array.isArray(parsed.gates) ? parsed.gates : [],
     };
@@ -364,7 +364,7 @@ export async function readProjectStageGateArtifact(
         blueprintRevisionId: blueprint.revisionId,
         workItemInventoryExists: workItems.exists,
         discoveryInventoryExists: discovery.exists,
-        roleRoutingExists: roleRouting.exists,
+        roleRoutingExists: storedRoleRouting.exists,
       });
     }
     throw error;

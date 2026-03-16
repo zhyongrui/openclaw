@@ -31,6 +31,9 @@ Not yet promised as stable:
   - `buildResult`
   - `verificationReport`
   - `draftPullRequest`
+  - `blueprintContext`
+  - `roleRouting`
+  - `stageGates`
   - other internal nested workflow structures
 
 Consumers should prefer the documented top-level fields instead of unpacking
@@ -98,6 +101,31 @@ those nested objects.
 - `failureDiagnosticBootstrapWarningShown`
 - `failureDiagnosticToolCount`
 - `failureDiagnosticUsageTotal`
+
+### Blueprint-First Control Plane Signals
+
+- `blueprintStatus`
+- `blueprintRevisionId`
+- `blueprintAgreed`
+- `blueprintDefaultedSectionCount`
+- `blueprintWorkstreamCandidateCount`
+- `blueprintOpenQuestionCount`
+- `blueprintHumanGateCount`
+- `roleRoutingMixedMode`
+- `roleRoutingFallbackConfigured`
+- `roleRoutingUnresolvedRoleCount`
+- `roleRoutingPlannerAdapter`
+- `roleRoutingCoderAdapter`
+- `roleRoutingReviewerAdapter`
+- `roleRoutingVerifierAdapter`
+- `roleRoutingDocWriterAdapter`
+- `stageGateBlockedGateCount`
+- `stageGateNeedsHumanDecisionCount`
+- `goalAgreementStageGateReadiness`
+- `workItemProjectionStageGateReadiness`
+- `executionRoutingStageGateReadiness`
+- `executionStartStageGateReadiness`
+- `mergePromotionStageGateReadiness`
 
 ### Suitability Signals
 
@@ -198,6 +226,10 @@ those nested objects.
 - string or timestamp fields use `null` when the underlying value is absent
 - `failureDiagnostics` uses `null` when no structured workflow failure metadata
   was recorded for the run
+- blueprint-first count and string mirrors use `null` when the current
+  workflow run did not capture blueprint-first context
+- blueprint-first readiness booleans such as `blueprintAgreed` use `null` when
+  no blueprint snapshot was attached to the run
 
 ## Consumer Guidance
 

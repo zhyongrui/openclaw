@@ -132,6 +132,59 @@ export interface WorkflowFailureDiagnostics {
   lastCallUsageTotal?: number;
 }
 
+export interface WorkflowBlueprintContext {
+  path: string;
+  status: string | null;
+  revisionId: string | null;
+  agreed: boolean;
+  defaultedSectionCount: number;
+  workstreamCandidateCount: number;
+  openQuestionCount: number;
+  humanGateCount: number;
+}
+
+export interface WorkflowRoleRouteSnapshot {
+  roleId: string;
+  adapterId: string;
+  source: string;
+  configured: boolean;
+  fallbackChain: string[];
+}
+
+export interface WorkflowRoleRoutingSnapshot {
+  artifactExists: boolean;
+  blueprintRevisionId: string | null;
+  mixedMode: boolean;
+  fallbackConfigured: boolean;
+  unresolvedRoleCount: number;
+  routes: WorkflowRoleRouteSnapshot[];
+}
+
+export interface WorkflowStageGateDecisionSnapshot {
+  decision: string;
+  note: string | null;
+  actor: string | null;
+  recordedAt: string;
+}
+
+export interface WorkflowStageGateRecordSnapshot {
+  gateId: string;
+  readiness: string;
+  decisionRequired: boolean;
+  blockerCount: number;
+  suggestionCount: number;
+  latestDecision: WorkflowStageGateDecisionSnapshot | null;
+}
+
+export interface WorkflowStageGateSnapshot {
+  artifactExists: boolean;
+  blueprintRevisionId: string | null;
+  gateCount: number;
+  blockedGateCount: number;
+  needsHumanDecisionCount: number;
+  gates: WorkflowStageGateRecordSnapshot[];
+}
+
 export interface WorkflowRun {
   id: string;
   stage: WorkflowStage;
@@ -147,6 +200,9 @@ export interface WorkflowRun {
   draftPullRequest?: PullRequestDraft;
   verificationReport?: VerificationReport;
   failureDiagnostics?: WorkflowFailureDiagnostics;
+  blueprintContext?: WorkflowBlueprintContext;
+  roleRouting?: WorkflowRoleRoutingSnapshot;
+  stageGates?: WorkflowStageGateSnapshot;
   rerunContext?: WorkflowRerunContext;
   history: string[];
 }
