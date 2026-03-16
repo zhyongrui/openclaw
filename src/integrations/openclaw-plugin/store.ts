@@ -128,7 +128,7 @@ export interface OpenClawCodeProviderPause {
   reason: string;
 }
 
-interface OpenClawCodeQueueState {
+export interface OpenClawCodeQueueState {
   version: 1;
   pendingApprovals: OpenClawCodePendingApproval[];
   pendingIntakeDrafts: OpenClawCodePendingIntakeDraft[];

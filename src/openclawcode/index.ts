@@ -3,6 +3,7 @@ export * from "./contracts/index.js";
 export * from "./discovery.js";
 export * from "./github/index.js";
 export * from "./orchestrator/index.js";
+export * from "./operator-status.js";
 export * from "./persistence/index.js";
 export * from "./promotion-artifacts.js";
 export * from "./role-routing.js";

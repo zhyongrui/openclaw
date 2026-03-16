@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { OpenClawCodeChatopsStore } from "../integrations/openclaw-plugin/store.js";
 import type { WorkflowRun } from "../openclawcode/index.js";
 import {
   openclawCodeBlueprintClarifyCommand,
@@ -11,6 +12,7 @@ import {
   DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS,
   DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS,
   openclawCodeBlueprintInitCommand,
+  openclawCodeOperatorStatusSnapshotShowCommand,
   openclawCodeBlueprintSetSectionCommand,
   openclawCodeBlueprintSetProviderRoleCommand,
   openclawCodeRoleRoutingRefreshCommand,
@@ -1853,6 +1855,180 @@ describe("openclawCodeRunCommand", () => {
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.exists).toBe(true);
     expect(payload.artifactStale).toBe(true);
+  });
+
+  it("shows an empty operator status snapshot when no chatops state file exists", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "openclawcode-operator-state-missing-"));
+
+    await openclawCodeOperatorStatusSnapshotShowCommand(
+      {
+        stateDir,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      contractVersion: 1,
+      stateDir,
+      statePath: path.join(stateDir, "plugins", "openclawcode", "chatops-state.json"),
+      exists: false,
+      pendingApprovalCount: 0,
+      pendingIntakeDraftCount: 0,
+      manualTakeoverCount: 0,
+      queuedRunCount: 0,
+      currentRunPresent: false,
+      trackedIssueCount: 0,
+      repoBindingCount: 0,
+      githubDeliveryCount: 0,
+      providerPauseActive: false,
+      currentRun: null,
+      providerPause: null,
+      repos: [],
+      issueSnapshots: [],
+    });
+  });
+
+  it("reports a stable operator status snapshot for tracked queue and status state", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "openclawcode-operator-state-"));
+    const store = OpenClawCodeChatopsStore.fromStateDir(stateDir);
+
+    await store.setRepoBinding({
+      repoKey: "openclaw/openclawcode",
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+    });
+    await store.addPendingApproval(
+      {
+        issueKey: "openclaw/openclawcode#101",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+      },
+      "Awaiting manual approval.",
+    );
+    await store.upsertPendingApproval(
+      {
+        issueKey: "openclaw/openclawcode#102",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+        approvalKind: "execution-start-gated",
+      },
+      "Held by execution-start gate.",
+    );
+    await store.upsertPendingIntakeDraft({
+      repoKey: "openclaw/openclawcode",
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+      title: "Add operator snapshot contract",
+      body: "Persist and surface a machine-readable operator snapshot.",
+      sourceRequest: "Need a stable operator snapshot contract.",
+      bodySynthesized: false,
+      clarificationQuestions: [],
+      clarificationSuggestions: [],
+      createdAt: "2026-03-16T00:00:00.000Z",
+      updatedAt: "2026-03-16T00:00:00.000Z",
+    });
+    await store.upsertManualTakeover({
+      issueKey: "openclaw/openclawcode#103",
+      runId: "run-103",
+      stage: "ready-for-human-review",
+      worktreePath: "/tmp/worktrees/run-103",
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+      actor: "tester",
+      requestedAt: "2026-03-16T00:05:00.000Z",
+    });
+    await store.enqueue(
+      {
+        issueKey: "openclaw/openclawcode#104",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+        request: {
+          owner: "openclaw",
+          repo: "openclawcode",
+          issueNumber: 104,
+          repoRoot: "/tmp/openclawcode",
+          baseBranch: "main",
+          branchName: "openclawcode/issue-104",
+          builderAgent: "codex",
+          verifierAgent: "claude-code",
+          testCommands: ["pnpm test"],
+          openPullRequest: true,
+          mergeOnApprove: false,
+        },
+      },
+      "Queued.",
+    );
+    await store.startNext("Running.");
+    await store.setStatusSnapshot({
+      issueKey: "openclaw/openclawcode#105",
+      status: "openclawcode status for openclaw/openclawcode#105\nStage: Ready For Human Review",
+      stage: "ready-for-human-review",
+      runId: "run-105",
+      updatedAt: "2026-03-16T00:10:00.000Z",
+      owner: "openclaw",
+      repo: "openclawcode",
+      issueNumber: 105,
+      branchName: "openclawcode/issue-105",
+      pullRequestNumber: 205,
+      pullRequestUrl: "https://github.com/openclaw/openclawcode/pull/205",
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+      latestReviewDecision: "approved",
+      autoMergePolicyEligible: false,
+      autoMergePolicyReason: "Blocked pending merge-promotion gate approval.",
+      autoMergeDisposition: "skipped",
+      autoMergeDispositionReason: "Waiting for merge-promotion override.",
+    });
+
+    await openclawCodeOperatorStatusSnapshotShowCommand(
+      {
+        stateDir,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      contractVersion: 1,
+      stateDir,
+      exists: true,
+      pendingApprovalCount: 2,
+      manualPendingApprovalCount: 1,
+      executionStartGatedApprovalCount: 1,
+      pendingIntakeDraftCount: 1,
+      manualTakeoverCount: 1,
+      queuedRunCount: 0,
+      currentRunPresent: true,
+      trackedIssueCount: 1,
+      repoBindingCount: 1,
+      githubDeliveryCount: 0,
+      providerPauseActive: false,
+      currentRun: {
+        issueKey: "openclaw/openclawcode#104",
+      },
+    });
+    expect(payload.pendingApprovals).toHaveLength(2);
+    expect(payload.issueSnapshots[0]).toMatchObject({
+      issueKey: "openclaw/openclawcode#105",
+      stage: "ready-for-human-review",
+      autoMergeDisposition: "skipped",
+    });
+    expect(payload.repos).toContainEqual(
+      expect.objectContaining({
+        repoKey: "openclaw/openclawcode",
+        bindingPresent: true,
+        trackedIssueCount: 1,
+        pendingApprovalCount: 2,
+        pendingIntakeDraftCount: 1,
+        manualTakeoverCount: 1,
+        queuedRunCount: 0,
+        currentRunCount: 1,
+        readyForHumanReviewCount: 1,
+      }),
+    );
   });
 
   it("discovers a missing work-item artifact from an agreed blueprint", async () => {

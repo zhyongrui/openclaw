@@ -1722,6 +1722,176 @@ async function resumeExecutionStartHeldApprovals(params: {
   return resumedIssueKeys;
 }
 
+function buildMergedByApprovedReviewStatus(params: {
+  snapshot: OpenClawCodeIssueStatusSnapshot;
+  pullRequestUrl?: string;
+  overrideUsed: boolean;
+}): string {
+  const summary = params.overrideUsed
+    ? "GitHub review approved the pull request and openclawcode merged it automatically using the approved merge-promotion override."
+    : "GitHub review approved the pull request and openclawcode merged it automatically.";
+  return [
+    `openclawcode status for ${params.snapshot.issueKey}`,
+    "Stage: Merged",
+    `Summary: ${summary}`,
+    params.pullRequestUrl ? `PR: ${params.pullRequestUrl}` : undefined,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildApprovedReviewAutoMergeFailureStatus(params: {
+  snapshot: OpenClawCodeIssueStatusSnapshot;
+  pullRequestUrl?: string;
+  reason: string;
+  overrideUsed: boolean;
+}): string {
+  const summary = params.overrideUsed
+    ? "GitHub review approved the pull request, but the merge-promotion override merge failed."
+    : "GitHub review approved the pull request, but the automatic merge failed.";
+  return [
+    `openclawcode status for ${params.snapshot.issueKey}`,
+    "Stage: Ready For Human Review",
+    `Summary: ${summary}`,
+    `Auto-merge failure: ${params.reason}`,
+    params.pullRequestUrl ? `PR: ${params.pullRequestUrl}` : undefined,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function resolveMergePromotionOverrideApproval(repoRoot: string): Promise<boolean> {
+  const stageGates = await readProjectStageGateArtifact(repoRoot);
+  const mergeGate = stageGates.gates.find((gate) => gate.gateId === "merge-promotion");
+  return mergeGate?.latestDecision?.decision === "approved";
+}
+
+async function maybeAutoMergeApprovedSnapshot(params: {
+  api: OpenClawPluginApi;
+  store: OpenClawCodeChatopsStore;
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  binding?: Awaited<ReturnType<OpenClawCodeChatopsStore["getRepoBinding"]>>;
+  snapshot: OpenClawCodeIssueStatusSnapshot;
+}): Promise<
+  | {
+      handled: false;
+    }
+  | {
+      handled: true;
+      merged: boolean;
+      reason: string;
+      snapshot: OpenClawCodeIssueStatusSnapshot;
+    }
+> {
+  const snapshot = params.snapshot;
+  if (
+    !params.repoConfig.mergeOnApprove ||
+    snapshot.stage !== "ready-for-human-review" ||
+    snapshot.latestReviewDecision !== "approved" ||
+    snapshot.pullRequestNumber == null
+  ) {
+    return { handled: false };
+  }
+
+  const overrideUsed =
+    snapshot.autoMergePolicyEligible !== true &&
+    (await resolveMergePromotionOverrideApproval(params.repoConfig.repoRoot));
+  const mergeAllowed = snapshot.autoMergePolicyEligible === true || overrideUsed;
+  if (!mergeAllowed) {
+    return { handled: false };
+  }
+
+  const github = new GitHubRestClient();
+  const updatedAt = new Date().toISOString();
+  const pullRequestUrl =
+    snapshot.pullRequestUrl ??
+    `https://github.com/${params.repoConfig.owner}/${params.repoConfig.repo}/pull/${snapshot.pullRequestNumber}`;
+  const destination = resolveNotificationDestination({
+    repoConfig: params.repoConfig,
+    binding: params.binding,
+    snapshot,
+  });
+
+  try {
+    await github.mergePullRequest({
+      owner: params.repoConfig.owner,
+      repo: params.repoConfig.repo,
+      pullNumber: snapshot.pullRequestNumber,
+    });
+    try {
+      await github.closeIssue({
+        owner: params.repoConfig.owner,
+        repo: params.repoConfig.repo,
+        issueNumber: snapshot.issueNumber,
+      });
+    } catch {
+      // Keep the merged snapshot even if issue close fails.
+    }
+    const mergedSnapshot: OpenClawCodeIssueStatusSnapshot = {
+      ...snapshot,
+      stage: "merged",
+      status: buildMergedByApprovedReviewStatus({
+        snapshot,
+        pullRequestUrl,
+        overrideUsed,
+      }),
+      updatedAt,
+      autoMergeDisposition: "merged",
+      autoMergeDispositionReason: overrideUsed
+        ? "Merged after review approval using the approved merge-promotion override."
+        : "Merged automatically after review approval.",
+    };
+    await params.store.setStatusSnapshot(mergedSnapshot);
+    await sendIssueNotification({
+      api: params.api,
+      store: params.store,
+      issueKey: mergedSnapshot.issueKey,
+      channel: destination.channel,
+      target: destination.target,
+      text: mergedSnapshot.status,
+    }).catch(() => undefined);
+    return {
+      handled: true,
+      merged: true,
+      reason: overrideUsed ? "review-approved-override-merged" : "review-approved-auto-merged",
+      snapshot: mergedSnapshot,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const failedSnapshot: OpenClawCodeIssueStatusSnapshot = {
+      ...snapshot,
+      status: buildApprovedReviewAutoMergeFailureStatus({
+        snapshot,
+        pullRequestUrl,
+        reason: message,
+        overrideUsed,
+      }),
+      updatedAt,
+      autoMergeDisposition: "failed",
+      autoMergeDispositionReason: overrideUsed
+        ? `Merge-promotion override merge failed after review approval: ${message}`
+        : `Automatic merge failed after review approval: ${message}`,
+    };
+    await params.store.setStatusSnapshot(failedSnapshot);
+    await sendIssueNotification({
+      api: params.api,
+      store: params.store,
+      issueKey: failedSnapshot.issueKey,
+      channel: destination.channel,
+      target: destination.target,
+      text: failedSnapshot.status,
+    }).catch(() => undefined);
+    return {
+      handled: true,
+      merged: false,
+      reason: overrideUsed
+        ? "review-approved-override-merge-failed"
+        : "review-approved-auto-merge-failed",
+      snapshot: failedSnapshot,
+    };
+  }
+}
+
 function buildInboxMessage(params: {
   repo: { owner: string; repo: string };
   state: Awaited<ReturnType<OpenClawCodeChatopsStore["snapshot"]>>;
@@ -2406,6 +2576,22 @@ async function handlePullRequestReviewWebhookEvent(params: {
       accepted: false,
       reason: applied.reason,
       issue: snapshot.issueKey,
+      pullRequestNumber: params.payload.pull_request.number,
+    });
+  }
+
+  const merged = await maybeAutoMergeApprovedSnapshot({
+    api: params.api,
+    store: params.store,
+    repoConfig: params.repoConfig,
+    binding: params.binding,
+    snapshot: applied.snapshot,
+  });
+  if (merged.handled) {
+    return await params.respondJson({
+      accepted: true,
+      reason: merged.reason,
+      issue: merged.snapshot.issueKey,
       pullRequestNumber: params.payload.pull_request.number,
     });
   }
@@ -4356,6 +4542,35 @@ export default {
                   repoConfig,
                 })
               : [];
+          let mergeDecisionLine: string | undefined;
+          if (parsed.gateId === "merge-promotion" && parsed.decision === "approved") {
+            const state = await store.snapshot();
+            const candidates = Object.values(state.statusSnapshotsByIssue).filter(
+              (snapshot) =>
+                snapshot.owner.toLowerCase() === repoConfig.owner.toLowerCase() &&
+                snapshot.repo.toLowerCase() === repoConfig.repo.toLowerCase() &&
+                snapshot.stage === "ready-for-human-review" &&
+                snapshot.latestReviewDecision === "approved" &&
+                snapshot.pullRequestNumber != null,
+            );
+            if (candidates.length === 1) {
+              const mergeAttempt = await maybeAutoMergeApprovedSnapshot({
+                api,
+                store,
+                repoConfig,
+                binding: await store.getRepoBinding(formatRepoKey(parsed.repo)),
+                snapshot: candidates[0]!,
+              });
+              if (mergeAttempt.handled) {
+                mergeDecisionLine = mergeAttempt.merged
+                  ? `Merge action: merged ${mergeAttempt.snapshot.issueKey} automatically.`
+                  : `Merge action: attempted ${mergeAttempt.snapshot.issueKey}, but merge failed.`;
+              }
+            } else if (candidates.length > 1) {
+              mergeDecisionLine =
+                "Merge action: skipped automatic merge because multiple review-approved candidates are waiting in this repo.";
+            }
+          }
           return {
             text: [
               `Recorded stage-gate decision for ${formatRepoKey(parsed.repo)}`,
@@ -4363,6 +4578,7 @@ export default {
               `Decision: ${parsed.decision}`,
               gate ? `Readiness: ${gate.readiness}` : undefined,
               parsed.note ? `Note: ${parsed.note}` : undefined,
+              mergeDecisionLine,
               resumedIssueKeys.length > 0
                 ? `Resumed held executions: ${resumedIssueKeys.length}`
                 : undefined,

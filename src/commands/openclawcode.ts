@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
   createProjectBlueprint,
@@ -35,6 +36,7 @@ import {
   readProjectDiscoveryInventory,
   readProjectRoleRoutingPlan,
   readProjectPromotionGateArtifact,
+  readOpenClawCodeOperatorStatusSnapshot,
   readProjectRollbackSuggestionArtifact,
   readProjectStageGateArtifact,
   readProjectWorkItemInventory,
@@ -54,6 +56,7 @@ import {
   writeProjectWorkItemInventory,
   resolveAutoMergeDisposition,
   resolveAutoMergePolicy,
+  type OpenClawCodeOperatorStatusSnapshot,
 } from "../openclawcode/index.js";
 import type { RuntimeEnv } from "../runtime.js";
 
@@ -214,6 +217,11 @@ export interface OpenClawCodeRollbackSuggestionRefreshOpts {
 
 export interface OpenClawCodeRollbackSuggestionShowOpts {
   repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeOperatorStatusSnapshotShowOpts {
+  stateDir?: string;
   json?: boolean;
 }
 
@@ -533,6 +541,49 @@ function logProjectRollbackSuggestionArtifact(params: {
       runtime.log(`- ${suggestion}`);
     }
   }
+}
+
+function logOpenClawCodeOperatorStatusSnapshot(params: {
+  snapshot: OpenClawCodeOperatorStatusSnapshot;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { snapshot, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(snapshot, null, 2));
+    return;
+  }
+
+  runtime.log(`State dir: ${snapshot.stateDir}`);
+  runtime.log(`State path: ${snapshot.statePath}`);
+  runtime.log(`Exists: ${snapshot.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${snapshot.generatedAt}`);
+  runtime.log(`Tracked issues: ${snapshot.trackedIssueCount}`);
+  runtime.log(`Pending approvals: ${snapshot.pendingApprovalCount}`);
+  runtime.log(`- manual: ${snapshot.manualPendingApprovalCount}`);
+  runtime.log(`- execution-start gated: ${snapshot.executionStartGatedApprovalCount}`);
+  runtime.log(`Pending intake drafts: ${snapshot.pendingIntakeDraftCount}`);
+  runtime.log(`Manual takeovers: ${snapshot.manualTakeoverCount}`);
+  runtime.log(`Queued runs: ${snapshot.queuedRunCount}`);
+  runtime.log(`Current run present: ${snapshot.currentRunPresent ? "yes" : "no"}`);
+  runtime.log(`Repo bindings: ${snapshot.repoBindingCount}`);
+  runtime.log(`GitHub deliveries: ${snapshot.githubDeliveryCount}`);
+  runtime.log(`Provider pause active: ${snapshot.providerPauseActive ? "yes" : "no"}`);
+  if (snapshot.currentRun) {
+    runtime.log(
+      `Current run: ${snapshot.currentRun.request.owner}/${snapshot.currentRun.request.repo}#${snapshot.currentRun.request.issueNumber}`,
+    );
+  }
+  for (const repo of snapshot.repos) {
+    runtime.log(
+      `- ${repo.repoKey}: tracked=${repo.trackedIssueCount} pending=${repo.pendingApprovalCount} queued=${repo.queuedRunCount} current=${repo.currentRunCount} ready=${repo.readyForHumanReviewCount} merged=${repo.mergedCount} failed=${repo.failedCount}`,
+    );
+  }
+}
+
+function resolveOperatorStateDir(stateDir?: string): string {
+  const envStateDir = process.env.OPENCLAW_STATE_DIR?.trim();
+  return path.resolve(stateDir ?? envStateDir ?? path.join(os.homedir(), ".openclaw"));
 }
 
 function resolvePublishedPullRequest(run: WorkflowRun): {
@@ -1416,6 +1467,19 @@ export async function openclawCodeRollbackSuggestionShowCommand(
   const artifact = await readProjectRollbackSuggestionArtifact(repoRoot);
   logProjectRollbackSuggestionArtifact({
     artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeOperatorStatusSnapshotShowCommand(
+  opts: OpenClawCodeOperatorStatusSnapshotShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const stateDir = resolveOperatorStateDir(opts.stateDir);
+  const snapshot = await readOpenClawCodeOperatorStatusSnapshot(stateDir);
+  logOpenClawCodeOperatorStatusSnapshot({
+    snapshot,
     runtime,
     json: Boolean(opts.json),
   });

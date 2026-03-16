@@ -2184,8 +2184,23 @@ artifact layer instead of stopping at chat text and setup-check output.
 This closes the first contract gap for release-readiness artifacts, but not the
 entire release-control story:
 
-- merge or promotion override still needs live runtime wiring
+- promotion override still needs explicit lifecycle wiring
 - promotion and rollback receipts still need explicit lifecycle hooks
+
+The next machine-readable operator surface is now also wired:
+
+- `openclaw code operator-status-snapshot-show --json` exposes the stable
+  chat-visible operator state contract with:
+  - pending approval counts
+  - execution-start-gated counts
+  - intake draft counts
+  - manual takeover counts
+  - current-run and queue state
+  - repo bindings and tracked issue snapshots
+- its schema is now documented in
+  `docs/openclawcode/operator-status-snapshot-contract.md`
+- this closes the first stable contract gap for chat-visible operator status
+  snapshots
 
 ## Manual Takeover And Post-Edit Resume
 
@@ -2210,4 +2225,4 @@ instead of stopping at gate decisions and rerun-time agent overrides.
 This does not yet complete the whole handoff story:
 
 - provider switching mid-run is still missing
-- explicit merge or promotion override flow is still missing
+- promotion override and release receipts are still missing

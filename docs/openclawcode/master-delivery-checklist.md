@@ -179,7 +179,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [ ] formalize a stable allowlist of low-risk categories for autonomous merge
 - [ ] formalize a stable denylist of high-risk categories for autonomous execution
 - [ ] add explicit operator override flow for suitability exceptions
-- [ ] add explicit operator override flow for merge-policy exceptions
+- [x] add explicit operator override flow for merge-policy exceptions
 - [ ] document supported labels and keywords that affect suitability
 - [ ] document supported labels and keywords that affect merge policy
 - [ ] make policy decisions machine-readable enough for external automation
@@ -244,7 +244,7 @@ The program is only "done enough to hand to other people" when all of these are 
   - fallback-proof readiness
   - promotion readiness
 - [x] expose a machine-readable rollback suggestion artifact
-- [ ] define a stable contract for chat-visible operator status snapshots
+- [x] define a stable contract for chat-visible operator status snapshots
 - [ ] define a stable contract for validation-pool reconciliation output
 - [ ] define a stable contract for promotion and rollback docs metadata
 

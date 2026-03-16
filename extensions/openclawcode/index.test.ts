@@ -146,6 +146,65 @@ function issueWebhookPayloadWithOwnerObject(issueNumber: number) {
   });
 }
 
+function blueprintFixtureContent(title: string) {
+  return [
+    "---",
+    "schemaVersion: 1",
+    `title: ${title}`,
+    "status: agreed",
+    "createdAt: 2026-03-16T00:00:00.000Z",
+    "updatedAt: 2026-03-16T00:00:00.000Z",
+    "statusChangedAt: 2026-03-16T00:00:00.000Z",
+    "agreedAt: 2026-03-16T00:00:00.000Z",
+    "---",
+    "",
+    `# ${title}`,
+    "",
+    "## Goal",
+    "Exercise merge-promotion overrides from tests.",
+    "",
+    "## Success Criteria",
+    "- Merge override can be approved from chat.",
+    "",
+    "## Scope",
+    "- In scope: merge override tests.",
+    "- Out of scope: live promotion.",
+    "",
+    "## Non-Goals",
+    "- None.",
+    "",
+    "## Constraints",
+    "- Keep artifacts deterministic.",
+    "",
+    "## Risks",
+    "- None.",
+    "",
+    "## Assumptions",
+    "- None.",
+    "",
+    "## Human Gates",
+    "- Goal agreement: required",
+    "- Merge or promotion: operator may intervene",
+    "",
+    "## Provider Strategy",
+    "- Planner: Claude Code",
+    "- Coder: Codex",
+    "- Reviewer: Claude Code",
+    "- Verifier: Codex",
+    "- Doc-writer: Codex",
+    "",
+    "## Workstreams",
+    "- Exercise merge override behavior.",
+    "",
+    "## Open Questions",
+    "- None.",
+    "",
+    "## Change Log",
+    "- 2026-03-16: merge override test fixture.",
+    "",
+  ].join("\n");
+}
+
 function pullRequestWebhookPayload(params: {
   pullRequestNumber: number;
   action?: string;
@@ -370,6 +429,7 @@ async function registerPluginFixture(params?: {
   triggerMode?: "approve" | "auto";
   repoRoot?: string;
   pollIntervalMs?: number;
+  mergeOnApprove?: boolean;
 }) {
   const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-plugin-test-"));
   const repoRoot =
@@ -406,6 +466,7 @@ async function registerPluginFixture(params?: {
             testCommands: [
               "pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads",
             ],
+            mergeOnApprove: params?.mergeOnApprove,
             pollIntervalMs: params?.pollIntervalMs,
           },
         ],
@@ -841,6 +902,189 @@ describe("openclawcode extension", () => {
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("auto-merges after an approved review when mergeOnApprove is enabled and policy allows it", async () => {
+    const fixture = await registerPluginFixture({ mergeOnApprove: true });
+    try {
+      vi.stubEnv("GH_TOKEN", "test-token");
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ merged: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ state: "closed" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#312",
+        status: "openclawcode status for zhyongrui/openclawcode#312\nStage: Changes Requested",
+        stage: "changes-requested",
+        runId: "run-312",
+        updatedAt: "2026-03-11T01:00:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 312,
+        branchName: "openclawcode/issue-312",
+        pullRequestNumber: 412,
+        pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/412",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+        autoMergePolicyEligible: true,
+        autoMergePolicyReason: "Eligible for auto-merge under the current command-layer policy.",
+      });
+      mocked.readRequestBodyWithLimit.mockResolvedValue(
+        pullRequestReviewWebhookPayload({
+          pullRequestNumber: 412,
+          reviewState: "approved",
+          submittedAt: "2026-03-11T02:15:00.000Z",
+        }),
+      );
+
+      const res = createMockServerResponse();
+      await fixture.route?.handler(
+        localReq({
+          method: "POST",
+          url: "/plugins/openclawcode/github",
+          headers: {
+            "x-github-event": "pull_request_review",
+            "x-github-delivery": "delivery-312-review-a",
+          },
+        }),
+        res,
+      );
+
+      expect(JSON.parse(String(res.body))).toMatchObject({
+        accepted: true,
+        reason: "review-approved-auto-merged",
+        issue: "zhyongrui/openclawcode#312",
+        pullRequest: 412,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        "https://api.github.com/repos/zhyongrui/openclawcode/pulls/412/merge",
+      );
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        "https://api.github.com/repos/zhyongrui/openclawcode/issues/312",
+      );
+      await waitForAssertion(async () => {
+        expect(await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#312")).toMatchObject({
+          stage: "merged",
+          autoMergeDisposition: "merged",
+        });
+      });
+      expect(mocked.runMessageAction.mock.calls.at(-1)?.[0]).toMatchObject({
+        params: expect.objectContaining({
+          message: expect.stringContaining("Stage: Merged"),
+        }),
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("uses an approved merge-promotion gate to override a blocked auto-merge policy after review approval", async () => {
+    const fixture = await registerPluginFixture({ mergeOnApprove: true });
+    try {
+      vi.stubEnv("GH_TOKEN", "test-token");
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ merged: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ state: "closed" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        blueprintFixtureContent("Merge Override Blueprint"),
+        "utf8",
+      );
+      await writeProjectStageGateArtifact(fixture.repoRoot);
+      await fixture.commands.get("occode-gate-decide")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-gate-decide merge-promotion approved allow merge override",
+        args: "merge-promotion approved allow merge override",
+        config: {},
+      });
+
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#313",
+        status: "openclawcode status for zhyongrui/openclawcode#313\nStage: Changes Requested",
+        stage: "changes-requested",
+        runId: "run-313",
+        updatedAt: "2026-03-11T01:00:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 313,
+        branchName: "openclawcode/issue-313",
+        pullRequestNumber: 413,
+        pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/413",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+        autoMergePolicyEligible: false,
+        autoMergePolicyReason:
+          "Not eligible for auto-merge: the run is not classified as command-layer.",
+      });
+      mocked.readRequestBodyWithLimit.mockResolvedValue(
+        pullRequestReviewWebhookPayload({
+          pullRequestNumber: 413,
+          reviewState: "approved",
+          submittedAt: "2026-03-11T02:15:00.000Z",
+        }),
+      );
+
+      const res = createMockServerResponse();
+      await fixture.route?.handler(
+        localReq({
+          method: "POST",
+          url: "/plugins/openclawcode/github",
+          headers: {
+            "x-github-event": "pull_request_review",
+            "x-github-delivery": "delivery-313-review-a",
+          },
+        }),
+        res,
+      );
+
+      expect(JSON.parse(String(res.body))).toMatchObject({
+        accepted: true,
+        reason: "review-approved-override-merged",
+        issue: "zhyongrui/openclawcode#313",
+        pullRequest: 413,
+      });
+      await waitForAssertion(async () => {
+        expect(await fixture.store.getStatusSnapshot("zhyongrui/openclawcode#313")).toMatchObject({
+          stage: "merged",
+          autoMergeDisposition: "merged",
+          autoMergeDispositionReason: expect.stringContaining("merge-promotion override"),
+        });
+      });
+      expect(mocked.runMessageAction.mock.calls.at(-1)?.[0]).toMatchObject({
+        params: expect.objectContaining({
+          message: expect.stringContaining("override"),
+        }),
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
     }
   });
 

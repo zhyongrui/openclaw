@@ -20,10 +20,11 @@ Recommended reading order:
 14. `openclaw-strategy.md`
 15. `openclaw-implementation-plan.md`
 16. `run-json-contract.md`
-17. `upstream-sync-policy.md`
-18. `operator-setup.md`
-19. `mvp-runbook.md`
-20. `webhook-operations.md`
+17. `operator-status-snapshot-contract.md`
+18. `upstream-sync-policy.md`
+19. `operator-setup.md`
+20. `mvp-runbook.md`
+21. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
@@ -253,6 +254,16 @@ loop with:
     baseline into `.openclawcode/promotion-gate.json`
   - `openclaw code rollback-suggestion-refresh --json` persists the current
     rollback candidate into `.openclawcode/rollback-suggestion.json`
+- a stable machine-readable operator-state contract now exists for chat-visible
+  status surfaces:
+  - `openclaw code operator-status-snapshot-show --json` reads the live
+    chatops store and persists nothing new
+  - its schema is documented in `operator-status-snapshot-contract.md`
+- approved review webhooks can now complete the merge path directly when
+  `mergeOnApprove` is enabled:
+  - policy-eligible runs merge automatically after GitHub review approval
+  - blocked runs can still merge when the operator explicitly approves the
+    `merge-promotion` stage gate
 - that setup verification script can now also run an isolated built-startup
   proof for the bundled `openclawcode` plugin through
   `--probe-built-startup`, using the same allowlisted diagnostic config that

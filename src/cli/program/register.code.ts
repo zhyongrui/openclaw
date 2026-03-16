@@ -12,6 +12,7 @@ import {
   openclawCodeBlueprintStatusIds,
   openclawCodeDiscoverWorkItemsCommand,
   openclawCodeListValidationIssuesCommand,
+  openclawCodeOperatorStatusSnapshotShowCommand,
   openclawCodePromotionGateRefreshCommand,
   openclawCodePromotionGateShowCommand,
   openclawCodeRoleRoutingRefreshCommand,
@@ -98,6 +99,10 @@ ${formatHelpExamples([
   [
     "openclaw code rollback-suggestion-refresh --json",
     "Persist the current rollback-target artifact for release and sync decisions.",
+  ],
+  [
+    "openclaw code operator-status-snapshot-show --json",
+    "Inspect the stable machine-readable operator state snapshot behind chat-visible status.",
   ],
   [
     'openclaw code stage-gates-decide --gate execution-start --decision approved --note "Proceed with autonomous execution" --json',
@@ -476,6 +481,26 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
         await openclawCodeRollbackSuggestionShowCommand(
           {
             repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("operator-status-snapshot-show")
+    .description("Show the stable machine-readable operator state snapshot")
+    .option(
+      "--state-dir <dir>",
+      "OpenClaw state dir (defaults to OPENCLAW_STATE_DIR or ~/.openclaw)",
+    )
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeOperatorStatusSnapshotShowCommand(
+          {
+            stateDir: opts.stateDir as string | undefined,
             json: Boolean(opts.json),
           },
           defaultRuntime,
