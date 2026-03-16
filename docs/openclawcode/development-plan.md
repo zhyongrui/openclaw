@@ -63,6 +63,8 @@ The first concrete landing in that track is now defined and partially shipped:
   - `openclaw code blueprint-init`
   - `openclaw code blueprint-show`
   - `openclaw code blueprint-set-status`
+  - `openclaw code blueprint-decompose`
+  - `openclaw code work-items-show`
 
 The active blueprint-first sequence is now:
 
@@ -78,6 +80,12 @@ That second step now has a first foothold in code too:
 - `openclaw code blueprint-clarify` can already inspect the current
   `PROJECT-BLUEPRINT.md` and emit deterministic clarification questions plus
   proactive suggestions before issue creation starts
+- `openclaw code blueprint-show --json` now exposes revision ids, content hash,
+  defaulted-section counts, provider-role assignments, and workstream/open
+  question counts
+- `openclaw code blueprint-decompose` now derives and persists a first
+  repo-local `.openclawcode/work-items.json` artifact with planned work items,
+  blockers, suggestions, and GitHub issue draft projections
 
 The remaining program is:
 

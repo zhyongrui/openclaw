@@ -52,10 +52,10 @@ The program is only "done enough to hand to other people" when all of these are 
 
 - [x] define a fixed project blueprint document path and schema
 - [ ] support a goal-discussion loop before issue creation
-- [ ] support clarification questions when the goal is underspecified
-- [ ] support proactive system suggestions while refining the goal
+- [x] support clarification questions when the goal is underspecified
+- [x] support proactive system suggestions while refining the goal
 - [x] support an explicit "blueprint agreed" checkpoint
-- [ ] derive execution work items from the blueprint instead of assuming GitHub issues already exist
+- [x] derive execution work items from the blueprint instead of assuming GitHub issues already exist
 - [ ] add a first general discovery pipeline beyond validation-pool seeding
 - [ ] define a provider-neutral role model for planner, coder, reviewer, verifier, and doc-writer
 - [ ] map Codex and Claude Code into that shared role model

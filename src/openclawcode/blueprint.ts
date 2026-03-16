@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
@@ -5,6 +6,13 @@ import { parseFrontmatterBlock } from "../markdown/frontmatter.js";
 
 export const PROJECT_BLUEPRINT_FILENAME = "PROJECT-BLUEPRINT.md";
 export const PROJECT_BLUEPRINT_SCHEMA_VERSION = 1;
+export const PROJECT_BLUEPRINT_ROLE_IDS = [
+  "planner",
+  "coder",
+  "reviewer",
+  "verifier",
+  "docWriter",
+] as const;
 export const PROJECT_BLUEPRINT_STATUSES = [
   "draft",
   "clarified",
@@ -27,6 +35,15 @@ export const PROJECT_BLUEPRINT_REQUIRED_SECTIONS = [
 ] as const;
 
 export type ProjectBlueprintStatus = (typeof PROJECT_BLUEPRINT_STATUSES)[number];
+export type ProjectBlueprintRoleId = (typeof PROJECT_BLUEPRINT_ROLE_IDS)[number];
+
+export interface ProjectBlueprintRoleAssignments {
+  planner: string | null;
+  coder: string | null;
+  reviewer: string | null;
+  verifier: string | null;
+  docWriter: string | null;
+}
 
 export interface ProjectBlueprintSummary {
   repoRoot: string;
@@ -38,12 +55,22 @@ export interface ProjectBlueprintSummary {
   createdAt: string | null;
   updatedAt: string | null;
   agreedAt: string | null;
+  statusChangedAt: string | null;
+  revisionId: string | null;
+  contentSha256: string | null;
   goalSummary: string | null;
   sectionCount: number;
   sections: string[];
+  frontmatterKeys: string[];
   requiredSectionsPresent: boolean;
   missingRequiredSections: string[];
   hasAgreementCheckpoint: boolean;
+  defaultedSectionCount: number;
+  defaultedSections: string[];
+  workstreamCandidateCount: number;
+  openQuestionCount: number;
+  humanGateCount: number;
+  providerRoleAssignments: ProjectBlueprintRoleAssignments;
 }
 
 export interface ProjectBlueprintClarificationReport extends ProjectBlueprintSummary {
@@ -53,12 +80,18 @@ export interface ProjectBlueprintClarificationReport extends ProjectBlueprintSum
   suggestionCount: number;
 }
 
+export interface ProjectBlueprintDocument extends ProjectBlueprintSummary {
+  content: string | null;
+  sectionBodies: Partial<Record<string, string>>;
+}
+
 interface ProjectBlueprintFrontmatter {
   schemaVersion: number;
   title: string;
   status: ProjectBlueprintStatus;
   createdAt: string;
   updatedAt: string;
+  statusChangedAt?: string;
   agreedAt?: string;
 }
 
@@ -70,15 +103,27 @@ const PROJECT_BLUEPRINT_PLACEHOLDER_SNIPPETS: Partial<
     "Define the first externally visible success criterion for this project.",
     "Define the first proof that another operator can repeat.",
   ],
-  Scope: ["- In scope:", "- Out of scope:"],
+  Scope: ["In scope:", "Out of scope:"],
   "Non-Goals": ["Record what this project should not attempt in the current delivery window."],
-  Constraints: ["- Technical:", "- Product:", "- Operational:"],
+  Constraints: ["Technical:", "Product:", "Operational:"],
   Risks: ["Record the main delivery, safety, or provider risks."],
   Assumptions: ["Record any assumption that still needs confirmation."],
-  "Human Gates": ["Goal agreement: required", "operator may intervene"],
-  "Provider Strategy": ["- Planner:", "- Coder:", "- Reviewer:", "- Verifier:", "- Doc-writer:"],
+  "Human Gates": [
+    "Goal agreement: required",
+    "Work item creation: operator may intervene",
+    "Merge or promotion: operator may intervene",
+  ],
+  "Provider Strategy": ["Planner:", "Coder:", "Reviewer:", "Verifier:", "Doc-writer:"],
   Workstreams: ["Break the blueprint into execution work items after agreement."],
   "Open Questions": ["Record anything that still needs clarification."],
+};
+
+const PROJECT_BLUEPRINT_PROVIDER_ROLE_HEADINGS: Record<string, ProjectBlueprintRoleId> = {
+  Planner: "planner",
+  Coder: "coder",
+  Reviewer: "reviewer",
+  Verifier: "verifier",
+  "Doc-writer": "docWriter",
 };
 
 export interface CreateProjectBlueprintOptions {
@@ -115,6 +160,26 @@ function extractSectionNames(content: string): string[] {
   return [...content.matchAll(/^##\s+(.+)$/gm)]
     .map((match) => match[1]?.trim())
     .filter((section): section is string => Boolean(section));
+}
+
+function normalizeMarkdownListItem(line: string): string | null {
+  const trimmed = line.trim();
+  const match =
+    trimmed.match(/^[-*]\s+\[(?: |x|X)\]\s+(.+)$/) ??
+    trimmed.match(/^[-*]\s+(.+)$/) ??
+    trimmed.match(/^\d+\.\s+(.+)$/);
+  if (!match?.[1]) {
+    return null;
+  }
+  return match[1].trim();
+}
+
+function extractMarkdownListItems(content: string): string[] {
+  return content
+    .split("\n")
+    .map((line) => normalizeMarkdownListItem(line))
+    .filter((item): item is string => Boolean(item))
+    .filter((item) => !/^none\b/i.test(item));
 }
 
 function extractGoalSummary(content: string): string | null {
@@ -166,6 +231,73 @@ function splitFrontmatter(content: string): { frontmatter: string | null; body: 
 
 function renderFrontmatter(frontmatter: ProjectBlueprintFrontmatter): string {
   return `---\n${YAML.stringify(frontmatter).trimEnd()}\n---\n`;
+}
+
+function emptyProjectBlueprintRoleAssignments(): ProjectBlueprintRoleAssignments {
+  return {
+    planner: null,
+    coder: null,
+    reviewer: null,
+    verifier: null,
+    docWriter: null,
+  };
+}
+
+function parseProjectBlueprintRoleAssignments(
+  providerStrategyBody: string | undefined,
+): ProjectBlueprintRoleAssignments {
+  const assignments = emptyProjectBlueprintRoleAssignments();
+  if (!providerStrategyBody) {
+    return assignments;
+  }
+
+  for (const item of extractMarkdownListItems(providerStrategyBody)) {
+    const match = item.match(/^([^:]+):\s*(.*)$/);
+    if (!match?.[1]) {
+      continue;
+    }
+    const roleId = PROJECT_BLUEPRINT_PROVIDER_ROLE_HEADINGS[match[1].trim()];
+    if (!roleId) {
+      continue;
+    }
+    const value = match[2]?.trim() || null;
+    assignments[roleId] = value && value.length > 0 ? value : null;
+  }
+
+  return assignments;
+}
+
+function defaultedProjectBlueprintSections(
+  sectionBodies: Partial<Record<string, string>>,
+): (typeof PROJECT_BLUEPRINT_REQUIRED_SECTIONS)[number][] {
+  return PROJECT_BLUEPRINT_REQUIRED_SECTIONS.filter((section) => {
+    const body = sectionBodies[section];
+    if (!body) {
+      return false;
+    }
+    const placeholders = PROJECT_BLUEPRINT_PLACEHOLDER_SNIPPETS[section] ?? [];
+    if (placeholders.length === 0) {
+      return false;
+    }
+
+    const placeholderListItems = placeholders
+      .map((placeholder) => normalizeMarkdownListItem(placeholder) ?? placeholder.trim())
+      .filter((item): item is string => Boolean(item));
+    const actualListItems = extractMarkdownListItems(body);
+    if (actualListItems.length > 0 && placeholderListItems.length === placeholders.length) {
+      return (
+        actualListItems.length === placeholderListItems.length &&
+        actualListItems.every((item, index) => item === placeholderListItems[index])
+      );
+    }
+
+    return body.trim() === placeholders.join("\n").trim();
+  });
+}
+
+function computeBlueprintContentSha(content: string): string {
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return createHash("sha256").update(normalized).digest("hex");
 }
 
 function renderProjectBlueprintBody(params: {
@@ -231,14 +363,26 @@ function parseProjectBlueprintContent(params: {
   content: string;
 }): ProjectBlueprintSummary {
   const frontmatter = parseFrontmatterBlock(params.content);
+  const sectionBodies = extractSectionBodies(params.content);
   const status = normalizeProjectBlueprintStatus(frontmatter.status);
   const sections = extractSectionNames(params.content);
   const missingRequiredSections = PROJECT_BLUEPRINT_REQUIRED_SECTIONS.filter(
     (section) => !sections.includes(section),
   );
+  const defaultedSections = defaultedProjectBlueprintSections(sectionBodies);
   const schemaVersionRaw = frontmatter.schemaVersion
     ? Number.parseInt(frontmatter.schemaVersion, 10)
     : Number.NaN;
+  const contentSha256 = computeBlueprintContentSha(params.content);
+  const workstreamItems = defaultedSections.includes("Workstreams")
+    ? []
+    : extractMarkdownListItems(sectionBodies.Workstreams ?? "");
+  const openQuestions = defaultedSections.includes("Open Questions")
+    ? []
+    : extractMarkdownListItems(sectionBodies["Open Questions"] ?? "");
+  const humanGates = defaultedSections.includes("Human Gates")
+    ? []
+    : extractMarkdownListItems(sectionBodies["Human Gates"] ?? "");
 
   return {
     repoRoot: params.repoRoot,
@@ -250,9 +394,13 @@ function parseProjectBlueprintContent(params: {
     createdAt: frontmatter.createdAt ?? null,
     updatedAt: frontmatter.updatedAt ?? null,
     agreedAt: frontmatter.agreedAt ?? null,
+    statusChangedAt: frontmatter.statusChangedAt ?? frontmatter.updatedAt ?? null,
+    revisionId: contentSha256.slice(0, 12),
+    contentSha256,
     goalSummary: extractGoalSummary(params.content),
     sectionCount: sections.length,
     sections,
+    frontmatterKeys: Object.keys(frontmatter).toSorted(),
     requiredSectionsPresent: missingRequiredSections.length === 0,
     missingRequiredSections,
     hasAgreementCheckpoint:
@@ -260,6 +408,14 @@ function parseProjectBlueprintContent(params: {
       status === "active" ||
       status === "superseded" ||
       Boolean(frontmatter.agreedAt),
+    defaultedSectionCount: defaultedSections.length,
+    defaultedSections,
+    workstreamCandidateCount: workstreamItems.length,
+    openQuestionCount: openQuestions.length,
+    humanGateCount: humanGates.length,
+    providerRoleAssignments: parseProjectBlueprintRoleAssignments(
+      sectionBodies["Provider Strategy"],
+    ),
   };
 }
 
@@ -295,12 +451,22 @@ export async function readProjectBlueprint(repoRoot: string): Promise<ProjectBlu
         createdAt: null,
         updatedAt: null,
         agreedAt: null,
+        statusChangedAt: null,
+        revisionId: null,
+        contentSha256: null,
         goalSummary: null,
         sectionCount: 0,
         sections: [],
+        frontmatterKeys: [],
         requiredSectionsPresent: false,
         missingRequiredSections: [...PROJECT_BLUEPRINT_REQUIRED_SECTIONS],
         hasAgreementCheckpoint: false,
+        defaultedSectionCount: 0,
+        defaultedSections: [],
+        workstreamCandidateCount: 0,
+        openQuestionCount: 0,
+        humanGateCount: 0,
+        providerRoleAssignments: emptyProjectBlueprintRoleAssignments(),
       };
     }
     throw error;
@@ -329,6 +495,7 @@ export async function createProjectBlueprint(
     status: "draft",
     createdAt: now,
     updatedAt: now,
+    statusChangedAt: now,
   };
   const content = `${renderFrontmatter(frontmatter)}\n${renderProjectBlueprintBody({
     title,
@@ -358,6 +525,7 @@ export async function updateProjectBlueprintStatus(
     status: options.status,
     createdAt: current.createdAt ?? now,
     updatedAt: now,
+    statusChangedAt: current.status === options.status ? (current.statusChangedAt ?? now) : now,
   };
   if (current.agreedAt) {
     frontmatter.agreedAt = current.agreedAt;
@@ -370,11 +538,35 @@ export async function updateProjectBlueprintStatus(
   return await readProjectBlueprint(repoRoot);
 }
 
+export async function readProjectBlueprintDocument(
+  repoRootInput: string,
+): Promise<ProjectBlueprintDocument> {
+  const repoRoot = path.resolve(repoRootInput);
+  const summary = await readProjectBlueprint(repoRoot);
+  if (!summary.exists) {
+    return {
+      ...summary,
+      content: null,
+      sectionBodies: {},
+    };
+  }
+
+  const content = await readFile(summary.blueprintPath, "utf8");
+  return {
+    ...parseProjectBlueprintContent({
+      repoRoot,
+      blueprintPath: summary.blueprintPath,
+      content,
+    }),
+    content,
+    sectionBodies: extractSectionBodies(content),
+  };
+}
+
 export async function inspectProjectBlueprintClarifications(
   repoRootInput: string,
 ): Promise<ProjectBlueprintClarificationReport> {
-  const repoRoot = path.resolve(repoRootInput);
-  const summary = await readProjectBlueprint(repoRoot);
+  const summary = await readProjectBlueprintDocument(repoRootInput);
   const questions = new Set<string>();
   const suggestions = new Set<string>();
 
@@ -391,9 +583,6 @@ export async function inspectProjectBlueprintClarifications(
     };
   }
 
-  const content = await readFile(summary.blueprintPath, "utf8");
-  const sectionBodies = extractSectionBodies(content);
-
   for (const section of summary.missingRequiredSections) {
     questions.add(
       `Fill the \`${section}\` section in PROJECT-BLUEPRINT.md before deriving work items.`,
@@ -401,12 +590,11 @@ export async function inspectProjectBlueprintClarifications(
   }
 
   for (const section of PROJECT_BLUEPRINT_REQUIRED_SECTIONS) {
-    const body = sectionBodies[section];
+    const body = summary.sectionBodies[section];
     if (!body) {
       continue;
     }
-    const placeholders = PROJECT_BLUEPRINT_PLACEHOLDER_SNIPPETS[section] ?? [];
-    if (!placeholders.every((placeholder) => body.includes(placeholder))) {
+    if (!summary.defaultedSections.includes(section)) {
       continue;
     }
     switch (section) {

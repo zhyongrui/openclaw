@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import {
   openclawCodeBlueprintClarifyCommand,
+  openclawCodeBlueprintDecomposeCommand,
   openclawCodeBlueprintInitCommand,
   openclawCodeBlueprintSetStatusCommand,
   openclawCodeBlueprintShowCommand,
@@ -10,6 +11,7 @@ import {
   openclawCodeRunCommand,
   openclawCodeSeedValidationIssueCommand,
   openclawCodeSeedValidationIssueTemplateIds,
+  openclawCodeWorkItemsShowCommand,
 } from "../../commands/openclawcode.js";
 import { defaultRuntime } from "../../runtime.js";
 import { formatDocsLink } from "../../terminal/links.js";
@@ -43,6 +45,14 @@ ${formatHelpExamples([
   [
     "openclaw code blueprint-set-status --status agreed",
     "Record the explicit blueprint agreement checkpoint.",
+  ],
+  [
+    "openclaw code blueprint-decompose --json",
+    "Derive and persist repo-local work items from the fixed project blueprint.",
+  ],
+  [
+    "openclaw code work-items-show --json",
+    "Inspect the latest persisted work-item inventory and stale-state signals.",
   ],
   [
     "openclaw code run --issue 123",
@@ -148,6 +158,40 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
           {
             repoRoot: opts.repoRoot as string | undefined,
             status: opts.status as string,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("blueprint-decompose")
+    .description("Derive and persist work items from the current fixed project blueprint")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeBlueprintDecomposeCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("work-items-show")
+    .description("Show the current repo-local work-item inventory artifact")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeWorkItemsShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
             json: Boolean(opts.json),
           },
           defaultRuntime,

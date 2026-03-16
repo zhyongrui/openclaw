@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowRun } from "../openclawcode/index.js";
 import {
   openclawCodeBlueprintClarifyCommand,
+  openclawCodeBlueprintDecomposeCommand,
   DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS,
   DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS,
   openclawCodeBlueprintInitCommand,
@@ -15,6 +16,7 @@ import {
   openclawCodeRunCommand,
   openclawCodeSeedValidationIssueCommand,
   openclawCodeSeedValidationIssueTemplateIds,
+  openclawCodeWorkItemsShowCommand,
 } from "./openclawcode.js";
 import { createTestRuntime } from "./test-runtime-config-helpers.js";
 
@@ -1321,6 +1323,20 @@ describe("openclawCodeRunCommand", () => {
       title: "OpenClawCode Blueprint",
       requiredSectionsPresent: true,
       hasAgreementCheckpoint: false,
+      statusChangedAt: expect.stringMatching(/^202\d-/),
+      revisionId: expect.stringMatching(/^[0-9a-f]{12}$/),
+      contentSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      workstreamCandidateCount: 0,
+      openQuestionCount: 0,
+      humanGateCount: 0,
+    });
+    expect(payload.defaultedSections).toContain("Workstreams");
+    expect(payload.providerRoleAssignments).toMatchObject({
+      planner: null,
+      coder: null,
+      reviewer: null,
+      verifier: null,
+      docWriter: null,
     });
     const content = await readFile(path.join(repoRoot, "PROJECT-BLUEPRINT.md"), "utf8");
     expect(content).toContain("# OpenClawCode Blueprint");
@@ -1349,6 +1365,9 @@ describe("openclawCodeRunCommand", () => {
       status: null,
       title: null,
       hasAgreementCheckpoint: false,
+      revisionId: null,
+      contentSha256: null,
+      defaultedSectionCount: 0,
     });
   });
 
@@ -1433,6 +1452,230 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.exists).toBe(false);
     expect(payload.questionCount).toBe(1);
     expect(payload.questions[0]).toContain("No project blueprint exists yet.");
+  });
+
+  it("derives and persists repo-local work items from an agreed blueprint", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-blueprint-decompose-"));
+    const blueprintPath = path.join(repoRoot, "PROJECT-BLUEPRINT.md");
+
+    await writeFile(
+      blueprintPath,
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Delivery Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-16T00:00:00.000Z",
+        "updatedAt: 2026-03-16T00:00:00.000Z",
+        "statusChangedAt: 2026-03-16T00:00:00.000Z",
+        "agreedAt: 2026-03-16T00:00:00.000Z",
+        "---",
+        "",
+        "# Delivery Blueprint",
+        "",
+        "## Goal",
+        "Ship a blueprint-first operator flow that another teammate can repeat.",
+        "",
+        "## Success Criteria",
+        "- `openclaw code blueprint-decompose` writes work items.",
+        "- `openclaw code work-items-show --json` reports a stable artifact.",
+        "",
+        "## Scope",
+        "- In scope: repo-local planning artifacts and issue-draft projection.",
+        "- Out of scope: live provider routing changes.",
+        "",
+        "## Non-Goals",
+        "- Rebuild the existing GitHub workflow engine.",
+        "",
+        "## Constraints",
+        "- Technical: stay compatible with the current issue-driven runtime.",
+        "- Product: preserve machine-readable artifacts.",
+        "- Operational: keep the flow deterministic.",
+        "",
+        "## Risks",
+        "- The blueprint may still be too vague for issue projection.",
+        "",
+        "## Assumptions",
+        "- The operator wants GitHub issue drafts, not direct issue creation, in this phase.",
+        "",
+        "## Human Gates",
+        "- Goal agreement: required",
+        "- Issue projection: operator may intervene",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Build repo-local work item inventory persistence.",
+        "- Generate GitHub issue drafts from blueprint-derived work items.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-16: blueprint agreed for decomposition testing.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      inventoryPath: path.join(repoRoot, ".openclawcode", "work-items.json"),
+      exists: true,
+      schemaVersion: 1,
+      blueprintExists: true,
+      blueprintStatus: "agreed",
+      readyForIssueProjection: true,
+      workItemCount: 2,
+      plannedWorkItemCount: 2,
+      discoveredWorkItemCount: 0,
+      blockerCount: 0,
+    });
+    expect(payload.workItems[0]).toMatchObject({
+      id: "planned-01-build-repo-local-work-item-inventory-persistence",
+      kind: "planned",
+      status: "planned",
+      title: "Build repo-local work item inventory persistence.",
+      workstreamIndex: 1,
+    });
+    expect(payload.workItems[0].providerRoleAssignments).toMatchObject({
+      planner: "Claude Code",
+      coder: "Codex",
+      reviewer: "Claude Code",
+      verifier: "Codex",
+      docWriter: "Codex",
+    });
+    expect(payload.workItems[0].githubIssueDraft.title).toBe(
+      "[Blueprint]: Build repo-local work item inventory persistence.",
+    );
+    const artifact = JSON.parse(
+      await readFile(path.join(repoRoot, ".openclawcode", "work-items.json"), "utf8"),
+    );
+    expect(artifact.workItemCount).toBe(2);
+  });
+
+  it("shows missing repo-local work-item inventory before decomposition has run", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-work-items-missing-"));
+
+    await openclawCodeWorkItemsShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      inventoryPath: path.join(repoRoot, ".openclawcode", "work-items.json"),
+      exists: false,
+      blueprintExists: false,
+      workItemCount: 0,
+      artifactStale: null,
+    });
+  });
+
+  it("reports a stale work-item artifact when the blueprint revision has changed", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-work-items-stale-"));
+    const blueprintPath = path.join(repoRoot, "PROJECT-BLUEPRINT.md");
+
+    await writeFile(
+      blueprintPath,
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Stale Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-16T00:00:00.000Z",
+        "updatedAt: 2026-03-16T00:00:00.000Z",
+        "statusChangedAt: 2026-03-16T00:00:00.000Z",
+        "agreedAt: 2026-03-16T00:00:00.000Z",
+        "---",
+        "",
+        "# Stale Blueprint",
+        "",
+        "## Goal",
+        "Ship stale detection.",
+        "",
+        "## Success Criteria",
+        "- Preserve a work-item artifact.",
+        "",
+        "## Scope",
+        "- In scope: stale detection.",
+        "- Out of scope: live execution.",
+        "",
+        "## Non-Goals",
+        "- None.",
+        "",
+        "## Constraints",
+        "- Technical: keep the file machine-readable.",
+        "",
+        "## Risks",
+        "- Drift between blueprint and work-item artifact.",
+        "",
+        "## Assumptions",
+        "- A stale artifact should be flagged.",
+        "",
+        "## Human Gates",
+        "- Goal agreement: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "",
+        "## Workstreams",
+        "- Emit artifact stale signals.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-16: stale detection baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+    runtime.log.mockClear();
+
+    const updatedContent = (await readFile(blueprintPath, "utf8")).replace(
+      "Emit artifact stale signals.",
+      "Emit artifact stale signals after blueprint edits.",
+    );
+    await writeFile(blueprintPath, updatedContent, "utf8");
+
+    await openclawCodeWorkItemsShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.exists).toBe(true);
+    expect(payload.artifactStale).toBe(true);
   });
 
   it("renders a dry-run validation issue template without creating a GitHub issue", async () => {

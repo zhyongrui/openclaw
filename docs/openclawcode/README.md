@@ -56,7 +56,10 @@ loop with:
   - `openclaw code blueprint-show`
   - `openclaw code blueprint-clarify`
   - `openclaw code blueprint-set-status`
-  - machine-readable lifecycle inspection through `--json`
+  - `openclaw code blueprint-decompose`
+  - `openclaw code work-items-show`
+  - machine-readable lifecycle inspection, revision metadata, and work-item
+    inventory output through `--json`
 - stable workflow identity metadata now also includes top-level mirrors for:
   - `issueTitle`
   - `issueRepo`

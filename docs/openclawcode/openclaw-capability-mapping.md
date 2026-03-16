@@ -262,6 +262,8 @@ Missing:
 Current status:
 
 - partial foothold via `openclaw code blueprint-clarify`
+- blueprint summaries now expose revision ids, defaulted sections, provider
+  role assignments, and workstream/open-question counts
 - still no chat-native discussion loop that updates the blueprint directly
 
 ### 2. Blueprint-Centered Source Of Truth
@@ -278,7 +280,10 @@ Current status:
 - `PROJECT-BLUEPRINT.md` exists
 - lifecycle statuses exist
 - explicit `agreed` checkpoint exists
-- decomposition and state propagation still do not exist
+- repo-local work-item decomposition now exists through
+  `.openclawcode/work-items.json`
+- stage-gate persistence still needs to extend beyond the blueprint/work-item
+  artifact boundary
 
 ### 3. Work Item Decomposition
 
@@ -288,6 +293,14 @@ Missing:
 - blueprint-to-work-item planning
 - work-item projection into GitHub issues
 - support for planned, discovered, docs, sync, and policy work items
+
+Current status:
+
+- first repo-local `work item` abstraction has landed
+- `openclaw code blueprint-decompose` now derives planned work items from the
+  `Workstreams` section
+- each work item already includes a GitHub issue draft projection
+- discovered work items and incremental re-decomposition still need to be built
 
 ### 4. General Discovery Pipeline
 
@@ -423,13 +436,14 @@ Acceptance:
 
 Status:
 
-- `[ ]` not started
+- `[x]` first planned work-item decomposition landed
+- `[ ]` incremental and discovered decomposition still open
 
 Tasks:
 
-- `[ ]` derive workstreams from `PROJECT-BLUEPRINT.md`
-- `[ ]` generate work items from each workstream
-- `[ ]` classify items as planned versus discovered
+- `[x]` derive workstreams from `PROJECT-BLUEPRINT.md`
+- `[x]` generate work items from each workstream
+- `[x]` classify initial blueprint-derived items as planned
 - `[ ]` support decomposition of:
   - feature slices
   - docs slices

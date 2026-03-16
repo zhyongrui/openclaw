@@ -72,10 +72,13 @@ Current foothold:
 
 - `openclaw code blueprint-clarify` now produces deterministic clarification
   questions and proactive suggestions from the current blueprint scaffold
+- `openclaw code blueprint-show --json` now exposes revision and defaulted
+  section metadata that downstream discussion surfaces can consume directly
 
 ### Phase B3: Work Item Decomposition
 
-Status: open
+Status: partially landed through repo-local decomposition and artifact
+persistence
 
 Deliverables:
 
@@ -88,6 +91,13 @@ Acceptance:
 
 - the system can derive work items from the blueprint instead of assuming they
   already exist on GitHub
+
+Current foothold:
+
+- `openclaw code blueprint-decompose` now derives `.openclawcode/work-items.json`
+- `openclaw code work-items-show --json` now reports persisted/stale work-item
+  inventory state
+- each planned work item already carries a GitHub issue draft projection
 
 ### Phase B4: Discovery Pipeline
 

@@ -26,9 +26,11 @@ import {
   parseValidationIssue,
   AgentBackedBuilder,
   AgentBackedVerifier,
+  readProjectWorkItemInventory,
   resolveGitHubRepoFromGit,
   runIssueWorkflow,
   type ValidationIssueTemplateId,
+  writeProjectWorkItemInventory,
 } from "../openclawcode/index.js";
 import type { RuntimeEnv } from "../runtime.js";
 
@@ -105,6 +107,16 @@ export interface OpenClawCodeBlueprintSetStatusOpts {
 }
 
 export interface OpenClawCodeBlueprintClarifyOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeBlueprintDecomposeOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeWorkItemsShowOpts {
   repoRoot?: string;
   json?: boolean;
 }
@@ -189,15 +201,30 @@ function logProjectBlueprintSummary(params: {
 
   runtime.log(`Schema version: ${summary.schemaVersion ?? "unknown"}`);
   runtime.log(`Status: ${summary.status ?? "unknown"}`);
+  runtime.log(`Status changed at: ${summary.statusChangedAt ?? "unknown"}`);
   runtime.log(`Title: ${summary.title ?? "untitled"}`);
   runtime.log(`Created at: ${summary.createdAt ?? "unknown"}`);
   runtime.log(`Updated at: ${summary.updatedAt ?? "unknown"}`);
   runtime.log(`Agreed at: ${summary.agreedAt ?? "not yet agreed"}`);
+  runtime.log(`Revision: ${summary.revisionId ?? "unknown"}`);
   runtime.log(`Goal summary: ${summary.goalSummary ?? "none"}`);
   runtime.log(`Required sections present: ${summary.requiredSectionsPresent ? "yes" : "no"}`);
   if (summary.missingRequiredSections.length > 0) {
     runtime.log(`Missing sections: ${summary.missingRequiredSections.join(", ")}`);
   }
+  runtime.log(`Defaulted sections: ${summary.defaultedSectionCount}`);
+  if (summary.defaultedSections.length > 0) {
+    runtime.log(`Still using defaults: ${summary.defaultedSections.join(", ")}`);
+  }
+  runtime.log(`Workstream candidates: ${summary.workstreamCandidateCount}`);
+  runtime.log(`Open questions: ${summary.openQuestionCount}`);
+  runtime.log(`Human gates: ${summary.humanGateCount}`);
+  const providerAssignments = Object.entries(summary.providerRoleAssignments)
+    .filter(([, value]) => value != null)
+    .map(([role, value]) => `${role}=${value}`);
+  runtime.log(
+    `Provider roles: ${providerAssignments.length > 0 ? providerAssignments.join(", ") : "none"}`,
+  );
 }
 
 function logProjectBlueprintClarificationReport(params: {
@@ -219,6 +246,47 @@ function logProjectBlueprintClarificationReport(params: {
   runtime.log(`Suggestions: ${report.suggestionCount}`);
   for (const suggestion of report.suggestions) {
     runtime.log(`- suggestion: ${suggestion}`);
+  }
+}
+
+function logProjectWorkItemInventory(params: {
+  inventory: Awaited<ReturnType<typeof readProjectWorkItemInventory>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { inventory, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(inventory, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${inventory.repoRoot}`);
+  runtime.log(`Inventory path: ${inventory.inventoryPath}`);
+  runtime.log(`Exists: ${inventory.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${inventory.generatedAt ?? "not yet generated"}`);
+  runtime.log(`Blueprint exists: ${inventory.blueprintExists ? "yes" : "no"}`);
+  runtime.log(`Blueprint path: ${inventory.blueprintPath}`);
+  runtime.log(`Blueprint status: ${inventory.blueprintStatus ?? "unknown"}`);
+  runtime.log(`Blueprint revision: ${inventory.blueprintRevisionId ?? "unknown"}`);
+  runtime.log(
+    `Artifact stale: ${inventory.artifactStale == null ? "unknown" : inventory.artifactStale ? "yes" : "no"}`,
+  );
+  runtime.log(`Ready for issue projection: ${inventory.readyForIssueProjection ? "yes" : "no"}`);
+  runtime.log(`Work items: ${inventory.workItemCount}`);
+  if (inventory.blockers.length > 0) {
+    runtime.log("Blockers:");
+    for (const blocker of inventory.blockers) {
+      runtime.log(`- ${blocker}`);
+    }
+  }
+  if (inventory.suggestions.length > 0) {
+    runtime.log("Suggestions:");
+    for (const suggestion of inventory.suggestions) {
+      runtime.log(`- ${suggestion}`);
+    }
+  }
+  for (const item of inventory.workItems) {
+    runtime.log(`- ${item.id}: ${item.title}`);
   }
 }
 
@@ -880,6 +948,32 @@ export async function openclawCodeBlueprintSetStatusCommand(
   });
   logProjectBlueprintSummary({
     summary,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeBlueprintDecomposeCommand(
+  opts: OpenClawCodeBlueprintDecomposeOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const inventory = await writeProjectWorkItemInventory(repoRoot);
+  logProjectWorkItemInventory({
+    inventory,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeWorkItemsShowCommand(
+  opts: OpenClawCodeWorkItemsShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const inventory = await readProjectWorkItemInventory(repoRoot);
+  logProjectWorkItemInventory({
+    inventory,
     runtime,
     json: Boolean(opts.json),
   });
