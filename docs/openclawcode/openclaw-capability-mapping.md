@@ -573,6 +573,7 @@ Status:
 
 - `[x]` issue-driven chatops exists
 - `[x]` first blueprint-first status slice has landed
+- `[x]` first chat-side handoff action has landed
 - `[ ]` blueprint-first chatops complete
 
 Tasks:
@@ -582,6 +583,7 @@ Tasks:
 - `[x]` expose work-item backlog in chat
 - `[x]` expose stage gates and pending approvals in chat
 - `[x]` expose provider-role decisions in chat
+- `[x]` expose stage-gate approval recording in chat
 - `[ ]` expose handoff and resume actions in chat
 
 Acceptance:

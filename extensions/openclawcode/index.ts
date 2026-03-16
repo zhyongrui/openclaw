@@ -38,6 +38,11 @@ import {
 import type { GitHubIssueClient } from "../../src/openclawcode/github/index.js";
 import { GitHubRestClient } from "../../src/openclawcode/github/index.js";
 import {
+  readProjectStageGateArtifact,
+  recordProjectStageGateDecision,
+  writeProjectStageGateArtifact,
+} from "../../src/openclawcode/stage-gates.js";
+import {
   classifyValidationIssue,
   type ValidationIssueClass,
   type ValidationIssueTemplateId,
@@ -728,6 +733,90 @@ function buildBlueprintSummaryMessage(params: {
   }
 
   return lines.join("\n");
+}
+
+function buildStageGateSummaryMessage(params: {
+  repo: { owner: string; repo: string };
+  artifact: Awaited<ReturnType<typeof readProjectStageGateArtifact>>;
+}): string {
+  const lines = [`openclawcode stage gates for ${formatRepoKey(params.repo)}`];
+
+  if (!params.artifact.blueprintExists) {
+    lines.push("Blueprint: missing");
+    return lines.join("\n");
+  }
+
+  if (params.artifact.blueprintRevisionId) {
+    lines.push(`Blueprint revision: ${params.artifact.blueprintRevisionId}`);
+  }
+  lines.push(
+    `Gate counts: blocked=${params.artifact.blockedGateCount} | needsHuman=${params.artifact.needsHumanDecisionCount} | total=${params.artifact.gateCount}`,
+  );
+
+  for (const gate of params.artifact.gates) {
+    lines.push(
+      `- ${gate.gateId} | ${gate.readiness} | decisionRequired=${gate.decisionRequired ? "yes" : "no"}`,
+    );
+    if (gate.latestDecision) {
+      lines.push(
+        `  latest: ${gate.latestDecision.decision} | ${gate.latestDecision.actor ?? "unknown"} | ${gate.latestDecision.recordedAt}`,
+      );
+      if (gate.latestDecision.note) {
+        lines.push(`  note: ${gate.latestDecision.note}`);
+      }
+    }
+    if (gate.blockers.length > 0) {
+      lines.push(`  blockers: ${gate.blockers.slice(0, 2).join(" ; ")}`);
+    } else if (gate.suggestions.length > 0) {
+      lines.push(`  suggestions: ${gate.suggestions.slice(0, 2).join(" ; ")}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function parseStageGateDecisionArgs(params: {
+  args: string;
+  defaults: { owner?: string; repo?: string };
+}):
+  | {
+      repo: { owner: string; repo: string };
+      gateId: string;
+      decision: string;
+      note: string;
+    }
+  | undefined {
+  const trimmed = params.args.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const tokens = trimmed.split(/\s+/);
+  let repo = parseChatopsRepoReference(tokens[0] ?? "", params.defaults);
+  let offset = 1;
+  if (!repo) {
+    if (!params.defaults.owner || !params.defaults.repo) {
+      return undefined;
+    }
+    repo = { owner: params.defaults.owner, repo: params.defaults.repo };
+    offset = 0;
+  }
+
+  const gateId = tokens[offset];
+  const decision = tokens[offset + 1];
+  if (!repo || !gateId || !decision) {
+    return undefined;
+  }
+
+  return {
+    repo,
+    gateId,
+    decision,
+    note: tokens
+      .slice(offset + 2)
+      .join(" ")
+      .trim(),
+  };
 }
 
 function buildInboxMessage(params: {
@@ -2330,6 +2419,102 @@ export default {
             clarification,
           }),
         };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-gates",
+      description: "Show the current blueprint stage-gate state for an openclawcode repo.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const repo = parseChatopsRepoReference(ctx.args ?? "", {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!repo) {
+          return {
+            text:
+              "Usage: /occode-gates owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-gates",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+
+        const artifact = await writeProjectStageGateArtifact(repoConfig.repoRoot);
+        return {
+          text: buildStageGateSummaryMessage({
+            repo: {
+              owner: repoConfig.owner,
+              repo: repoConfig.repo,
+            },
+            artifact,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-gate-decide",
+      description: "Record a blueprint stage-gate decision from chat for an openclawcode repo.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const parsed = parseStageGateDecisionArgs({
+          args: ctx.args ?? "",
+          defaults: {
+            owner: defaultRepo?.owner,
+            repo: defaultRepo?.repo,
+          },
+        });
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-gate-decide owner/repo <gate-id> <decision> [note]\n" +
+              "Or, when exactly one repo is configured: /occode-gate-decide <gate-id> <decision> [note]",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.repo.owner}/${parsed.repo.repo}.`,
+          };
+        }
+
+        try {
+          const artifact = await recordProjectStageGateDecision({
+            repoRoot: repoConfig.repoRoot,
+            gateId: parsed.gateId,
+            decision: parsed.decision,
+            note: parsed.note || undefined,
+            actor: resolveCommandNotifyTarget(ctx) ?? ctx.senderId ?? ctx.channel,
+          });
+          const gate = artifact.gates.find((entry) => entry.gateId === parsed.gateId);
+          return {
+            text: [
+              `Recorded stage-gate decision for ${formatRepoKey(parsed.repo)}`,
+              `Gate: ${parsed.gateId}`,
+              `Decision: ${parsed.decision}`,
+              gate ? `Readiness: ${gate.readiness}` : undefined,
+              parsed.note ? `Note: ${parsed.note}` : undefined,
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          };
+        } catch (error) {
+          return {
+            text: (error as Error).message,
+          };
+        }
       },
     });
 

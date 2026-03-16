@@ -234,3 +234,5 @@ The near-term implementation order is:
   operator-facing status messages
 - surfaced blueprint work-item backlog summaries in `/occode-inbox`
 - exposed blueprint summary and clarification prompts through `/occode-blueprint`
+- exposed stage-gate inspection and decision recording through
+  `/occode-gates` and `/occode-gate-decide`

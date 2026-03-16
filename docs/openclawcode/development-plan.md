@@ -1936,3 +1936,20 @@ The operator surface now has a first explicit blueprint discussion entrypoint:
 - clarification logic now treats unresolved `Open Questions` and partially
   assigned provider roles as live discussion prompts instead of leaving them
   implicit
+
+## Stage-Gate Handoff Chat Surface
+
+The operator surface now has a first write path for blueprint-first handoff:
+chat users can inspect gates and record decisions without dropping to local
+CLI.
+
+- new commands:
+  - `/occode-gates`
+  - `/occode-gate-decide`
+- `/occode-gates` refreshes and shows the repo-local stage-gate artifact in
+  chat
+- `/occode-gate-decide` records `approved`, `changes-requested`, or `blocked`
+  decisions directly into `.openclawcode/stage-gates.json`
+- this is still only the first handoff slice:
+  - it does not yet resume runs automatically
+  - it does not yet switch providers from chat

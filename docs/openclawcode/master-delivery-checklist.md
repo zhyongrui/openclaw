@@ -120,6 +120,8 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] provide `/occode-status`
 - [x] provide `/occode-inbox`
 - [x] provide `/occode-blueprint`
+- [x] provide `/occode-gates`
+- [x] provide `/occode-gate-decide`
 - [x] provide `/occode-skip`
 - [x] provide `/occode-sync`
 - [x] show suitability decisions in `/occode-status`
@@ -140,6 +142,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [ ] allow editing a generated issue draft before creation
 - [ ] support clarification prompts when a one-line request is underspecified
 - [x] show blueprint summary and clarification prompts in chat
+- [x] allow stage-gate decisions to be recorded from chat
 - [ ] show policy explanation when auto-merge is disallowed
 - [ ] show policy explanation when suitability blocks autonomous execution
 - [ ] show promotion-readiness and rollback-readiness in chat-facing operator views

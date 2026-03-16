@@ -6,6 +6,10 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OpenClawCodeChatopsStore } from "../../src/integrations/openclaw-plugin/index.js";
 import type { WorkflowRun } from "../../src/openclawcode/contracts/index.js";
+import {
+  readProjectStageGateArtifact,
+  writeProjectStageGateArtifact,
+} from "../../src/openclawcode/stage-gates.js";
 import { writeProjectWorkItemInventory } from "../../src/openclawcode/work-items.js";
 import type {
   OpenClawPluginCommandDefinition,
@@ -2957,6 +2961,180 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain(
         "- Record explicit assignments for Reviewer, Verifier, and Doc-writer under `Provider Strategy` when you want a fixed multi-agent plan.",
       );
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows blueprint stage gates through /occode-gates", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Gate Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:05:00.000Z",
+          "statusChangedAt: 2026-03-16T00:05:00.000Z",
+          "agreedAt: 2026-03-16T00:05:00.000Z",
+          "---",
+          "",
+          "# Gate Blueprint",
+          "",
+          "## Goal",
+          "Surface stage gates in chat and allow chat-side approval records.",
+          "",
+          "## Success Criteria",
+          "- Operators can inspect gate readiness from chat.",
+          "",
+          "## Scope",
+          "- In scope: gate summaries and decisions.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Keep the first surface deterministic.",
+          "",
+          "## Risks",
+          "- Hidden gate blockers slow operator intervention.",
+          "",
+          "## Assumptions",
+          "- The blueprint is already agreed.",
+          "",
+          "## Human Gates",
+          "- Goal agreement: required",
+          "- Merge promotion: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: OpenClaw Default",
+          "- Doc-writer: Claude Code",
+          "",
+          "## Workstreams",
+          "- Add a chat-visible gate summary command.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-16: initial gate chat view.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      await writeProjectStageGateArtifact(fixture.repoRoot);
+
+      const result = await fixture.commands.get("occode-gates")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-gates",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain("openclawcode stage gates for zhyongrui/openclawcode");
+      expect(result?.text).toContain("Gate counts: blocked=0 | needsHuman=1 | total=5");
+      expect(result?.text).toContain("- goal-agreement | ready | decisionRequired=yes");
+      expect(result?.text).toContain(
+        "- merge-promotion | needs-human-decision | decisionRequired=yes",
+      );
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("records a stage-gate decision through /occode-gate-decide", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Gate Decision Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:05:00.000Z",
+          "statusChangedAt: 2026-03-16T00:05:00.000Z",
+          "agreedAt: 2026-03-16T00:05:00.000Z",
+          "---",
+          "",
+          "# Gate Decision Blueprint",
+          "",
+          "## Goal",
+          "Allow chat users to record stage-gate decisions.",
+          "",
+          "## Success Criteria",
+          "- A chat command persists a stage-gate decision.",
+          "",
+          "## Scope",
+          "- In scope: stage-gate decision recording.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Keep the first command explicit.",
+          "",
+          "## Risks",
+          "- Bad decisions could hide blockers.",
+          "",
+          "## Assumptions",
+          "- Operators understand the gate they are deciding.",
+          "",
+          "## Human Gates",
+          "- Goal agreement: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: OpenClaw Default",
+          "- Doc-writer: Claude Code",
+          "",
+          "## Workstreams",
+          "- Persist gate decisions from chat.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-16: initial gate decision command.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      await writeProjectStageGateArtifact(fixture.repoRoot);
+
+      const result = await fixture.commands.get("occode-gate-decide")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-gate-decide goal-agreement blocked Need human signoff",
+        args: "goal-agreement blocked Need human signoff",
+        senderId: "user:operator",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Recorded stage-gate decision for zhyongrui/openclawcode");
+      expect(result?.text).toContain("Gate: goal-agreement");
+      expect(result?.text).toContain("Decision: blocked");
+      expect(result?.text).toContain("Readiness: blocked");
+
+      const artifact = await readProjectStageGateArtifact(fixture.repoRoot);
+      const gate = artifact.gates.find((entry) => entry.gateId === "goal-agreement");
+      expect(gate?.latestDecision?.decision).toBe("blocked");
+      expect(gate?.latestDecision?.actor).toBe("user:operator");
+      expect(gate?.latestDecision?.note).toBe("Need human signoff");
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
