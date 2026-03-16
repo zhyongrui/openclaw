@@ -42,6 +42,20 @@ The program is only "done enough to hand to other people" when all of these are 
 - [ ] upstream sync can be repeated without putting the long-lived operator at risk
 - [ ] release-facing docs explain scope, prerequisites, support policy, and known limits
 
+## Phase -1: Blueprint-First Control Plane
+
+- [ ] define a fixed project blueprint document path and schema
+- [ ] support a goal-discussion loop before issue creation
+- [ ] support clarification questions when the goal is underspecified
+- [ ] support proactive system suggestions while refining the goal
+- [ ] support an explicit "blueprint agreed" checkpoint
+- [ ] derive execution work items from the blueprint instead of assuming GitHub issues already exist
+- [ ] add a first general discovery pipeline beyond validation-pool seeding
+- [ ] define a provider-neutral role model for planner, coder, reviewer, verifier, and doc-writer
+- [ ] map Codex and Claude Code into that shared role model
+- [ ] support stage-level human handoff, edit, resume, and provider switching
+- [ ] persist blueprint and stage-gate decisions in machine-readable artifacts
+
 ## Phase 0: Already-Proven Foundations
 
 - [x] define the issue-driven workflow model and stage transitions

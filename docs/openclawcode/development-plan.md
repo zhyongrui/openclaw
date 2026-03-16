@@ -24,10 +24,29 @@ future sessions, see `master-delivery-checklist.md`.
 For the long seed-ready list of low-risk command-layer field mirrors that
 should not all be opened on GitHub at once, see `command-layer-backlog.md`.
 
+For the current gap between today's issue-driven loop and the intended
+blueprint-driven multi-agent product, see
+`blueprint-first-orchestration.md`.
+
 ## Final Delivery Plan
 
 The work should now converge on a public-usable operator, not an endless
 sequence of isolated fixes.
+
+The newest product-direction finding is that the current system is already
+strong in the issue-driven execution half, but still missing the upstream
+control plane for:
+
+- goal discussion
+- fixed blueprint documents
+- blueprint-to-work-item decomposition
+- general self-discovery
+- provider-neutral Codex/Claude role routing
+- stage-level human handoff
+
+Those gaps are now documented in `blueprint-first-orchestration.md` and should
+be treated as the next major architecture track rather than as scattered
+one-off improvements.
 
 The remaining program is:
 

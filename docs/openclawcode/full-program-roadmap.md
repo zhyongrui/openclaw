@@ -11,6 +11,10 @@ Use it to answer three questions quickly:
 2. what major work remains
 3. what the next slice should be after the current one lands
 
+For the explicit gap between the current issue-driven implementation and the
+intended blueprint-first multi-agent product, see
+`blueprint-first-orchestration.md`.
+
 ## North Star
 
 `openclawcode` should become a repo-bound coding operator that can:
@@ -37,6 +41,16 @@ The finished product should support this loop without ad hoc operator repair:
    only when policy allows
 7. the bound chat thread stays current with queue state, failures, reruns,
    PR lifecycle, and final outcome
+
+The next expansion beyond that loop is now explicit:
+
+1. the user and system discuss the project goal first
+2. the agreed goal is written into a fixed blueprint document
+3. the system derives or discovers work items from that blueprint
+4. the execution engine can route planner/coder/reviewer roles to Codex,
+   Claude Code, or both
+5. a human can intervene at any stage, but the system keeps moving when the
+   human does not intervene
 
 ## Program Completion Checklist
 
