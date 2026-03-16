@@ -29,7 +29,7 @@ Development logs live in `dev-log/`.
 
 ## Current Status
 
-As of 2026-03-14, the repository includes a working `openclawcode` issue-driven
+As of 2026-03-16, the repository includes a working `openclawcode` issue-driven
 loop with:
 
 - workflow state, persistence, and isolated worktree management
@@ -61,10 +61,14 @@ loop with:
   - `openclaw code discover-work-items`
   - `openclaw code role-routing-refresh`
   - `openclaw code role-routing-show`
+  - `openclaw code stage-gates-refresh`
+  - `openclaw code stage-gates-show`
+  - `openclaw code stage-gates-decide`
   - machine-readable lifecycle inspection, revision metadata, and work-item
     inventory output through `--json`
   - repo-local discovery and provider-role routing artifacts under
     `.openclawcode/`
+  - repo-local stage-gate decisions persisted under `.openclawcode/stage-gates.json`
 - stable workflow identity metadata now also includes top-level mirrors for:
   - `issueTitle`
   - `issueRepo`

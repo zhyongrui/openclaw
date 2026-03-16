@@ -163,7 +163,7 @@ Current foothold:
 
 ### Phase B6: Stage-Level Human Handoff
 
-Status: open
+Status: partially landed
 
 Deliverables:
 
@@ -177,6 +177,21 @@ Acceptance:
 
 - every major stage has a documented human intervention path
 - autonomous execution can resume from that intervention without losing state
+
+Current foothold:
+
+- `openclaw code stage-gates-refresh` now persists `.openclawcode/stage-gates.json`
+- `openclaw code stage-gates-show --json` now exposes:
+  - five repo-local stage gates
+  - gate readiness and blocker summaries
+  - linked blueprint, work-item, discovery, and role-routing availability
+- `openclaw code stage-gates-decide` now records durable human decisions for:
+  - `approved`
+  - `changes-requested`
+  - `blocked`
+- the remaining gap is runtime integration:
+  - decisions do not yet steer live workflow execution
+  - chat surfaces do not yet expose these gates
 
 ### Phase B7: Proofs And Productization
 

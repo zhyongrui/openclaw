@@ -28,10 +28,17 @@ import {
   AgentBackedVerifier,
   readProjectDiscoveryInventory,
   readProjectRoleRoutingPlan,
+  readProjectStageGateArtifact,
   readProjectWorkItemInventory,
+  recordProjectStageGateDecision,
   resolveGitHubRepoFromGit,
   runIssueWorkflow,
   type ValidationIssueTemplateId,
+  parseProjectStageGateDecisionId,
+  parseProjectStageGateId,
+  projectStageGateDecisionIds,
+  projectStageGateIds,
+  writeProjectStageGateArtifact,
   writeProjectDiscoveryInventory,
   writeProjectRoleRoutingPlan,
   writeProjectWorkItemInventory,
@@ -137,6 +144,25 @@ export interface OpenClawCodeRoleRoutingRefreshOpts {
 
 export interface OpenClawCodeRoleRoutingShowOpts {
   repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeStageGatesRefreshOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeStageGatesShowOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeStageGatesDecideOpts {
+  repoRoot?: string;
+  gate: string;
+  decision: string;
+  actor?: string;
+  note?: string;
   json?: boolean;
 }
 
@@ -365,6 +391,28 @@ function logProjectRoleRoutingPlan(params: {
     runtime.log(
       `- ${route.roleId}: ${route.rawAssignment ?? "openclaw-default"} (${route.adapterId}, ${route.source})`,
     );
+  }
+}
+
+function logProjectStageGateArtifact(params: {
+  artifact: Awaited<ReturnType<typeof readProjectStageGateArtifact>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { artifact, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(artifact, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${artifact.repoRoot}`);
+  runtime.log(`Stage-gate path: ${artifact.artifactPath}`);
+  runtime.log(`Exists: ${artifact.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${artifact.generatedAt ?? "not yet generated"}`);
+  runtime.log(`Blocked gates: ${artifact.blockedGateCount}`);
+  runtime.log(`Needs human decision: ${artifact.needsHumanDecisionCount}`);
+  for (const gate of artifact.gates) {
+    runtime.log(`- ${gate.gateId}: ${gate.readiness} | ${gate.title}`);
   }
 }
 
@@ -1091,6 +1139,59 @@ export async function openclawCodeRoleRoutingShowCommand(
   const plan = await readProjectRoleRoutingPlan(repoRoot);
   logProjectRoleRoutingPlan({
     plan,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export function openclawCodeStageGateIds(): string[] {
+  return projectStageGateIds();
+}
+
+export function openclawCodeStageGateDecisionIds(): string[] {
+  return projectStageGateDecisionIds();
+}
+
+export async function openclawCodeStageGatesRefreshCommand(
+  opts: OpenClawCodeStageGatesRefreshOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await writeProjectStageGateArtifact(repoRoot);
+  logProjectStageGateArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeStageGatesShowCommand(
+  opts: OpenClawCodeStageGatesShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await readProjectStageGateArtifact(repoRoot);
+  logProjectStageGateArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeStageGatesDecideCommand(
+  opts: OpenClawCodeStageGatesDecideOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await recordProjectStageGateDecision({
+    repoRoot,
+    gateId: parseProjectStageGateId(String(opts.gate)),
+    decision: parseProjectStageGateDecisionId(String(opts.decision)),
+    actor: opts.actor,
+    note: opts.note,
+  });
+  logProjectStageGateArtifact({
+    artifact,
     runtime,
     json: Boolean(opts.json),
   });

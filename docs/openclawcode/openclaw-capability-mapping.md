@@ -340,12 +340,28 @@ Current status:
 
 ### 6. Stage-Level Human Handoff
 
+Current status:
+
+- the first repo-local stage-gate artifact now exists
+- explicit human decisions can now be persisted as durable gate records
+- the current gate ids are:
+  - `goal-agreement`
+  - `work-item-projection`
+  - `execution-routing`
+  - `execution-start`
+  - `merge-promotion`
+- the current decisions are:
+  - `approved`
+  - `changes-requested`
+  - `blocked`
+- the remaining gap is runtime and chat integration rather than durable state
+
 Missing:
 
 - pause/edit/resume at each major stage
 - manual worktree takeover
 - provider switching mid-run
-- explicit gate decisions captured as durable artifacts
+- runtime steering from durable gate decisions
 
 ## Reuse Strategy
 
@@ -375,7 +391,7 @@ Status:
 - `[x]` fixed blueprint path
 - `[x]` initial schema
 - `[x]` explicit `agreed` checkpoint
-- `[ ]` richer machine-readable blueprint state
+- `[x]` richer machine-readable blueprint state
 - `[ ]` blueprint state propagation into downstream work items and runs
 
 Tasks:
@@ -383,8 +399,8 @@ Tasks:
 - `[x]` fix the canonical blueprint path at `PROJECT-BLUEPRINT.md`
 - `[x]` define lifecycle states
 - `[x]` add CLI commands to create, inspect, and update blueprint lifecycle
-- `[ ]` add a stable machine-readable blueprint contract
-- `[ ]` persist blueprint fingerprints or content hashes
+- `[x]` add a stable machine-readable blueprint contract
+- `[x]` persist blueprint fingerprints or content hashes
 - `[ ]` persist blueprint revision metadata into work items and workflow runs
 - `[ ]` add validation for incomplete or contradictory blueprint states
 
@@ -422,11 +438,12 @@ Acceptance:
 
 Status:
 
-- `[ ]` not started
+- `[x]` first repo-local work-item model landed
+- `[ ]` GitHub projection and richer classes still open
 
 Tasks:
 
-- `[ ]` define a first internal `work item` type independent from GitHub
+- `[x]` define a first internal `work item` type independent from GitHub
 - `[ ]` support work-item classes:
   - feature
   - bugfix
@@ -434,9 +451,10 @@ Tasks:
   - sync
   - validation
   - incident
-- `[ ]` store work items under repo-local state
-- `[ ]` give work items durable ids and statuses
-- `[ ]` map work items to GitHub issues when external tracking is needed
+- `[x]` store work items under repo-local state
+- `[x]` give work items durable ids and statuses
+- `[x]` map work items to GitHub issue drafts when external tracking is needed
+- `[ ]` map work items to live GitHub issues when external tracking is needed
 
 Acceptance:
 
@@ -527,18 +545,21 @@ Acceptance:
 
 Status:
 
-- `[ ]` coarse run controls already exist
-- `[ ]` fine-grained handoff not started
+- `[x]` coarse run controls already exist
+- `[x]` first repo-local stage-gate artifact landed
+- `[ ]` runtime-aware handoff still open
 
 Tasks:
 
+- `[x]` persist gate decisions in a repo-local artifact
+- `[x]` expose stage-gate readiness and blockers through CLI
 - `[ ]` allow plan approval before code execution
 - `[ ]` allow plan editing before code execution
 - `[ ]` allow manual worktree takeover
 - `[ ]` allow provider switching after a failed or paused stage
 - `[ ]` allow structured resume after manual edits
 - `[ ]` allow explicit override of suitability and merge-policy decisions
-- `[ ]` persist all handoff and override decisions in workflow artifacts
+- `[ ]` persist all handoff and override decisions in workflow run artifacts
 
 Acceptance:
 

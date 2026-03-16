@@ -12,6 +12,9 @@ import {
   openclawCodeBlueprintInitCommand,
   openclawCodeRoleRoutingRefreshCommand,
   openclawCodeRoleRoutingShowCommand,
+  openclawCodeStageGatesDecideCommand,
+  openclawCodeStageGatesRefreshCommand,
+  openclawCodeStageGatesShowCommand,
   openclawCodeBlueprintSetStatusCommand,
   openclawCodeBlueprintShowCommand,
   openclawCodeListValidationIssuesCommand,
@@ -1982,6 +1985,154 @@ describe("openclawCodeRunCommand", () => {
         process.env.OPENCLAWCODE_MODEL_FALLBACKS = previousFallbacks;
       }
     }
+  });
+
+  it("persists stage-gate readiness and records structured decisions", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-stage-gates-"));
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Stage Gate Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-16T00:00:00.000Z",
+        "updatedAt: 2026-03-16T00:00:00.000Z",
+        "statusChangedAt: 2026-03-16T00:00:00.000Z",
+        "agreedAt: 2026-03-16T00:00:00.000Z",
+        "---",
+        "",
+        "# Stage Gate Blueprint",
+        "",
+        "## Goal",
+        "Persist stage-gate decisions.",
+        "",
+        "## Success Criteria",
+        "- Stage gates are machine-readable.",
+        "",
+        "## Scope",
+        "- In scope: repo-local gate artifacts.",
+        "- Out of scope: chat integration.",
+        "",
+        "## Non-Goals",
+        "- None.",
+        "",
+        "## Constraints",
+        "- Technical: keep the artifact deterministic.",
+        "",
+        "## Risks",
+        "- None.",
+        "",
+        "## Assumptions",
+        "- None.",
+        "",
+        "## Human Gates",
+        "- Goal agreement: required",
+        "- Execution start: operator may intervene",
+        "- Merge or promotion: operator may intervene",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Persist repo-local stage gates.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-16: stage-gate baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeRoleRoutingRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeDiscoverWorkItemsCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+
+    await openclawCodeStageGatesRefreshCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    let payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      exists: true,
+      gateCount: 5,
+      blockedGateCount: 0,
+      needsHumanDecisionCount: 1,
+    });
+    expect(payload.gates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          gateId: "goal-agreement",
+          readiness: "ready",
+        }),
+        expect.objectContaining({
+          gateId: "merge-promotion",
+          readiness: "needs-human-decision",
+        }),
+      ]),
+    );
+
+    runtime.log.mockClear();
+    await openclawCodeStageGatesDecideCommand(
+      {
+        repoRoot,
+        gate: "execution-start",
+        decision: "approved",
+        actor: "operator",
+        note: "Proceed with autonomous execution.",
+        json: true,
+      },
+      runtime,
+    );
+
+    payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.gates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          gateId: "execution-start",
+          latestDecision: expect.objectContaining({
+            decision: "approved",
+            actor: "operator",
+            note: "Proceed with autonomous execution.",
+          }),
+        }),
+      ]),
+    );
+
+    runtime.log.mockClear();
+    await openclawCodeStageGatesShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          gateId: "execution-start",
+          decision: "approved",
+          actor: "operator",
+        }),
+      ]),
+    );
   });
 
   it("renders a dry-run validation issue template without creating a GitHub issue", async () => {

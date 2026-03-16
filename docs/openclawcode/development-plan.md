@@ -68,6 +68,9 @@ The first concrete landing in that track is now defined and partially shipped:
   - `openclaw code discover-work-items`
   - `openclaw code role-routing-refresh`
   - `openclaw code role-routing-show`
+  - `openclaw code stage-gates-refresh`
+  - `openclaw code stage-gates-show`
+  - `openclaw code stage-gates-decide`
 
 The active blueprint-first sequence is now:
 
@@ -94,6 +97,13 @@ That second step now has a first foothold in code too:
 - `openclaw code role-routing-refresh` now persists a provider-neutral routing
   plan at `.openclawcode/role-routing.json`, normalizing Codex and Claude Code
   onto shared role adapters
+- `openclaw code stage-gates-refresh` now persists the first repo-local
+  `.openclawcode/stage-gates.json` artifact, which records gate readiness for
+  goal agreement, work-item projection, execution routing, execution start, and
+  merge promotion
+- `openclaw code stage-gates-decide` now records structured human decisions
+  against those gates so approval, changes-requested, and blocked outcomes are
+  durable instead of staying in chat-only context
 
 The remaining program is:
 

@@ -60,7 +60,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] define a provider-neutral role model for planner, coder, reviewer, verifier, and doc-writer
 - [x] map Codex and Claude Code into that shared role model
 - [ ] support stage-level human handoff, edit, resume, and provider switching
-- [ ] persist blueprint and stage-gate decisions in machine-readable artifacts
+- [x] persist blueprint and stage-gate decisions in machine-readable artifacts
 
 ## Phase 0: Already-Proven Foundations
 

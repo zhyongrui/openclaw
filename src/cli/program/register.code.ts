@@ -14,6 +14,11 @@ import {
   openclawCodeRunCommand,
   openclawCodeSeedValidationIssueCommand,
   openclawCodeSeedValidationIssueTemplateIds,
+  openclawCodeStageGatesDecideCommand,
+  openclawCodeStageGatesRefreshCommand,
+  openclawCodeStageGatesShowCommand,
+  openclawCodeStageGateDecisionIds,
+  openclawCodeStageGateIds,
   openclawCodeWorkItemsShowCommand,
 } from "../../commands/openclawcode.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -66,6 +71,14 @@ ${formatHelpExamples([
     "Persist the current provider-neutral role routing plan.",
   ],
   ["openclaw code role-routing-show --json", "Inspect the latest persisted role-routing artifact."],
+  [
+    "openclaw code stage-gates-refresh --json",
+    "Persist the current stage-gate artifact for blueprint-backed execution.",
+  ],
+  [
+    'openclaw code stage-gates-decide --gate execution-start --decision approved --note "Proceed with autonomous execution" --json',
+    "Record a structured human decision for a stage gate.",
+  ],
   [
     "openclaw code run --issue 123",
     "Plan and run the workflow for issue #123 in the current repo.",
@@ -255,6 +268,68 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
         await openclawCodeRoleRoutingShowCommand(
           {
             repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("stage-gates-refresh")
+    .description("Persist the current repo-local stage-gate artifact")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeStageGatesRefreshCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("stage-gates-show")
+    .description("Show the current repo-local stage-gate artifact")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeStageGatesShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("stage-gates-decide")
+    .description("Record a structured human decision for a repo-local stage gate")
+    .requiredOption("--gate <gate>", `Stage gate (${openclawCodeStageGateIds().join(", ")})`)
+    .requiredOption(
+      "--decision <decision>",
+      `Decision (${openclawCodeStageGateDecisionIds().join(", ")})`,
+    )
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--actor <text>", "Actor recording the decision")
+    .option("--note <text>", "Decision note")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeStageGatesDecideCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            gate: opts.gate as string,
+            decision: opts.decision as string,
+            actor: opts.actor as string | undefined,
+            note: opts.note as string | undefined,
             json: Boolean(opts.json),
           },
           defaultRuntime,

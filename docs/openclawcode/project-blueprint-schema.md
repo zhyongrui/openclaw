@@ -120,6 +120,37 @@ It currently carries:
   - stale work-item artifacts
   - remaining blueprint open questions
 
+The first repo-local stage-gate artifact now lives at:
+
+`/repo/.openclawcode/stage-gates.json`
+
+It currently carries:
+
+- the five gate ids:
+  - `goal-agreement`
+  - `work-item-projection`
+  - `execution-routing`
+  - `execution-start`
+  - `merge-promotion`
+- readiness states:
+  - `ready`
+  - `blocked`
+  - `needs-human-decision`
+- structured human decisions:
+  - `approved`
+  - `changes-requested`
+  - `blocked`
+- linkage back to:
+  - blueprint revision metadata
+  - work-item inventory availability
+  - discovery inventory availability
+  - role-routing availability
+- persisted decision records with:
+  - actor
+  - note
+  - recordedAt
+  - latest decision per gate
+
 The first provider-neutral role routing artifact now lives at:
 
 `/repo/.openclawcode/role-routing.json`
@@ -140,5 +171,5 @@ It currently carries:
 - route source, mixed-mode detection, unresolved-role counts, and fallback-chain
   visibility
 
-All eight commands support `--json` so the blueprint state is already
+All eleven commands support `--json` so the blueprint state is already
 machine-readable enough for follow-on automation and staged handoff.
