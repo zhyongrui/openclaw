@@ -199,6 +199,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.publishedPullRequestNumber).toBe(42);
     expect(payload.publishedPullRequestHasNumber).toBe(true);
     expect(payload.publishedPullRequestHasUrl).toBe(true);
+    expect(payload.publishedPullRequestHasOpenedAt).toBe(true);
     expect(payload.publishedPullRequestTitle).toBe(
       "[Issue #2] Include changed file list in JSON output",
     );
@@ -339,6 +340,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.publishedPullRequestBody).toBeNull();
     expect(payload.publishedPullRequestHasNumber).toBe(false);
     expect(payload.publishedPullRequestHasUrl).toBe(false);
+    expect(payload.publishedPullRequestHasOpenedAt).toBe(false);
     expect(payload.publishedPullRequestBranchName).toBeNull();
     expect(payload.publishedPullRequestBaseBranch).toBeNull();
     expect(payload.publishedPullRequestUrl).toBeNull();
@@ -812,6 +814,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.publishedPullRequestNumber).toBeNull();
     expect(payload.publishedPullRequestHasNumber).toBe(false);
     expect(payload.publishedPullRequestHasUrl).toBe(true);
+    expect(payload.publishedPullRequestHasOpenedAt).toBe(true);
     expect(payload.publishedPullRequestTitle).toBe(
       "[Issue #2] Include changed file list in JSON output",
     );
