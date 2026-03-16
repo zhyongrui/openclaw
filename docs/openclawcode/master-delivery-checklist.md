@@ -8,6 +8,9 @@ see `command-layer-backlog.md`.
 For the long-form blueprint-first phase plan, see
 `blueprint-first-delivery-plan.md`.
 
+For the mapping from current `openclaw` substrate capabilities to the intended
+blueprint-first product, see `openclaw-capability-mapping.md`.
+
 Use it when the goal is not just "finish the next slice", but "keep shipping
 until the product is genuinely usable by other people".
 

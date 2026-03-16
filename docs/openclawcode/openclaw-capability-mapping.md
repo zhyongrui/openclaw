@@ -1,0 +1,596 @@
+# OpenClaw Capability Mapping And Blueprint-First Build Plan
+
+## Purpose
+
+This document answers two questions in one place:
+
+1. which existing `openclaw` capabilities already support the intended
+   blueprint-first autonomous development product
+2. what still needs to be built, in what order, until that product is usable
+
+It is the practical bridge between:
+
+- the current `openclaw` substrate
+- the current `openclawcode` issue-driven execution layer
+- the intended blueprint-first, multi-agent, human-interruptible development
+  system
+
+## Product Goal
+
+The target product should support this loop:
+
+1. a user describes a project goal in chat
+2. the system asks clarifying questions and proposes refinements
+3. the agreed target is written into a fixed blueprint document
+4. the system derives or discovers work items from that blueprint
+5. the system chooses Codex, Claude Code, or both by execution role
+6. the system implements, tests, opens a PR, reacts to review, and merges
+   under policy
+7. a human can intervene at every stage, but the system continues
+   autonomously when the human does not intervene
+
+## What OpenClaw Already Gives Us
+
+The `openclaw` repository already provides a large part of the lower layers
+that this product needs.
+
+### 1. Multi-Channel Goal Intake
+
+Already available:
+
+- channel integrations for:
+  - WhatsApp
+  - Telegram
+  - Slack
+  - Discord
+  - Google Chat
+  - Signal
+  - iMessage and BlueBubbles
+  - IRC
+  - Microsoft Teams
+  - Matrix
+  - Feishu
+  - LINE
+  - Mattermost
+  - Nextcloud Talk
+  - Nostr
+  - Synology Chat
+  - Tlon
+  - Twitch
+  - Zalo
+  - WebChat
+- message send/read/manage CLI
+- channel-bound chat delivery and reply-back
+
+Relevant code:
+
+- `extensions/*`
+- `src/channels/*`
+- `src/cli/program/register.message.ts`
+
+Why this matters:
+
+- the blueprint discussion loop can start on existing chat surfaces
+- the system does not need a new custom front end before it can start shaping
+  user goals
+
+### 2. Gateway Control Plane
+
+Already available:
+
+- a local gateway with a large method surface for:
+  - chat
+  - send
+  - status
+  - models
+  - agents
+  - sessions
+  - cron
+  - tools
+  - config
+  - approvals
+  - browser
+  - node invocation
+  - wizard and doctor flows
+
+Relevant code:
+
+- `src/gateway/*`
+- `src/gateway/server-methods-list.ts`
+
+Why this matters:
+
+- the blueprint-first product does not need a new RPC/control plane
+- stage transitions, human handoff, and status surfaces can ride the existing
+  gateway
+
+### 3. Sessions And Multi-Agent Isolation
+
+Already available:
+
+- isolated agents
+- agent workspaces
+- agent auth profiles
+- agent bindings to channels and accounts
+- session inspection and mutation
+
+Relevant code:
+
+- `src/agents/*`
+- `src/cli/program/register.agent.ts`
+- `src/sessions/*`
+
+Why this matters:
+
+- blueprint discussion can stay isolated from coding execution
+- planner, coder, reviewer, and verifier roles can be mapped onto distinct
+  agent identities or runtime configs
+
+### 4. Plugin And Extension Platform
+
+Already available:
+
+- plugin discovery
+- bundle manifests
+- plugin runtime API
+- plugin HTTP routes
+- plugin config schemas
+- plugin-safe runtime wrappers for config, media, tools, channel, logging,
+  events, and subagents
+
+Relevant code:
+
+- `src/plugins/discovery.ts`
+- `src/plugins/runtime/index.ts`
+- `src/plugin-sdk/index.ts`
+
+Why this matters:
+
+- Codex, Claude Code, or other execution backends can be integrated through
+  the existing extension mechanism
+- new orchestration layers do not need to be hard-coded into the core forever
+
+### 5. Models, Providers, Auth, And Fallback Primitives
+
+Already available:
+
+- model inventory
+- provider auth plumbing
+- provider selection
+- runtime auth helpers
+- fallback chains and provider diagnostics
+
+Relevant code:
+
+- `src/providers/*`
+- `src/agents/model-auth.ts`
+- `src/openclawcode/runtime/agent-runner.ts`
+
+Why this matters:
+
+- the desired Codex/Claude mixed-mode system does not need a brand-new model
+  stack
+- what is missing is role-level orchestration, not raw provider connectivity
+
+### 6. Automation Inputs
+
+Already available:
+
+- cron
+- webhooks
+- health checks
+- logs
+- doctor flows
+- setup-check style diagnostics
+- channel and gateway lifecycle signals
+
+Relevant code:
+
+- `src/cron/*`
+- `src/hooks/*`
+- `src/gateway/server-cron.ts`
+- `src/gateway/server-maintenance.ts`
+- `scripts/openclawcode-setup-check.sh`
+
+Why this matters:
+
+- these are enough to seed the first general discovery pipeline
+- the product can discover problems from real signals instead of only waiting
+  for manual issue creation
+
+### 7. Rich Local Action Surface
+
+Already available:
+
+- browser control
+- canvas and A2UI
+- node pairing
+- node invocation
+- camera
+- screen recording
+- notifications
+- voice wake and talk mode
+
+Relevant code:
+
+- `src/browser/*`
+- `src/canvas-host/*`
+- `src/node-host/*`
+- `src/gateway/server-methods/nodes.ts`
+
+Why this matters:
+
+- the product can later expose human handoff, approvals, and review state
+  through richer interfaces without rebuilding the runtime
+
+### 8. Existing Coding Execution Layer
+
+Already available in `openclawcode`:
+
+- issue-driven planning
+- isolated worktrees
+- builder and verifier execution
+- PR publication
+- rerun and review handling
+- merge policy
+- operator chat surfaces
+- validation-pool upkeep
+
+Relevant code:
+
+- `src/openclawcode/*`
+- `extensions/openclawcode/*`
+
+Why this matters:
+
+- the blueprint-first system does not need a new coding engine
+- it should reuse the existing issue-driven workflow as the execution layer
+
+## What The Current Stack Does Not Yet Give Us
+
+The missing work is mostly above the substrate layer.
+
+### 1. Goal Discussion As A First-Class Stage
+
+Missing:
+
+- a dedicated conversation stage before issue creation
+- structured clarification requests
+- structured proactive suggestions
+- a durable transcript or artifact for that agreement process
+
+Current status:
+
+- partial foothold via `openclaw code blueprint-clarify`
+- still no chat-native discussion loop that updates the blueprint directly
+
+### 2. Blueprint-Centered Source Of Truth
+
+Missing:
+
+- automatic repo bootstrap around the blueprint
+- stronger guarantees that issue creation and discovery are anchored back to
+  the blueprint
+- machine-readable blueprint state beyond simple lifecycle inspection
+
+Current status:
+
+- `PROJECT-BLUEPRINT.md` exists
+- lifecycle statuses exist
+- explicit `agreed` checkpoint exists
+- decomposition and state propagation still do not exist
+
+### 3. Work Item Decomposition
+
+Missing:
+
+- first internal `work item` abstraction broader than GitHub issues
+- blueprint-to-work-item planning
+- work-item projection into GitHub issues
+- support for planned, discovered, docs, sync, and policy work items
+
+### 4. General Discovery Pipeline
+
+Missing:
+
+- evidence collection across test, provider, setup, docs, and sync signals
+- dedupe and prioritization
+- work-item generation from those signals
+
+Current status:
+
+- only validation-pool seeding is proactive today
+
+### 5. Provider-Neutral Role Routing
+
+Missing:
+
+- explicit roles:
+  - planner
+  - coder
+  - reviewer
+  - verifier
+  - doc-writer
+- mapping from those roles to Codex, Claude Code, or mixed mode
+- fallback policy by role instead of only by model string
+
+### 6. Stage-Level Human Handoff
+
+Missing:
+
+- pause/edit/resume at each major stage
+- manual worktree takeover
+- provider switching mid-run
+- explicit gate decisions captured as durable artifacts
+
+## Reuse Strategy
+
+The right strategy is not to replace `openclaw` or replace `openclawcode`.
+
+The right strategy is:
+
+1. keep `openclaw` as the substrate
+2. keep `openclawcode` as the execution engine
+3. add a blueprint-first orchestration layer above the existing issue-driven
+   workflow
+
+That means:
+
+- reuse channel, session, plugin, model, and automation plumbing
+- reuse the existing coding workflow for implementation runs
+- build only the missing upstream control-plane layers
+
+## Complete Detailed Build Plan
+
+The remaining delivery plan should be executed in the following order.
+
+### Phase M1: Blueprint Source Of Truth
+
+Status:
+
+- `[x]` fixed blueprint path
+- `[x]` initial schema
+- `[x]` explicit `agreed` checkpoint
+- `[ ]` richer machine-readable blueprint state
+- `[ ]` blueprint state propagation into downstream work items and runs
+
+Tasks:
+
+- `[x]` fix the canonical blueprint path at `PROJECT-BLUEPRINT.md`
+- `[x]` define lifecycle states
+- `[x]` add CLI commands to create, inspect, and update blueprint lifecycle
+- `[ ]` add a stable machine-readable blueprint contract
+- `[ ]` persist blueprint fingerprints or content hashes
+- `[ ]` persist blueprint revision metadata into work items and workflow runs
+- `[ ]` add validation for incomplete or contradictory blueprint states
+
+Acceptance:
+
+- every repo has one canonical blueprint file
+- every downstream execution unit can point back to the blueprint revision
+  that produced it
+
+### Phase M2: Goal Discussion Loop
+
+Status:
+
+- `[x]` repo-local clarification reporting exists
+- `[ ]` chat-native discussion loop
+- `[ ]` write-back from discussion into blueprint sections
+- `[ ]` final confirmation before work decomposition
+
+Tasks:
+
+- `[x]` add deterministic clarification questions from the blueprint scaffold
+- `[x]` add deterministic proactive suggestions from the blueprint scaffold
+- `[ ]` add a chat-facing discussion command or flow before issue creation
+- `[ ]` let the system update blueprint sections from accepted clarifications
+- `[ ]` support explicit user confirmation that the blueprint is now agreed
+- `[ ]` keep an auditable history of clarifications that changed the blueprint
+
+Acceptance:
+
+- the user can stay in chat while shaping the goal
+- the system can ask questions instead of guessing
+- the agreed result is written back into the blueprint
+
+### Phase M3: Work Item Model
+
+Status:
+
+- `[ ]` not started
+
+Tasks:
+
+- `[ ]` define a first internal `work item` type independent from GitHub
+- `[ ]` support work-item classes:
+  - feature
+  - bugfix
+  - docs
+  - sync
+  - validation
+  - incident
+- `[ ]` store work items under repo-local state
+- `[ ]` give work items durable ids and statuses
+- `[ ]` map work items to GitHub issues when external tracking is needed
+
+Acceptance:
+
+- the system no longer assumes GitHub issues already exist
+- GitHub becomes one projection target, not the only internal object
+
+### Phase M4: Blueprint To Work Item Decomposition
+
+Status:
+
+- `[ ]` not started
+
+Tasks:
+
+- `[ ]` derive workstreams from `PROJECT-BLUEPRINT.md`
+- `[ ]` generate work items from each workstream
+- `[ ]` classify items as planned versus discovered
+- `[ ]` support decomposition of:
+  - feature slices
+  - docs slices
+  - rollout work
+  - validation work
+  - sync work
+- `[ ]` support incremental decomposition when the blueprint changes
+
+Acceptance:
+
+- a newly agreed blueprint can produce an initial backlog without manual issue
+  authoring
+
+### Phase M5: Discovery Pipeline
+
+Status:
+
+- `[ ]` validation-only discovery exists
+- `[ ]` general discovery not started
+
+Tasks:
+
+- `[ ]` define discovery evidence records
+- `[ ]` add the first non-validation discovery source
+- `[ ]` start with one or more of:
+  - failing tests
+  - setup-check regressions
+  - provider pause incidents
+  - upstream sync failures
+  - docs drift
+- `[ ]` add dedupe keys
+- `[ ]` add severity and priority scoring
+- `[ ]` turn evidence into draft work items
+- `[ ]` prevent noisy duplicate issue creation
+
+Acceptance:
+
+- the system can notice important problems without a human typing a new issue
+
+### Phase M6: Provider Role Model
+
+Status:
+
+- `[ ]` model access exists
+- `[ ]` role routing not started
+
+Tasks:
+
+- `[ ]` define first-class roles:
+  - planner
+  - coder
+  - reviewer
+  - verifier
+  - doc-writer
+- `[ ]` define a provider-neutral adapter contract for each role
+- `[ ]` implement Codex role adapters
+- `[ ]` implement Claude Code role adapters
+- `[ ]` support mixed-mode routing by stage
+- `[ ]` support fallback by role
+- `[ ]` persist selected role/provider decisions into run artifacts
+
+Acceptance:
+
+- one run can use different providers for different stages without changing
+  the top-level orchestration model
+
+### Phase M7: Stage-Level Human Handoff
+
+Status:
+
+- `[ ]` coarse run controls already exist
+- `[ ]` fine-grained handoff not started
+
+Tasks:
+
+- `[ ]` allow plan approval before code execution
+- `[ ]` allow plan editing before code execution
+- `[ ]` allow manual worktree takeover
+- `[ ]` allow provider switching after a failed or paused stage
+- `[ ]` allow structured resume after manual edits
+- `[ ]` allow explicit override of suitability and merge-policy decisions
+- `[ ]` persist all handoff and override decisions in workflow artifacts
+
+Acceptance:
+
+- a human can intervene at any important stage without breaking continuity
+
+### Phase M8: Chatops Integration
+
+Status:
+
+- `[ ]` issue-driven chatops exists
+- `[ ]` blueprint-first chatops not started
+
+Tasks:
+
+- `[ ]` expose blueprint discussion in existing chat surfaces
+- `[ ]` expose blueprint status in operator status views
+- `[ ]` expose work-item backlog in chat
+- `[ ]` expose stage gates and pending approvals in chat
+- `[ ]` expose provider-role decisions in chat
+- `[ ]` expose handoff and resume actions in chat
+
+Acceptance:
+
+- the user can run the blueprint-first loop from chat, not only from local CLI
+
+### Phase M9: Proofs And Operationalization
+
+Status:
+
+- `[ ]` not started
+
+Tasks:
+
+- `[ ]` run one blueprint-first proof on the refreshed sync branch
+- `[ ]` run one blueprint-first proof on the long-lived baseline
+- `[ ]` document install, promotion, and rollback for blueprint-aware releases
+- `[ ]` define machine-readable promotion and rollback artifacts
+- `[ ]` document supported provider combinations and limits
+- `[ ]` document when humans should intervene
+
+Acceptance:
+
+- another operator can stand the system up from docs and repeat a full
+  blueprint-first flow
+
+## Immediate Next Slices
+
+The next concrete slices should be:
+
+1. add richer machine-readable blueprint state
+2. add chat-native blueprint discussion before issue creation
+3. introduce the first repo-local `work item` abstraction
+4. derive the first planned work items from the blueprint
+5. add the first general discovery source
+
+## Short Summary
+
+OpenClaw already provides most of the substrate:
+
+- channels
+- gateway
+- sessions
+- plugins
+- models
+- automation
+- device and browser surfaces
+
+OpenClawCode already provides the coding execution layer:
+
+- issue-driven runs
+- worktrees
+- builder and verifier
+- PR and rerun lifecycle
+
+The major remaining work is the missing upstream control plane:
+
+- blueprint-first goal discussion
+- blueprint-centered state
+- work-item decomposition
+- discovery
+- provider-role routing
+- stage-level human handoff

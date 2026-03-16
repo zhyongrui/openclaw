@@ -28,6 +28,10 @@ For the current gap between today's issue-driven loop and the intended
 blueprint-driven multi-agent product, see
 `blueprint-first-orchestration.md`.
 
+For the capability-by-capability mapping from the existing `openclaw`
+substrate to that target product, plus the detailed build order for the
+remaining layers, see `openclaw-capability-mapping.md`.
+
 For the execution order of that new control-plane track, see
 `blueprint-first-delivery-plan.md`.
 

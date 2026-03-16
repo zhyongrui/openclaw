@@ -9,6 +9,9 @@ It translates the gap analysis in `blueprint-first-orchestration.md` into
 implementation phases that can be shipped, tested, and documented one slice at
 a time.
 
+For the lower-level mapping of existing `openclaw` capabilities onto those
+phases, see `openclaw-capability-mapping.md`.
+
 ## Target End State
 
 The finished system should support this loop:
