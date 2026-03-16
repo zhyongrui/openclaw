@@ -711,6 +711,9 @@ export function createSandboxedReadTool(params: SandboxToolParams) {
         return null;
       }
       const hostPath = params.bridge.resolvePath({ filePath, cwd: params.root }).hostPath;
+      if (!hostPath) {
+        throw new Error(`Expected hostPath for sandbox directory read: ${filePath}`);
+      }
       const entries = await fs.readdir(hostPath, { withFileTypes: true });
       return entries
         .map((entry) => ({

@@ -20,6 +20,24 @@ export function resolveBundledPluginsDir(
     return resolveUserPath(override, env);
   }
 
+  if (env.OPENCLAW_WATCH_MODE === "1") {
+    try {
+      const packageRoot = resolveOpenClawPackageRootSync({
+        cwd: opts.cwd ?? process.cwd(),
+      });
+      if (packageRoot) {
+        // In watch mode, prefer source plugin roots so plugin-local runtime deps
+        // resolve from extensions/<id>/node_modules instead of stripped dist copies.
+        const sourceExtensionsDir = path.join(packageRoot, "extensions");
+        if (fs.existsSync(sourceExtensionsDir)) {
+          return sourceExtensionsDir;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   // bun --compile: ship a sibling `extensions/` next to the executable.
   try {
     const execDir = path.dirname(opts.execPath ?? process.execPath);

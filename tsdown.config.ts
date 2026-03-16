@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig } from "tsdown";
+import { buildPluginSdkEntrySources } from "./scripts/lib/plugin-sdk-entries.mjs";
 
 const env = {
   NODE_ENV: "production",
@@ -58,63 +59,6 @@ function nodeBuildConfig(config: Record<string, unknown>) {
   };
 }
 
-function listBundledExtensionEntries(): Record<string, string> {
-  const entrySource = path.resolve("extensions", "openclawcode", "index.ts");
-  if (!fs.existsSync(entrySource)) {
-    return {};
-  }
-  return {
-    "extensions/openclawcode/index": entrySource,
-  };
-}
-
-const pluginSdkEntrypoints = [
-  "index",
-  "core",
-  "compat",
-  "telegram",
-  "discord",
-  "slack",
-  "signal",
-  "imessage",
-  "whatsapp",
-  "line",
-  "msteams",
-  "acpx",
-  "bluebubbles",
-  "copilot-proxy",
-  "device-pair",
-  "diagnostics-otel",
-  "diffs",
-  "feishu",
-  "googlechat",
-  "irc",
-  "llm-task",
-  "lobster",
-  "matrix",
-  "mattermost",
-  "memory-core",
-  "memory-lancedb",
-  "minimax-portal-auth",
-  "nextcloud-talk",
-  "nostr",
-  "open-prose",
-  "phone-control",
-  "qwen-portal-auth",
-  "synology-chat",
-  "talk-voice",
-  "test-utils",
-  "thread-ownership",
-  "tlon",
-  "twitch",
-  "voice-call",
-  "zalo",
-  "zalouser",
-  "account-id",
-  "keyed-async-queue",
-] as const;
-
-const bundledExtensionEntries = listBundledExtensionEntries();
 function listBundledPluginBuildEntries(): Record<string, string> {
   const extensionsRoot = path.join(process.cwd(), "extensions");
   const entries: Record<string, string> = {};
@@ -200,7 +144,7 @@ export default defineConfig([
   nodeBuildConfig({
     // Bundle all plugin-sdk entries in a single build so the bundler can share
     // common chunks instead of duplicating them per entry (~712MB heap saved).
-    entry: Object.fromEntries(pluginSdkEntrypoints.map((e) => [e, `src/plugin-sdk/${e}.ts`])),
+    entry: buildPluginSdkEntrySources(),
     outDir: "dist/plugin-sdk",
   }),
   nodeBuildConfig({
@@ -208,6 +152,9 @@ export default defineConfig([
     // directly from dist/extensions instead of transpiling extensions/*.ts via Jiti.
     entry: bundledPluginBuildEntries,
     outDir: "dist",
+    deps: {
+      neverBundle: ["@lancedb/lancedb"],
+    },
   }),
   nodeBuildConfig({
     entry: "src/extensionAPI.ts",
@@ -215,11 +162,4 @@ export default defineConfig([
   nodeBuildConfig({
     entry: ["src/hooks/bundled/*/handler.ts", "src/hooks/llm-slug-generator.ts"],
   }),
-  ...(Object.keys(bundledExtensionEntries).length > 0
-    ? [
-        nodeBuildConfig({
-          entry: bundledExtensionEntries,
-        }),
-      ]
-    : []),
 ]);

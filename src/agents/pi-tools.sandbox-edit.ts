@@ -80,10 +80,14 @@ function resolveSandboxHostPath(params: {
   root: string;
   pathParam: string;
 }): string {
-  return params.bridge.resolvePath({
+  const hostPath = params.bridge.resolvePath({
     filePath: params.pathParam,
     cwd: params.root,
   }).hostPath;
+  if (!hostPath) {
+    throw new Error(`Expected hostPath for sandbox edit: ${params.pathParam}`);
+  }
+  return hostPath;
 }
 
 async function readSandboxHostFile(params: {

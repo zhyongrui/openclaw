@@ -16,6 +16,23 @@ function makeTempDir() {
 
 const mkdirSafe = mkdirSafeDir;
 
+function normalizePathForAssertion(value: string | undefined): string | undefined {
+  if (!value) {
+    return value;
+  }
+  return value.replace(/\\/g, "/");
+}
+
+function hasDiagnosticSourceSuffix(
+  diagnostics: Array<{ source?: string }>,
+  suffix: string,
+): boolean {
+  const normalizedSuffix = normalizePathForAssertion(suffix);
+  return diagnostics.some((entry) =>
+    normalizePathForAssertion(entry.source)?.endsWith(normalizedSuffix ?? suffix),
+  );
+}
+
 function buildDiscoveryEnv(stateDir: string): NodeJS.ProcessEnv {
   return {
     OPENCLAW_STATE_DIR: stateDir,
@@ -277,7 +294,9 @@ describe("discoverOpenClawPlugins", () => {
     expect(bundle?.format).toBe("bundle");
     expect(bundle?.bundleFormat).toBe("codex");
     expect(bundle?.source).toBe(bundleDir);
-    expect(bundle?.rootDir).toBe(fs.realpathSync.native(bundleDir));
+    expect(normalizePathForAssertion(bundle?.rootDir)).toBe(
+      normalizePathForAssertion(fs.realpathSync(bundleDir)),
+    );
   });
 
   it("auto-detects manifestless Claude bundles from the default layout", async () => {
@@ -331,9 +350,7 @@ describe("discoverOpenClawPlugins", () => {
 
     expect(legacy).toBeDefined();
     expect(legacy?.format).toBe("openclaw");
-    expect(
-      result.diagnostics.some((entry) => entry.source?.endsWith(".claude-plugin/plugin.json")),
-    ).toBe(true);
+    expect(hasDiagnosticSourceSuffix(result.diagnostics, ".claude-plugin/plugin.json")).toBe(true);
   });
 
   it("falls back to legacy index discovery for configured paths with malformed bundle sidecars", async () => {
@@ -352,9 +369,7 @@ describe("discoverOpenClawPlugins", () => {
 
     expect(legacy).toBeDefined();
     expect(legacy?.format).toBe("openclaw");
-    expect(
-      result.diagnostics.some((entry) => entry.source?.endsWith(".codex-plugin/plugin.json")),
-    ).toBe(true);
+    expect(hasDiagnosticSourceSuffix(result.diagnostics, ".codex-plugin/plugin.json")).toBe(true);
   });
 
   it("blocks extension entries that escape package directory", async () => {
