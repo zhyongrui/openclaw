@@ -237,3 +237,5 @@ The near-term implementation order is:
 - exposed stage-gate inspection and decision recording through
   `/occode-gates` and `/occode-gate-decide`
 - made `/occode-start` honor execution-start gate readiness and approval
+- made auto webhook intake and `/occode-intake` honor execution-start gate
+  readiness and approval

@@ -1238,6 +1238,112 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("holds auto webhook issues for execution-start gate approval when the gate is not ready", async () => {
+    const fixture = await registerPluginFixture({ triggerMode: "auto" });
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Auto Gate Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:05:00.000Z",
+          "statusChangedAt: 2026-03-16T00:05:00.000Z",
+          "agreedAt: 2026-03-16T00:05:00.000Z",
+          "---",
+          "",
+          "# Auto Gate Blueprint",
+          "",
+          "## Goal",
+          "Stop auto execution when the execution-start gate still needs a human decision.",
+          "",
+          "## Success Criteria",
+          "- Auto webhook intake waits for gate approval instead of queueing immediately.",
+          "",
+          "## Scope",
+          "- In scope: gate-aware auto intake.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Preserve deterministic gate output.",
+          "",
+          "## Risks",
+          "- Auto execution may start too early without a gate check.",
+          "",
+          "## Assumptions",
+          "- A human can approve the gate from chat.",
+          "",
+          "## Human Gates",
+          "- Execution start: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: OpenClaw Default",
+          "- Doc-writer: Claude Code",
+          "",
+          "## Workstreams",
+          "- Gate auto webhook intake on execution-start.",
+          "",
+          "## Open Questions",
+          "- Should the operator accept the remaining risk now?",
+          "",
+          "## Change Log",
+          "- 2026-03-16: gate-aware auto intake test.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      await writeProjectDiscoveryInventory(fixture.repoRoot);
+
+      mocked.readRequestBodyWithLimit.mockResolvedValue(issueWebhookPayload(206));
+      const res = createMockServerResponse();
+
+      await fixture.route?.handler(
+        localReq({
+          method: "POST",
+          url: "/plugins/openclawcode/github",
+          headers: {
+            "x-github-event": "issues",
+            "x-github-delivery": "delivery-206-a",
+          },
+        }),
+        res,
+      );
+
+      expect(JSON.parse(String(res.body))).toMatchObject({
+        accepted: true,
+        reason: "execution-start-gated",
+        issue: "zhyongrui/openclawcode#206",
+      });
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.queue).toEqual([]);
+      expect(snapshot.pendingApprovals).toEqual([
+        {
+          issueKey: "zhyongrui/openclawcode#206",
+          notifyChannel: "telegram",
+          notifyTarget: "chat:primary",
+        },
+      ]);
+      expect(snapshot.statusByIssue["zhyongrui/openclawcode#206"]).toBe(
+        "Awaiting execution-start gate approval.",
+      );
+      expect(mocked.runMessageAction.mock.calls[0]?.[0]).toMatchObject({
+        params: expect.objectContaining({
+          message: expect.stringContaining("execution start is currently gated"),
+        }),
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
   it("creates and queues a low-risk issue through /occode-intake", async () => {
     const fixture = await registerPluginFixture();
     try {
@@ -1313,6 +1419,125 @@ describe("openclawcode extension", () => {
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("creates but does not queue /occode-intake issues when execution-start is gated", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Intake Gate Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:05:00.000Z",
+          "statusChangedAt: 2026-03-16T00:05:00.000Z",
+          "agreedAt: 2026-03-16T00:05:00.000Z",
+          "---",
+          "",
+          "# Intake Gate Blueprint",
+          "",
+          "## Goal",
+          "Create issues from chat without auto-queueing them when execution-start still needs approval.",
+          "",
+          "## Success Criteria",
+          "- /occode-intake creates the issue but stops before queueing.",
+          "",
+          "## Scope",
+          "- In scope: gate-aware chat intake.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Preserve the created issue link in the response.",
+          "",
+          "## Risks",
+          "- Queueing too early could bypass human intent.",
+          "",
+          "## Assumptions",
+          "- Operators can approve the gate from chat.",
+          "",
+          "## Human Gates",
+          "- Execution start: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: OpenClaw Default",
+          "- Doc-writer: Claude Code",
+          "",
+          "## Workstreams",
+          "- Gate chat intake before queueing work.",
+          "",
+          "## Open Questions",
+          "- Should the operator accept the remaining execution-start risk now?",
+          "",
+          "## Change Log",
+          "- 2026-03-16: gate-aware intake test.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      await writeProjectDiscoveryInventory(fixture.repoRoot);
+
+      vi.stubEnv("GH_TOKEN", "test-token");
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify(
+            createGitHubIssueResponse({
+              issueNumber: 223,
+              title: "[Feature]: Expose issueCount in openclaw code run --json output",
+              body: "Summary\nAdd a stable top-level issueCount field.",
+            }),
+          ),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await fixture.commands.get("occode-intake")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: [
+          "/occode-intake",
+          "[Feature]: Expose issueCount in openclaw code run --json output",
+          "Summary",
+          "Add a stable top-level issueCount field.",
+        ].join("\n"),
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain(
+        "openclawcode created a new GitHub issue from chat, but execution start is currently gated.",
+      );
+      expect(result?.text).toContain("Issue: zhyongrui/openclawcode#223");
+      expect(result?.text).toContain("Gate: execution-start");
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.queue).toEqual([]);
+      expect(snapshot.pendingApprovals).toEqual([
+        {
+          issueKey: "zhyongrui/openclawcode#223",
+          notifyChannel: "feishu",
+          notifyTarget: "user:intake-chat",
+        },
+      ]);
+      expect(snapshot.statusByIssue["zhyongrui/openclawcode#223"]).toBe(
+        "Awaiting execution-start gate approval.",
+      );
+    } finally {
+      await cleanupPluginFixture(fixture);
     }
   });
 

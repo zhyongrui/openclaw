@@ -1964,3 +1964,17 @@ The first stage-gate write path now actually influences execution.
   message instead of queueing the issue
 - once a human records `execution-start approved`, the same `/occode-start`
   path can proceed and enqueue the issue
+
+## Gate-Aware Autonomous Intake
+
+The same execution-start gate now applies to autonomous intake paths instead of
+only manual `/occode-start`.
+
+- webhook `triggerMode=auto` now:
+  - creates a pending approval instead of queueing immediately when
+    `execution-start` is not ready
+  - notifies chat that the issue is gated
+- `/occode-intake` now:
+  - still creates the GitHub issue
+  - but stops before queueing when `execution-start` is not ready
+  - stores the issue as a pending approval with gate guidance

@@ -585,6 +585,7 @@ Tasks:
 - `[x]` expose provider-role decisions in chat
 - `[x]` expose stage-gate approval recording in chat
 - `[x]` let approved execution-start gates unblock chat-started execution
+- `[x]` hold autonomous intake paths behind execution-start when human signoff is still required
 - `[ ]` expose handoff and resume actions in chat
 
 Acceptance:

@@ -606,6 +606,70 @@ async function enqueueInteractiveIssueIntake(params: {
   });
 }
 
+async function queueOrGateIssueExecution(params: {
+  store: OpenClawCodeChatopsStore;
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  issue: {
+    owner: string;
+    repo: string;
+    number: number;
+  };
+  destination: {
+    channel: string;
+    target: string;
+  };
+  queuedStatus: string;
+  gatedStatus?: string;
+}): Promise<
+  | {
+      outcome: "queued";
+      queuedRun: NonNullable<
+        Awaited<ReturnType<OpenClawCodeChatopsStore["promotePendingApprovalToQueue"]>>
+      >;
+    }
+  | {
+      outcome: "gated";
+      gate: NonNullable<Awaited<ReturnType<typeof readExecutionStartGate>>["gate"]>;
+    }
+  | {
+      outcome: "already-tracked";
+    }
+> {
+  const executionStartGate = await readExecutionStartGate(params.repoConfig.repoRoot);
+  if (executionStartGate && executionStartGate.gate.readiness !== "ready") {
+    const accepted = await params.store.addPendingApproval(
+      {
+        issueKey: formatIssueKey(params.issue),
+        notifyChannel: params.destination.channel,
+        notifyTarget: params.destination.target,
+      },
+      params.gatedStatus ?? "Awaiting execution-start gate approval.",
+    );
+    if (!accepted) {
+      return { outcome: "already-tracked" };
+    }
+    return {
+      outcome: "gated",
+      gate: executionStartGate.gate,
+    };
+  }
+
+  const queuedRun = await enqueueInteractiveIssueIntake({
+    store: params.store,
+    repoConfig: params.repoConfig,
+    issue: params.issue,
+    destination: params.destination,
+    status: params.queuedStatus,
+  });
+  if (!queuedRun) {
+    return { outcome: "already-tracked" };
+  }
+  return {
+    outcome: "queued",
+    queuedRun,
+  };
+}
+
 function buildIntakeQueuedMessage(params: {
   issue: {
     owner: string;
@@ -650,6 +714,39 @@ function buildIntakeEscalatedMessage(params: {
     params.issue.url ? `URL: ${params.issue.url}` : undefined,
     `Summary: ${params.summary}`,
     `Use /occode-status ${issueKey} to inspect the tracked status.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildExecutionStartGateDeferredMessage(params: {
+  issue: {
+    owner: string;
+    repo: string;
+    number: number;
+    title: string;
+    url?: string;
+  };
+  gate: NonNullable<Awaited<ReturnType<typeof readExecutionStartGate>>["gate"]>;
+  source: "chat-intake" | "auto-webhook";
+}): string {
+  const issueKey = formatIssueKey(params.issue);
+  return [
+    params.source === "chat-intake"
+      ? "openclawcode created a new GitHub issue from chat, but execution start is currently gated."
+      : "openclawcode received a new GitHub issue, but execution start is currently gated.",
+    `Issue: ${issueKey}`,
+    `Title: ${params.issue.title}`,
+    params.issue.url ? `URL: ${params.issue.url}` : undefined,
+    `Gate: ${params.gate.gateId}`,
+    `Readiness: ${params.gate.readiness}`,
+    params.gate.blockers.length > 0
+      ? `Blockers: ${params.gate.blockers.slice(0, 2).join(" ; ")}`
+      : params.gate.suggestions.length > 0
+        ? `Suggestions: ${params.gate.suggestions.slice(0, 2).join(" ; ")}`
+        : undefined,
+    `Use /occode-gates ${params.issue.owner}/${params.issue.repo} to inspect the current gate state.`,
+    `Use /occode-gate-decide ${params.issue.owner}/${params.issue.repo} execution-start approved [note] and then /occode-start ${issueKey} when a human accepts the current execution-start risk.`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -1315,37 +1412,61 @@ async function handleIssueWebhookEvent(params: {
   }
 
   if (params.repoConfig.triggerMode === "auto") {
-    const enqueued = await enqueueInteractiveIssueIntake({
+    const queued = await queueOrGateIssueExecution({
       store: params.store,
       repoConfig: params.repoConfig,
       issue: decision.issue,
       destination,
-      status: "Auto-started from issue webhook.",
+      queuedStatus: "Auto-started from issue webhook.",
+      gatedStatus: "Awaiting execution-start gate approval.",
     });
-    if (!enqueued) {
+    if (queued.outcome === "already-tracked") {
       return await params.respondJson({
         accepted: false,
         reason: "already-tracked",
         issue: issueKey,
       });
     }
-    const providerPause = await params.store.getActiveProviderPause();
+    if (queued.outcome === "queued") {
+      const providerPause = await params.store.getActiveProviderPause();
+      scheduleNotification({
+        api: params.api,
+        channel: destination.channel,
+        target: destination.target,
+        text: appendProviderPauseText({
+          text: [
+            "openclawcode auto-started a new GitHub issue.",
+            `Issue: ${issueKey}`,
+            `Title: ${decision.issue.title}`,
+            "Mode: auto",
+            "Status: queued for execution",
+          ].join("\n"),
+          pause: providerPause,
+        }),
+      });
+      kickQueueDrain(params.api, params.store);
+      return await params.respondJson({
+        accepted: true,
+        reason: "auto-enqueued",
+        issue: issueKey,
+      });
+    }
+
     scheduleNotification({
       api: params.api,
       channel: destination.channel,
       target: destination.target,
-      text: appendProviderPauseText({
-        text: [
-          "openclawcode auto-started a new GitHub issue.",
-          `Issue: ${issueKey}`,
-          `Title: ${decision.issue.title}`,
-          "Mode: auto",
-          "Status: queued for execution",
-        ].join("\n"),
-        pause: providerPause,
+      text: buildExecutionStartGateDeferredMessage({
+        issue: decision.issue,
+        gate: queued.gate,
+        source: "auto-webhook",
       }),
     });
-    kickQueueDrain(params.api, params.store);
+    return await params.respondJson({
+      accepted: true,
+      reason: "execution-start-gated",
+      issue: issueKey,
+    });
   } else {
     const approvalMessage = buildIssueApprovalMessage({
       issue: decision.issue,
@@ -1373,7 +1494,7 @@ async function handleIssueWebhookEvent(params: {
 
   return await params.respondJson({
     accepted: true,
-    reason: params.repoConfig.triggerMode === "auto" ? "auto-enqueued" : "announced-for-approval",
+    reason: "announced-for-approval",
     issue: issueKey,
   });
 }
@@ -1995,14 +2116,15 @@ export default {
           };
         }
 
-        const queued = await enqueueInteractiveIssueIntake({
+        const queued = await queueOrGateIssueExecution({
           store,
           repoConfig,
           issue: decision.issue,
           destination,
-          status: "Queued from chat intake.",
+          queuedStatus: "Queued from chat intake.",
+          gatedStatus: "Awaiting execution-start gate approval.",
         });
-        if (!queued) {
+        if (queued.outcome === "already-tracked") {
           return {
             text: [
               `Created GitHub issue ${issueKey}.`,
@@ -2011,13 +2133,23 @@ export default {
             ].join("\n"),
           };
         }
-        const providerPause = await store.getActiveProviderPause();
-        kickQueueDrain(api, store);
+        if (queued.outcome === "queued") {
+          const providerPause = await store.getActiveProviderPause();
+          kickQueueDrain(api, store);
+
+          return {
+            text: buildIntakeQueuedMessage({
+              issue: createdIssue,
+              pause: providerPause,
+            }),
+          };
+        }
 
         return {
-          text: buildIntakeQueuedMessage({
+          text: buildExecutionStartGateDeferredMessage({
             issue: createdIssue,
-            pause: providerPause,
+            gate: queued.gate,
+            source: "chat-intake",
           }),
         };
       },
