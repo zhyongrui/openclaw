@@ -683,8 +683,42 @@ PY
 import json
 import sys
 
-payload = json.loads(sys.argv[1])
+raw_payload = sys.argv[1]
 configured_raw = sys.argv[2]
+
+decoder = json.JSONDecoder()
+payload = None
+
+candidate_blocks = []
+stripped = raw_payload.strip()
+if stripped:
+    candidate_blocks.append(stripped)
+    for index, char in enumerate(stripped):
+        if char in "{[":
+            candidate_blocks.append(stripped[index:])
+
+lines = [line.rstrip() for line in raw_payload.splitlines() if line.strip()]
+for index, line in enumerate(lines):
+    if line.lstrip().startswith(("{", "[")):
+        candidate_blocks.append("\n".join(lines[index:]).strip())
+
+seen = set()
+for candidate in candidate_blocks:
+    if not candidate or candidate in seen:
+        continue
+    seen.add(candidate)
+    try:
+        decoded, end = decoder.raw_decode(candidate)
+    except json.JSONDecodeError:
+        continue
+    if candidate[end:].strip():
+        continue
+    if isinstance(decoded, dict):
+        payload = decoded
+        break
+
+if payload is None:
+    raise SystemExit(1)
 
 models = payload.get("models") or []
 available_keys = []
