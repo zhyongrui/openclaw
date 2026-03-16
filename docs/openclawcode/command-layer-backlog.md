@@ -23,7 +23,9 @@ Rules:
 - [x] `publishedPullRequestUrl`
 - [x] `publishedPullRequestBaseBranch`
 - [x] `publishedPullRequestBranchName`
-- [ ] `publishedPullRequestTitle`
+- [x] `publishedPullRequestTitle`
+- [x] `publishedPullRequestBody`
+- [ ] `publishedPullRequestHasNumber`
 
 ## Published Pull Request Mirrors
 
@@ -32,8 +34,8 @@ Rules:
 - [x] `publishedPullRequestUrl`
 - [x] `publishedPullRequestBaseBranch`
 - [x] `publishedPullRequestBranchName`
-- [ ] `publishedPullRequestTitle`
-- [ ] `publishedPullRequestBody`
+- [x] `publishedPullRequestTitle`
+- [x] `publishedPullRequestBody`
 - [ ] `publishedPullRequestHasNumber`
 - [ ] `publishedPullRequestHasUrl`
 - [ ] `publishedPullRequestHasOpenedAt`

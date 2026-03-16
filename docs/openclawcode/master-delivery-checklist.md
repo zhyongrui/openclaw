@@ -385,7 +385,7 @@ These are the next narrow slices that should be consumed from the current state.
 - [x] implement `#121` for `publishedPullRequestBaseBranch`
 - [x] implement `#122` for `publishedPullRequestBranchName`
 - [x] implement `#123` for `publishedPullRequestTitle`
-- [ ] implement `#124` for `publishedPullRequestBody`
+- [x] implement `#124` for `publishedPullRequestBody`
 - [ ] keep `run-json-contract.md` aligned with each new top-level field
 - [ ] keep `development-plan.md` and `full-program-roadmap.md` aligned with the latest pool state
 - [ ] decide whether the next productization slice after the current command-layer queue should be:
