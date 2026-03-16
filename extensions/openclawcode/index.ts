@@ -532,6 +532,22 @@ function buildNotificationLedgerLines(snapshot: OpenClawCodeIssueStatusSnapshot)
   return error ? [line, `  notify-error: ${error}`] : [line];
 }
 
+function buildOperatorContextLines(repoConfig: OpenClawCodeChatopsRepoConfig): string[] {
+  const lines = [
+    `Operator repo root: ${repoConfig.repoRoot}`,
+    `Operator baseline: ${repoConfig.baseBranch}`,
+  ];
+  const profile = process.env.OPENCLAW_PROFILE?.trim();
+  if (profile) {
+    lines.push(`OpenClaw profile: ${profile}`);
+  }
+  const configPath = process.env.OPENCLAW_CONFIG_PATH?.trim();
+  if (configPath) {
+    lines.push(`OpenClaw config: ${configPath}`);
+  }
+  return lines;
+}
+
 function buildSuitabilityLedgerLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
   if (!snapshot.suitabilityDecision && !snapshot.suitabilitySummary) {
     return [];
@@ -2858,12 +2874,16 @@ export default {
                 }),
               ].join("\n")
             : resolvedStatusText;
+        const resolvedWithOperatorContext = [
+          resolvedWithProvider,
+          ...buildOperatorContextLines(repoConfig),
+        ].join("\n");
         return {
           text:
             (await appendValidationIssueStatusContext({
-              text: resolvedWithProvider,
+              text: resolvedWithOperatorContext,
               issue: command.issue,
-            }).catch(() => resolvedWithProvider)) ?? resolvedWithProvider,
+            }).catch(() => resolvedWithOperatorContext)) ?? resolvedWithOperatorContext,
         };
       },
     });

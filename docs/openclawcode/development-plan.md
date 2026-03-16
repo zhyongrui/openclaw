@@ -2049,3 +2049,21 @@ This still does not complete the full provider-switch story:
 - the override only applies when queueing a new rerun
 - it does not hot-swap an already running builder or verifier
 - manual worktree takeover and post-edit resume are still future slices
+
+## Operator Context In Chat Status
+
+`/occode-status` now shows the active operator repo root and baseline directly
+in the status body instead of assuming operators remember which config and base
+branch they are looking at.
+
+- every status response now includes:
+  - `Operator repo root: ...`
+  - `Operator baseline: ...`
+- when the surrounding OpenClaw process has them, status also shows:
+  - `OpenClaw profile: ...`
+  - `OpenClaw config: ...`
+
+This closes the status-side visibility gap for:
+
+- current branch or release baseline
+- current operator config profile or root

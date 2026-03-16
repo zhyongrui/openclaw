@@ -2673,6 +2673,8 @@ describe("openclawcode extension", () => {
 
       expect(result?.text).toContain("Stage: Merged");
       expect(result?.text).toContain("PR: https://github.com/zhyongrui/openclawcode/pull/206");
+      expect(result?.text).toContain(`Operator repo root: ${fixture.repoRoot}`);
+      expect(result?.text).toContain("Operator baseline: main");
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -2701,6 +2703,8 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain(
         "Summary: The issue was already satisfied; no code changes or PR were needed.",
       );
+      expect(result?.text).toContain(`Operator repo root: ${fixture.repoRoot}`);
+      expect(result?.text).toContain("Operator baseline: main");
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -2750,6 +2754,8 @@ describe("openclawcode extension", () => {
       expect(result).toEqual({
         text: [
           "No openclawcode status recorded yet for zhyongrui/openclawcode#266.",
+          `Operator repo root: ${fixture.repoRoot}`,
+          "Operator baseline: main",
           "Validation issue: command-layer",
           "Validation template: command-json-number",
         ].join("\n"),
@@ -2794,6 +2800,8 @@ describe("openclawcode extension", () => {
           "Provider pause: active until 2099-03-12T12:15:00.000Z",
           "- failures: 2 | last failure: 2099-03-12T12:05:00.000Z",
           "- reason: Paused after 2 recent provider-side transient failures. Recent workflow runs are failing with HTTP 400 internal errors before code changes are produced.",
+          `Operator repo root: ${fixture.repoRoot}`,
+          "Operator baseline: main",
         ].join("\n"),
       });
     } finally {
@@ -2837,6 +2845,8 @@ describe("openclawcode extension", () => {
           "Summary: Build failed: HTTP 400: Internal server error",
           "Provider failure context: pause cleared after 2026-03-12T12:15:00.000Z | last transient failure at 2026-03-12T12:05:00.000Z | failures: 2",
           "Provider failure reason: Paused after 2 recent provider-side transient failures. Recent workflow runs are failing with HTTP 400 internal errors before code changes are produced.",
+          `Operator repo root: ${fixture.repoRoot}`,
+          "Operator baseline: main",
         ].join("\n"),
       });
     } finally {
@@ -2885,6 +2895,8 @@ describe("openclawcode extension", () => {
           "Summary: Build failed: HTTP 400: Internal server error",
           "Provider failure context: last transient failure at 2026-03-12T12:06:00.000Z | failures: 1",
           "Failure diagnostics: model=crs/gpt-5.4, prompt=8629, skillsPrompt=1245, schema=3030, tools=4, skills=1, files=0, usage=0, bootstrap=clean",
+          `Operator repo root: ${fixture.repoRoot}`,
+          "Operator baseline: main",
         ].join("\n"),
       });
     } finally {
