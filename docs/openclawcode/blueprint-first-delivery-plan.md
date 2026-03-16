@@ -101,7 +101,7 @@ Current foothold:
 
 ### Phase B4: Discovery Pipeline
 
-Status: open
+Status: partially landed through repo-local blueprint/work-item discovery
 
 Deliverables:
 
@@ -118,9 +118,22 @@ Candidate inputs:
 - upstream sync conflicts
 - docs drift
 
+Current foothold:
+
+- `openclaw code discover-work-items` now persists the first non-validation
+  discovery artifact
+- discovery evidence currently covers:
+  - missing work-item artifacts
+  - stale work-item artifacts after blueprint changes
+  - unresolved blueprint open questions
+- each evidence record already includes:
+  - a stable dedupe key
+  - severity and priority
+  - a discovered work-item draft
+
 ### Phase B5: Provider Role Routing
 
-Status: open
+Status: partially landed through repo-local role-routing artifacts
 
 Deliverables:
 
@@ -137,6 +150,16 @@ Acceptance:
 
 - one stage can use Codex while another uses Claude Code without changing the
   higher-level orchestration model
+
+Current foothold:
+
+- `openclaw code role-routing-refresh` now persists `.openclawcode/role-routing.json`
+- `openclaw code role-routing-show --json` now exposes:
+  - first-class planner/coder/reviewer/verifier/doc-writer roles
+  - normalized Codex and Claude Code adapters
+  - mixed-mode detection
+  - unresolved-role blockers
+  - fallback-chain visibility
 
 ### Phase B6: Stage-Level Human Handoff
 

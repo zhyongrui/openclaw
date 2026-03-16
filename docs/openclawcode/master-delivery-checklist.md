@@ -56,9 +56,9 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] support proactive system suggestions while refining the goal
 - [x] support an explicit "blueprint agreed" checkpoint
 - [x] derive execution work items from the blueprint instead of assuming GitHub issues already exist
-- [ ] add a first general discovery pipeline beyond validation-pool seeding
-- [ ] define a provider-neutral role model for planner, coder, reviewer, verifier, and doc-writer
-- [ ] map Codex and Claude Code into that shared role model
+- [x] add a first general discovery pipeline beyond validation-pool seeding
+- [x] define a provider-neutral role model for planner, coder, reviewer, verifier, and doc-writer
+- [x] map Codex and Claude Code into that shared role model
 - [ ] support stage-level human handoff, edit, resume, and provider switching
 - [ ] persist blueprint and stage-gate decisions in machine-readable artifacts
 

@@ -26,10 +26,14 @@ import {
   parseValidationIssue,
   AgentBackedBuilder,
   AgentBackedVerifier,
+  readProjectDiscoveryInventory,
+  readProjectRoleRoutingPlan,
   readProjectWorkItemInventory,
   resolveGitHubRepoFromGit,
   runIssueWorkflow,
   type ValidationIssueTemplateId,
+  writeProjectDiscoveryInventory,
+  writeProjectRoleRoutingPlan,
   writeProjectWorkItemInventory,
 } from "../openclawcode/index.js";
 import type { RuntimeEnv } from "../runtime.js";
@@ -117,6 +121,21 @@ export interface OpenClawCodeBlueprintDecomposeOpts {
 }
 
 export interface OpenClawCodeWorkItemsShowOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeDiscoverWorkItemsOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeRoleRoutingRefreshOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeRoleRoutingShowOpts {
   repoRoot?: string;
   json?: boolean;
 }
@@ -287,6 +306,65 @@ function logProjectWorkItemInventory(params: {
   }
   for (const item of inventory.workItems) {
     runtime.log(`- ${item.id}: ${item.title}`);
+  }
+}
+
+function logProjectDiscoveryInventory(params: {
+  inventory: Awaited<ReturnType<typeof readProjectDiscoveryInventory>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { inventory, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(inventory, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${inventory.repoRoot}`);
+  runtime.log(`Discovery path: ${inventory.inventoryPath}`);
+  runtime.log(`Exists: ${inventory.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${inventory.generatedAt ?? "not yet generated"}`);
+  runtime.log(`Evidence count: ${inventory.evidenceCount}`);
+  runtime.log(`Highest priority: ${inventory.highestPriority ?? "none"}`);
+  if (inventory.blockers.length > 0) {
+    runtime.log("Blockers:");
+    for (const blocker of inventory.blockers) {
+      runtime.log(`- ${blocker}`);
+    }
+  }
+  for (const entry of inventory.evidence) {
+    runtime.log(`- ${entry.id}: ${entry.summary}`);
+  }
+}
+
+function logProjectRoleRoutingPlan(params: {
+  plan: Awaited<ReturnType<typeof readProjectRoleRoutingPlan>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { plan, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(plan, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${plan.repoRoot}`);
+  runtime.log(`Role-routing path: ${plan.artifactPath}`);
+  runtime.log(`Exists: ${plan.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${plan.generatedAt ?? "not yet generated"}`);
+  runtime.log(`Fallback configured: ${plan.fallbackConfigured ? "yes" : "no"}`);
+  runtime.log(`Mixed mode: ${plan.mixedMode ? "yes" : "no"}`);
+  runtime.log(`Unresolved roles: ${plan.unresolvedRoleCount}`);
+  if (plan.blockers.length > 0) {
+    runtime.log("Blockers:");
+    for (const blocker of plan.blockers) {
+      runtime.log(`- ${blocker}`);
+    }
+  }
+  for (const route of plan.routes) {
+    runtime.log(
+      `- ${route.roleId}: ${route.rawAssignment ?? "openclaw-default"} (${route.adapterId}, ${route.source})`,
+    );
   }
 }
 
@@ -974,6 +1052,45 @@ export async function openclawCodeWorkItemsShowCommand(
   const inventory = await readProjectWorkItemInventory(repoRoot);
   logProjectWorkItemInventory({
     inventory,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeDiscoverWorkItemsCommand(
+  opts: OpenClawCodeDiscoverWorkItemsOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const inventory = await writeProjectDiscoveryInventory(repoRoot);
+  logProjectDiscoveryInventory({
+    inventory,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeRoleRoutingRefreshCommand(
+  opts: OpenClawCodeRoleRoutingRefreshOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const plan = await writeProjectRoleRoutingPlan(repoRoot);
+  logProjectRoleRoutingPlan({
+    plan,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeRoleRoutingShowCommand(
+  opts: OpenClawCodeRoleRoutingShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const plan = await readProjectRoleRoutingPlan(repoRoot);
+  logProjectRoleRoutingPlan({
+    plan,
     runtime,
     json: Boolean(opts.json),
   });

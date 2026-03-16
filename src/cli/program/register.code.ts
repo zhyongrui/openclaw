@@ -6,7 +6,10 @@ import {
   openclawCodeBlueprintSetStatusCommand,
   openclawCodeBlueprintShowCommand,
   openclawCodeBlueprintStatusIds,
+  openclawCodeDiscoverWorkItemsCommand,
   openclawCodeListValidationIssuesCommand,
+  openclawCodeRoleRoutingRefreshCommand,
+  openclawCodeRoleRoutingShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
   openclawCodeRunCommand,
   openclawCodeSeedValidationIssueCommand,
@@ -54,6 +57,15 @@ ${formatHelpExamples([
     "openclaw code work-items-show --json",
     "Inspect the latest persisted work-item inventory and stale-state signals.",
   ],
+  [
+    "openclaw code discover-work-items --json",
+    "Run the first non-validation discovery pipeline and persist discovered work items.",
+  ],
+  [
+    "openclaw code role-routing-refresh --json",
+    "Persist the current provider-neutral role routing plan.",
+  ],
+  ["openclaw code role-routing-show --json", "Inspect the latest persisted role-routing artifact."],
   [
     "openclaw code run --issue 123",
     "Plan and run the workflow for issue #123 in the current repo.",
@@ -190,6 +202,57 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .action(async (opts) => {
       await runCommandWithRuntime(defaultRuntime, async () => {
         await openclawCodeWorkItemsShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("discover-work-items")
+    .description("Run repo-local discovery and persist discovered work items")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeDiscoverWorkItemsCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("role-routing-refresh")
+    .description("Persist the current provider-neutral role routing plan")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeRoleRoutingRefreshCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("role-routing-show")
+    .description("Show the current provider-neutral role routing artifact")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeRoleRoutingShowCommand(
           {
             repoRoot: opts.repoRoot as string | undefined,
             json: Boolean(opts.json),

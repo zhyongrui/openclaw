@@ -65,6 +65,9 @@ The first concrete landing in that track is now defined and partially shipped:
   - `openclaw code blueprint-set-status`
   - `openclaw code blueprint-decompose`
   - `openclaw code work-items-show`
+  - `openclaw code discover-work-items`
+  - `openclaw code role-routing-refresh`
+  - `openclaw code role-routing-show`
 
 The active blueprint-first sequence is now:
 
@@ -86,6 +89,11 @@ That second step now has a first foothold in code too:
 - `openclaw code blueprint-decompose` now derives and persists a first
   repo-local `.openclawcode/work-items.json` artifact with planned work items,
   blockers, suggestions, and GitHub issue draft projections
+- `openclaw code discover-work-items` now derives and persists the first
+  non-validation discovery artifact at `.openclawcode/discovery-work-items.json`
+- `openclaw code role-routing-refresh` now persists a provider-neutral routing
+  plan at `.openclawcode/role-routing.json`, normalizing Codex and Claude Code
+  onto shared role adapters
 
 The remaining program is:
 

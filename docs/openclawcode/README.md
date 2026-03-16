@@ -58,8 +58,13 @@ loop with:
   - `openclaw code blueprint-set-status`
   - `openclaw code blueprint-decompose`
   - `openclaw code work-items-show`
+  - `openclaw code discover-work-items`
+  - `openclaw code role-routing-refresh`
+  - `openclaw code role-routing-show`
   - machine-readable lifecycle inspection, revision metadata, and work-item
     inventory output through `--json`
+  - repo-local discovery and provider-role routing artifacts under
+    `.openclawcode/`
 - stable workflow identity metadata now also includes top-level mirrors for:
   - `issueTitle`
   - `issueRepo`

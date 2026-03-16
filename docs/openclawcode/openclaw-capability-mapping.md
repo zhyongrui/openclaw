@@ -313,6 +313,10 @@ Missing:
 Current status:
 
 - only validation-pool seeding is proactive today
+- the first repo-local non-validation discovery artifact now exists for:
+  - missing work-item artifacts
+  - stale work-item artifacts
+  - unresolved blueprint open questions
 
 ### 5. Provider-Neutral Role Routing
 
@@ -326,6 +330,13 @@ Missing:
   - doc-writer
 - mapping from those roles to Codex, Claude Code, or mixed mode
 - fallback policy by role instead of only by model string
+
+Current status:
+
+- the first repo-local provider-neutral role plan now exists
+- Codex and Claude Code both normalize into shared adapter ids
+- mixed-mode routing visibility exists before live run integration
+- role decisions still do not flow into runtime run artifacts yet
 
 ### 6. Stage-Level Human Handoff
 
@@ -461,22 +472,23 @@ Acceptance:
 
 Status:
 
-- `[ ]` validation-only discovery exists
-- `[ ]` general discovery not started
+- `[x]` validation-only discovery exists
+- `[x]` first repo-local discovery source landed
+- `[ ]` broader runtime discovery still open
 
 Tasks:
 
-- `[ ]` define discovery evidence records
-- `[ ]` add the first non-validation discovery source
-- `[ ]` start with one or more of:
+- `[x]` define discovery evidence records
+- `[x]` add the first non-validation discovery source
+- `[x]` start with one or more of:
   - failing tests
   - setup-check regressions
   - provider pause incidents
   - upstream sync failures
   - docs drift
-- `[ ]` add dedupe keys
-- `[ ]` add severity and priority scoring
-- `[ ]` turn evidence into draft work items
+- `[x]` add dedupe keys
+- `[x]` add severity and priority scoring
+- `[x]` turn evidence into draft work items
 - `[ ]` prevent noisy duplicate issue creation
 
 Acceptance:
@@ -487,20 +499,21 @@ Acceptance:
 
 Status:
 
-- `[ ]` model access exists
-- `[ ]` role routing not started
+- `[x]` model access exists
+- `[x]` first repo-local role-routing plan landed
+- `[ ]` runtime integration and per-stage persistence still open
 
 Tasks:
 
-- `[ ]` define first-class roles:
+- `[x]` define first-class roles:
   - planner
   - coder
   - reviewer
   - verifier
   - doc-writer
-- `[ ]` define a provider-neutral adapter contract for each role
-- `[ ]` implement Codex role adapters
-- `[ ]` implement Claude Code role adapters
+- `[x]` define a provider-neutral adapter contract for each role
+- `[x]` implement Codex role adapters
+- `[x]` implement Claude Code role adapters
 - `[ ]` support mixed-mode routing by stage
 - `[ ]` support fallback by role
 - `[ ]` persist selected role/provider decisions into run artifacts

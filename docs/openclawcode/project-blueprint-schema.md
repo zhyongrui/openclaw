@@ -107,5 +107,38 @@ It currently carries:
   - acceptance criteria
   - GitHub issue drafts
 
-All five commands support `--json` so the blueprint state is already
+The first repo-local discovery artifact now lives at:
+
+`/repo/.openclawcode/discovery-work-items.json`
+
+It currently carries:
+
+- stable discovery evidence ids and dedupe keys
+- severity and priority scoring
+- discovered work-item drafts for:
+  - missing work-item artifacts
+  - stale work-item artifacts
+  - remaining blueprint open questions
+
+The first provider-neutral role routing artifact now lives at:
+
+`/repo/.openclawcode/role-routing.json`
+
+It currently carries:
+
+- first-class roles:
+  - `planner`
+  - `coder`
+  - `reviewer`
+  - `verifier`
+  - `docWriter`
+- normalized adapter ids:
+  - `codex`
+  - `claude-code`
+  - `openclaw-default`
+  - `custom`
+- route source, mixed-mode detection, unresolved-role counts, and fallback-chain
+  visibility
+
+All eight commands support `--json` so the blueprint state is already
 machine-readable enough for follow-on automation and staged handoff.

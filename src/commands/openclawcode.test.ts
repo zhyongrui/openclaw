@@ -6,9 +6,12 @@ import type { WorkflowRun } from "../openclawcode/index.js";
 import {
   openclawCodeBlueprintClarifyCommand,
   openclawCodeBlueprintDecomposeCommand,
+  openclawCodeDiscoverWorkItemsCommand,
   DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS,
   DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS,
   openclawCodeBlueprintInitCommand,
+  openclawCodeRoleRoutingRefreshCommand,
+  openclawCodeRoleRoutingShowCommand,
   openclawCodeBlueprintSetStatusCommand,
   openclawCodeBlueprintShowCommand,
   openclawCodeListValidationIssuesCommand,
@@ -1676,6 +1679,309 @@ describe("openclawCodeRunCommand", () => {
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.exists).toBe(true);
     expect(payload.artifactStale).toBe(true);
+  });
+
+  it("discovers a missing work-item artifact from an agreed blueprint", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-discovery-missing-"));
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Discovery Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-16T00:00:00.000Z",
+        "updatedAt: 2026-03-16T00:00:00.000Z",
+        "statusChangedAt: 2026-03-16T00:00:00.000Z",
+        "agreedAt: 2026-03-16T00:00:00.000Z",
+        "---",
+        "",
+        "# Discovery Blueprint",
+        "",
+        "## Goal",
+        "Detect missing repo-local artifacts.",
+        "",
+        "## Success Criteria",
+        "- Emit a discovered work item when the work-item artifact is missing.",
+        "",
+        "## Scope",
+        "- In scope: discovery artifact creation.",
+        "- Out of scope: direct GitHub issue creation.",
+        "",
+        "## Non-Goals",
+        "- None.",
+        "",
+        "## Constraints",
+        "- Technical: stay deterministic.",
+        "",
+        "## Risks",
+        "- Artifact drift may go unnoticed without discovery.",
+        "",
+        "## Assumptions",
+        "- The blueprint is already agreed.",
+        "",
+        "## Human Gates",
+        "- Goal agreement: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "",
+        "## Workstreams",
+        "- Create the repo-local work-item artifact.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-16: baseline discovery test.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeDiscoverWorkItemsCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      exists: true,
+      blueprintExists: true,
+      workItemInventoryExists: false,
+      evidenceCount: 1,
+      discoveredWorkItemCount: 1,
+      highestPriority: "high",
+    });
+    expect(payload.evidence[0]).toMatchObject({
+      source: "work-item-artifact-missing",
+      severity: "high",
+      priority: "high",
+    });
+    expect(payload.evidence[0].discoveredWorkItem.kind).toBe("discovered");
+  });
+
+  it("discovers stale work-item drift after the blueprint changes", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-discovery-stale-"));
+    const blueprintPath = path.join(repoRoot, "PROJECT-BLUEPRINT.md");
+    await writeFile(
+      blueprintPath,
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Discovery Drift Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-16T00:00:00.000Z",
+        "updatedAt: 2026-03-16T00:00:00.000Z",
+        "statusChangedAt: 2026-03-16T00:00:00.000Z",
+        "agreedAt: 2026-03-16T00:00:00.000Z",
+        "---",
+        "",
+        "# Discovery Drift Blueprint",
+        "",
+        "## Goal",
+        "Detect stale work-item artifacts.",
+        "",
+        "## Success Criteria",
+        "- A stale artifact becomes a discovered work item.",
+        "",
+        "## Scope",
+        "- In scope: stale detection.",
+        "- Out of scope: auto-refresh.",
+        "",
+        "## Non-Goals",
+        "- None.",
+        "",
+        "## Constraints",
+        "- Technical: use repo-local files only.",
+        "",
+        "## Risks",
+        "- None.",
+        "",
+        "## Assumptions",
+        "- None.",
+        "",
+        "## Human Gates",
+        "- Goal agreement: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "",
+        "## Workstreams",
+        "- Persist the initial work-item artifact.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-16: baseline drift test.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await writeFile(
+      blueprintPath,
+      (await readFile(blueprintPath, "utf8")).replace(
+        "Persist the initial work-item artifact.",
+        "Persist the updated work-item artifact.",
+      ),
+      "utf8",
+    );
+
+    await openclawCodeDiscoverWorkItemsCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.workItemArtifactStale).toBe(true);
+    expect(
+      payload.evidence.some(
+        (entry: { source: string }) => entry.source === "work-item-artifact-stale",
+      ),
+    ).toBe(true);
+  });
+
+  it("persists a provider-neutral role routing plan with mixed Codex and Claude assignments", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-role-routing-"));
+    const previousDefault = process.env.OPENCLAWCODE_ROLE_DEFAULT;
+    const previousFallbacks = process.env.OPENCLAWCODE_MODEL_FALLBACKS;
+    process.env.OPENCLAWCODE_ROLE_DEFAULT = "Codex";
+    process.env.OPENCLAWCODE_MODEL_FALLBACKS = "openai/gpt-5,anthropic/claude-sonnet";
+
+    try {
+      await writeFile(
+        path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Routing Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:00:00.000Z",
+          "statusChangedAt: 2026-03-16T00:00:00.000Z",
+          "agreedAt: 2026-03-16T00:00:00.000Z",
+          "---",
+          "",
+          "# Routing Blueprint",
+          "",
+          "## Goal",
+          "Route planner and coder roles cleanly.",
+          "",
+          "## Success Criteria",
+          "- Persist a machine-readable route plan.",
+          "",
+          "## Scope",
+          "- In scope: role routing.",
+          "- Out of scope: live run integration.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Technical: keep the output deterministic.",
+          "",
+          "## Risks",
+          "- None.",
+          "",
+          "## Assumptions",
+          "- None.",
+          "",
+          "## Human Gates",
+          "- Goal agreement: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "",
+          "## Workstreams",
+          "- Persist the provider-neutral role plan.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-16: routing baseline.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      await openclawCodeRoleRoutingRefreshCommand(
+        {
+          repoRoot,
+          json: true,
+        },
+        runtime,
+      );
+
+      let payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+      expect(payload).toMatchObject({
+        repoRoot,
+        exists: true,
+        fallbackConfigured: true,
+        mixedMode: true,
+        routeCount: 5,
+        unresolvedRoleCount: 0,
+      });
+      expect(payload.routes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            roleId: "planner",
+            rawAssignment: "Claude Code",
+            adapterId: "claude-code",
+            source: "blueprint",
+          }),
+          expect.objectContaining({
+            roleId: "coder",
+            rawAssignment: "Codex",
+            adapterId: "codex",
+            source: "blueprint",
+          }),
+          expect.objectContaining({
+            roleId: "reviewer",
+            rawAssignment: "Codex",
+            adapterId: "codex",
+            source: "env-role-default",
+          }),
+        ]),
+      );
+
+      runtime.log.mockClear();
+      await openclawCodeRoleRoutingShowCommand(
+        {
+          repoRoot,
+          json: true,
+        },
+        runtime,
+      );
+
+      payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+      expect(payload.exists).toBe(true);
+      expect(payload.fallbackChain).toEqual(["openai/gpt-5", "anthropic/claude-sonnet"]);
+    } finally {
+      if (previousDefault == null) {
+        delete process.env.OPENCLAWCODE_ROLE_DEFAULT;
+      } else {
+        process.env.OPENCLAWCODE_ROLE_DEFAULT = previousDefault;
+      }
+      if (previousFallbacks == null) {
+        delete process.env.OPENCLAWCODE_MODEL_FALLBACKS;
+      } else {
+        process.env.OPENCLAWCODE_MODEL_FALLBACKS = previousFallbacks;
+      }
+    }
   });
 
   it("renders a dry-run validation issue template without creating a GitHub issue", async () => {
