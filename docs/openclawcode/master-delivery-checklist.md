@@ -151,7 +151,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] auto-resume execution-start-held work after chat gate approval
 - [x] allow pre-run provider-role reroute updates from chat
 - [ ] show policy explanation when auto-merge is disallowed
-- [ ] show policy explanation when suitability blocks autonomous execution
+- [x] show policy explanation when suitability blocks autonomous execution
 - [ ] show promotion-readiness and rollback-readiness in chat-facing operator views
 - [x] show current branch or release baseline in chat-facing operator views
 - [x] show the current operator config profile or root in status output

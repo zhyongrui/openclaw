@@ -561,6 +561,24 @@ function buildSuitabilityLedgerLines(snapshot: OpenClawCodeIssueStatusSnapshot):
   return [line];
 }
 
+function buildTopLevelSuitabilityPolicyLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
+  if (
+    !snapshot.suitabilityDecision ||
+    snapshot.suitabilityDecision === "auto-run" ||
+    !snapshot.suitabilitySummary
+  ) {
+    return [];
+  }
+  return [
+    `Suitability policy: ${[
+      snapshot.suitabilityDecision,
+      trimToSingleLine(snapshot.suitabilitySummary),
+    ]
+      .filter(Boolean)
+      .join(" | ")}`,
+  ];
+}
+
 function buildPrecheckedEscalationStatus(params: {
   issue: { owner: string; repo: string; number: number };
   summary: string;
@@ -2876,6 +2894,7 @@ export default {
             : resolvedStatusText;
         const resolvedWithOperatorContext = [
           resolvedWithProvider,
+          ...(currentSnapshot ? buildTopLevelSuitabilityPolicyLines(currentSnapshot) : []),
           ...buildOperatorContextLines(repoConfig),
         ].join("\n");
         return {

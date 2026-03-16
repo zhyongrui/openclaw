@@ -2905,6 +2905,51 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("shows suitability policy explanation through /occode-status when autonomous execution is blocked", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#6624",
+        status: [
+          "openclawcode status for zhyongrui/openclawcode#6624",
+          "Stage: Escalated",
+          "Summary: Escalated before execution.",
+        ].join("\n"),
+        stage: "escalated",
+        runId: "run-6624",
+        updatedAt: "2026-03-12T12:07:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 6624,
+        suitabilityDecision: "needs-human-review",
+        suitabilitySummary:
+          "Needs human review because the issue requests policy changes outside command-layer scope.",
+      });
+
+      const result = await fixture.commands.get("occode-status")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-status #6624",
+        args: "#6624",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "openclawcode status for zhyongrui/openclawcode#6624",
+          "Stage: Escalated",
+          "Summary: Escalated before execution.",
+          "Suitability policy: needs-human-review | Needs human review because the issue requests policy changes outside command-layer scope.",
+          `Operator repo root: ${fixture.repoRoot}`,
+          "Operator baseline: main",
+        ].join("\n"),
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("heals /occode-status from GitHub when a tracked pull request was merged externally", async () => {
     const fixture = await registerPluginFixture();
     try {

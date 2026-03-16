@@ -2067,3 +2067,18 @@ This closes the status-side visibility gap for:
 
 - current branch or release baseline
 - current operator config profile or root
+
+## Suitability Policy Explainability In Status
+
+`/occode-status` now explains suitability-based autonomous-execution blocks
+directly in the top-level status body instead of leaving that reasoning buried
+in local artifacts.
+
+- when the tracked snapshot records:
+  - `needs-human-review`
+  - `escalate`
+- status now appends:
+  - `Suitability policy: <decision> | <summary>`
+
+This closes the first chat-visible explainability gap for suitability policy.
+The remaining adjacent gap is auto-merge policy explainability.
