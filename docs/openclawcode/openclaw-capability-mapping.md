@@ -584,6 +584,7 @@ Tasks:
 - `[x]` expose stage gates and pending approvals in chat
 - `[x]` expose provider-role decisions in chat
 - `[x]` expose stage-gate approval recording in chat
+- `[x]` let approved execution-start gates unblock chat-started execution
 - `[ ]` expose handoff and resume actions in chat
 
 Acceptance:

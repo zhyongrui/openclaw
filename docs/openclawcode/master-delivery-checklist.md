@@ -143,6 +143,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [ ] support clarification prompts when a one-line request is underspecified
 - [x] show blueprint summary and clarification prompts in chat
 - [x] allow stage-gate decisions to be recorded from chat
+- [x] make `/occode-start` respect execution-start gate decisions
 - [ ] show policy explanation when auto-merge is disallowed
 - [ ] show policy explanation when suitability blocks autonomous execution
 - [ ] show promotion-readiness and rollback-readiness in chat-facing operator views

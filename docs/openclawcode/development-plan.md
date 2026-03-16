@@ -1953,3 +1953,14 @@ CLI.
 - this is still only the first handoff slice:
   - it does not yet resume runs automatically
   - it does not yet switch providers from chat
+
+## Gate-Aware Start Control
+
+The first stage-gate write path now actually influences execution.
+
+- `approved` decisions now upgrade `needs-human-decision` gates to `ready`
+- `/occode-start` now refreshes the stage-gate artifact before queueing
+- if `execution-start` is still gated, `/occode-start` returns a gate-specific
+  message instead of queueing the issue
+- once a human records `execution-start approved`, the same `/occode-start`
+  path can proceed and enqueue the issue

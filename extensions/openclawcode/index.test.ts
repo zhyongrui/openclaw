@@ -6,6 +6,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OpenClawCodeChatopsStore } from "../../src/integrations/openclaw-plugin/index.js";
 import type { WorkflowRun } from "../../src/openclawcode/contracts/index.js";
+import { writeProjectDiscoveryInventory } from "../../src/openclawcode/discovery.js";
 import {
   readProjectStageGateArtifact,
   writeProjectStageGateArtifact,
@@ -1642,6 +1643,200 @@ describe("openclawcode extension", () => {
           "- reason: Paused after 2 recent provider-side transient failures. Recent workflow runs are failing with HTTP 400 internal errors before code changes are produced.",
         ].join("\n"),
       });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks /occode-start when the execution-start gate is not ready", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.addPendingApproval({
+        issueKey: "zhyongrui/openclawcode#240",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+      });
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Execution Gate Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:05:00.000Z",
+          "statusChangedAt: 2026-03-16T00:05:00.000Z",
+          "agreedAt: 2026-03-16T00:05:00.000Z",
+          "---",
+          "",
+          "# Execution Gate Blueprint",
+          "",
+          "## Goal",
+          "Require a human decision before execution starts when open questions remain.",
+          "",
+          "## Success Criteria",
+          "- /occode-start refuses to queue until the execution-start gate is approved.",
+          "",
+          "## Scope",
+          "- In scope: gate-aware start flow.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Preserve deterministic gate behavior.",
+          "",
+          "## Risks",
+          "- Autonomous execution could start too early without this guard.",
+          "",
+          "## Assumptions",
+          "- Operators can inspect stage gates from chat.",
+          "",
+          "## Human Gates",
+          "- Execution start: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: OpenClaw Default",
+          "- Doc-writer: Claude Code",
+          "",
+          "## Workstreams",
+          "- Block start until the execution-start gate is approved.",
+          "",
+          "## Open Questions",
+          "- Should the operator accept the remaining open question before execution?",
+          "",
+          "## Change Log",
+          "- 2026-03-16: gate-aware start test.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      await writeProjectDiscoveryInventory(fixture.repoRoot);
+
+      const result = await fixture.commands.get("occode-start")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-start #240",
+        args: "#240",
+        to: "user:current-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain(
+        "Execution start is currently gated for zhyongrui/openclawcode.",
+      );
+      expect(result?.text).toContain("Gate: execution-start");
+      expect(result?.text).toContain("Readiness: needs-human-decision");
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.queue).toHaveLength(0);
+      expect(snapshot.pendingApprovals).toHaveLength(1);
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("allows /occode-start after execution-start is approved in chat", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.addPendingApproval({
+        issueKey: "zhyongrui/openclawcode#241",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+      });
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Execution Resume Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:05:00.000Z",
+          "statusChangedAt: 2026-03-16T00:05:00.000Z",
+          "agreedAt: 2026-03-16T00:05:00.000Z",
+          "---",
+          "",
+          "# Execution Resume Blueprint",
+          "",
+          "## Goal",
+          "Allow execution to proceed after a human approves the execution-start gate.",
+          "",
+          "## Success Criteria",
+          "- /occode-start queues once the execution-start gate is approved.",
+          "",
+          "## Scope",
+          "- In scope: approved override for needs-human-decision gates.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Only override needs-human-decision, not blocked gates.",
+          "",
+          "## Risks",
+          "- Approval should be explicit and auditable.",
+          "",
+          "## Assumptions",
+          "- Chat operators can record gate decisions.",
+          "",
+          "## Human Gates",
+          "- Execution start: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: OpenClaw Default",
+          "- Doc-writer: Claude Code",
+          "",
+          "## Workstreams",
+          "- Let approved execution-start gates unblock /occode-start.",
+          "",
+          "## Open Questions",
+          "- Should the remaining question be accepted for now?",
+          "",
+          "## Change Log",
+          "- 2026-03-16: gate approval resume test.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      await writeProjectDiscoveryInventory(fixture.repoRoot);
+
+      const decision = await fixture.commands.get("occode-gate-decide")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-gate-decide execution-start approved Accepted for this run",
+        args: "execution-start approved Accepted for this run",
+        senderId: "user:operator",
+        config: {},
+      });
+      expect(decision?.text).toContain("Decision: approved");
+      expect(decision?.text).toContain("Readiness: ready");
+
+      const result = await fixture.commands.get("occode-start")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-start #241",
+        args: "#241",
+        to: "user:current-chat",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: "Queued zhyongrui/openclawcode#241. I will post status updates here.",
+      });
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.queue).toHaveLength(1);
+      expect(snapshot.pendingApprovals).toEqual([]);
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });

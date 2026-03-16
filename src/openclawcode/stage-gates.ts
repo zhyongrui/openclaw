@@ -167,6 +167,11 @@ function finalizeGateRecord(params: {
     if (latestDecision.note) {
       blockers.unshift(latestDecision.note);
     }
+  } else if (latestDecision?.decision === "approved" && readiness === "needs-human-decision") {
+    readiness = "ready";
+    if (latestDecision.note) {
+      suggestions.unshift(latestDecision.note);
+    }
   } else if (latestDecision?.decision === "changes-requested") {
     readiness = "needs-human-decision";
     if (latestDecision.note) {

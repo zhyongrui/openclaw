@@ -819,6 +819,41 @@ function parseStageGateDecisionArgs(params: {
   };
 }
 
+async function readExecutionStartGate(repoRoot: string): Promise<
+  | {
+      artifact: Awaited<ReturnType<typeof writeProjectStageGateArtifact>>;
+      gate: NonNullable<Awaited<ReturnType<typeof writeProjectStageGateArtifact>>["gates"][number]>;
+    }
+  | undefined
+> {
+  const artifact = await writeProjectStageGateArtifact(repoRoot);
+  const gate = artifact.gates.find((entry) => entry.gateId === "execution-start");
+  if (!gate) {
+    return undefined;
+  }
+  return { artifact, gate };
+}
+
+function buildExecutionStartGateBlockedMessage(params: {
+  repo: { owner: string; repo: string };
+  gate: NonNullable<Awaited<ReturnType<typeof writeProjectStageGateArtifact>>["gates"][number]>;
+}): string {
+  return [
+    `Execution start is currently gated for ${formatRepoKey(params.repo)}.`,
+    `Gate: ${params.gate.gateId}`,
+    `Readiness: ${params.gate.readiness}`,
+    params.gate.blockers.length > 0
+      ? `Blockers: ${params.gate.blockers.slice(0, 2).join(" ; ")}`
+      : params.gate.suggestions.length > 0
+        ? `Suggestions: ${params.gate.suggestions.slice(0, 2).join(" ; ")}`
+        : undefined,
+    `Use /occode-gates ${formatRepoKey(params.repo)} to inspect all stage gates.`,
+    `Use /occode-gate-decide ${formatRepoKey(params.repo)} execution-start approved [note] after a human accepts the current execution-start risk.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function buildInboxMessage(params: {
   repo: { owner: string; repo: string };
   state: Awaited<ReturnType<OpenClawCodeChatopsStore["snapshot"]>>;
@@ -2019,6 +2054,18 @@ export default {
           repo: command.issue.repo,
           number: command.issue.number,
         });
+        const executionStartGate = await readExecutionStartGate(repoConfig.repoRoot);
+        if (executionStartGate && executionStartGate.gate.readiness !== "ready") {
+          return {
+            text: buildExecutionStartGateBlockedMessage({
+              repo: {
+                owner: repoConfig.owner,
+                repo: repoConfig.repo,
+              },
+              gate: executionStartGate.gate,
+            }),
+          };
+        }
         const currentStatus = await store.getStatus(issueKey);
         const pendingApproval = await store.getPendingApproval(issueKey);
         if (await store.isQueuedOrRunning(issueKey)) {

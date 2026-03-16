@@ -236,3 +236,4 @@ The near-term implementation order is:
 - exposed blueprint summary and clarification prompts through `/occode-blueprint`
 - exposed stage-gate inspection and decision recording through
   `/occode-gates` and `/occode-gate-decide`
+- made `/occode-start` honor execution-start gate readiness and approval
