@@ -3721,6 +3721,37 @@ describe("openclawcode extension", () => {
   it("shows promotion and rollback readiness through /occode-inbox when setup-check succeeds", async () => {
     const fixture = await registerPluginFixture();
     try {
+      await fs.mkdir(path.join(fixture.repoRoot, ".openclawcode"), { recursive: true });
+      await fs.writeFile(
+        path.join(fixture.repoRoot, ".openclawcode", "promotion-receipt.json"),
+        `${JSON.stringify(
+          {
+            exists: true,
+            schemaVersion: 1,
+            recordedAt: "2026-03-16T09:00:00.000Z",
+            actor: "user:promoter",
+            promotedRef: "main@abc123",
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      await fs.writeFile(
+        path.join(fixture.repoRoot, ".openclawcode", "rollback-receipt.json"),
+        `${JSON.stringify(
+          {
+            exists: true,
+            schemaVersion: 1,
+            recordedAt: "2026-03-16T09:05:00.000Z",
+            actor: "user:rollback",
+            restoredRef: "main@def456",
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
       fixture.runCommandWithTimeout.mockResolvedValue({
         code: 0,
         stdout: JSON.stringify({
@@ -3762,6 +3793,12 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain("Proof readiness: low-risk=ready | fallback=blocked");
       expect(result?.text).toContain("Rollback readiness: ready | target=main");
       expect(result?.text).toContain("Setup-check summary: pass=19 | warn=0 | fail=0");
+      expect(result?.text).toContain(
+        "Latest promotion receipt: main@abc123 | actor=user:promoter | 2026-03-16T09:00:00.000Z",
+      );
+      expect(result?.text).toContain(
+        "Latest rollback receipt: main@def456 | actor=user:rollback | 2026-03-16T09:05:00.000Z",
+      );
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -3771,6 +3808,22 @@ describe("openclawcode extension", () => {
   it("shows a compact promotion checklist command", async () => {
     const fixture = await registerPluginFixture();
     try {
+      await fs.mkdir(path.join(fixture.repoRoot, ".openclawcode"), { recursive: true });
+      await fs.writeFile(
+        path.join(fixture.repoRoot, ".openclawcode", "promotion-receipt.json"),
+        `${JSON.stringify(
+          {
+            exists: true,
+            schemaVersion: 1,
+            recordedAt: "2026-03-16T09:10:00.000Z",
+            actor: "user:promoter",
+            promotedRef: "main@aaa111",
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
       fixture.runCommandWithTimeout.mockResolvedValue({
         code: 0,
         stdout: JSON.stringify({
@@ -3818,6 +3871,7 @@ describe("openclawcode extension", () => {
           "Proof readiness: low-risk=blocked | fallback=blocked",
           "Rollback readiness: ready | target=main",
           "Setup-check summary: pass=18 | warn=1 | fail=0",
+          "Latest promotion receipt: main@aaa111 | actor=user:promoter | 2026-03-16T09:10:00.000Z",
           "Checklist: strict=yes | gateway=yes | route-probe=yes | built-startup=yes",
         ].join("\n"),
       });

@@ -47,6 +47,10 @@ import {
 import type { GitHubIssueClient } from "../../src/openclawcode/github/index.js";
 import { GitHubRestClient } from "../../src/openclawcode/github/index.js";
 import {
+  readProjectPromotionReceiptArtifact,
+  readProjectRollbackReceiptArtifact,
+} from "../../src/openclawcode/promotion-artifacts.js";
+import {
   readProjectRoleRoutingPlan,
   writeProjectRoleRoutingPlan,
 } from "../../src/openclawcode/role-routing.js";
@@ -732,9 +736,41 @@ function buildPromotionReadinessLines(params: {
   ];
 }
 
+function buildReleaseReceiptLines(params: {
+  promotionReceipt?: Awaited<ReturnType<typeof readProjectPromotionReceiptArtifact>>;
+  rollbackReceipt?: Awaited<ReturnType<typeof readProjectRollbackReceiptArtifact>>;
+}): string[] {
+  const lines: string[] = [];
+  if (params.promotionReceipt?.exists) {
+    lines.push(
+      `Latest promotion receipt: ${[
+        params.promotionReceipt.promotedRef,
+        params.promotionReceipt.actor ? `actor=${params.promotionReceipt.actor}` : undefined,
+        params.promotionReceipt.recordedAt,
+      ]
+        .filter(Boolean)
+        .join(" | ")}`,
+    );
+  }
+  if (params.rollbackReceipt?.exists) {
+    lines.push(
+      `Latest rollback receipt: ${[
+        params.rollbackReceipt.restoredRef,
+        params.rollbackReceipt.actor ? `actor=${params.rollbackReceipt.actor}` : undefined,
+        params.rollbackReceipt.recordedAt,
+      ]
+        .filter(Boolean)
+        .join(" | ")}`,
+    );
+  }
+  return lines;
+}
+
 function buildPromotionChecklistMessage(params: {
   repoConfig: OpenClawCodeChatopsRepoConfig;
   probe?: SetupCheckProbePayload;
+  promotionReceipt?: Awaited<ReturnType<typeof readProjectPromotionReceiptArtifact>>;
+  rollbackReceipt?: Awaited<ReturnType<typeof readProjectRollbackReceiptArtifact>>;
 }): string {
   const lines = [
     `openclawcode promotion checklist for ${formatRepoKey(params.repoConfig)}`,
@@ -750,6 +786,7 @@ function buildPromotionChecklistMessage(params: {
   }
   lines.push(`Operator root: ${params.probe.operatorRoot}`);
   lines.push(...buildPromotionReadinessLines(params));
+  lines.push(...buildReleaseReceiptLines(params));
   lines.push(
     `Checklist: strict=${params.probe.readiness.strict ? "yes" : "no"} | gateway=${params.probe.readiness.gatewayReachable ? "yes" : "no"} | route-probe=${params.probe.readiness.routeProbeReady ? "yes" : params.probe.readiness.routeProbeSkipped ? "skipped" : "no"} | built-startup=${params.probe.readiness.builtStartupProofReady ? "yes" : "no"}`,
   );
@@ -1926,6 +1963,8 @@ function buildInboxMessage(params: {
   workItems?: Awaited<ReturnType<typeof readProjectWorkItemInventory>>;
   repoConfig?: OpenClawCodeChatopsRepoConfig;
   setupCheck?: SetupCheckProbePayload;
+  promotionReceipt?: Awaited<ReturnType<typeof readProjectPromotionReceiptArtifact>>;
+  rollbackReceipt?: Awaited<ReturnType<typeof readProjectRollbackReceiptArtifact>>;
 }): string {
   const repoKey = formatRepoKey(params.repo);
   const pending = params.state.pendingApprovals.filter((entry) =>
@@ -2066,6 +2105,7 @@ function buildInboxMessage(params: {
     lines.push(
       ...buildPromotionReadinessLines({ repoConfig: params.repoConfig, probe: params.setupCheck }),
     );
+    lines.push(...buildReleaseReceiptLines(params));
   }
 
   return lines.join("\n");
@@ -4256,6 +4296,12 @@ export default {
           api,
           repoConfig,
         });
+        const promotionReceipt = await readProjectPromotionReceiptArtifact(
+          repoConfig.repoRoot,
+        ).catch(() => undefined);
+        const rollbackReceipt = await readProjectRollbackReceiptArtifact(repoConfig.repoRoot).catch(
+          () => undefined,
+        );
         return {
           text: buildInboxMessage({
             repo: {
@@ -4267,6 +4313,8 @@ export default {
             workItems,
             repoConfig,
             setupCheck,
+            promotionReceipt,
+            rollbackReceipt,
           }),
         };
       },
@@ -4303,10 +4351,18 @@ export default {
           api,
           repoConfig,
         });
+        const promotionReceipt = await readProjectPromotionReceiptArtifact(
+          repoConfig.repoRoot,
+        ).catch(() => undefined);
+        const rollbackReceipt = await readProjectRollbackReceiptArtifact(repoConfig.repoRoot).catch(
+          () => undefined,
+        );
         return {
           text: buildPromotionChecklistMessage({
             repoConfig,
             probe: setupCheck,
+            promotionReceipt,
+            rollbackReceipt,
           }),
         };
       },
