@@ -15,10 +15,13 @@ export interface OpenClawCodeQueuedRun {
   issueKey: string;
 }
 
+export type OpenClawCodePendingApprovalKind = "manual" | "execution-start-gated";
+
 export interface OpenClawCodePendingApproval {
   issueKey: string;
   notifyChannel: string;
   notifyTarget: string;
+  approvalKind?: OpenClawCodePendingApprovalKind;
 }
 
 export interface OpenClawCodeIssueStatusSnapshot {
@@ -346,6 +349,29 @@ function normalizeProviderPause(raw: unknown): OpenClawCodeProviderPause | undef
   };
 }
 
+function normalizePendingApproval(raw: unknown): OpenClawCodePendingApproval | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const candidate = raw as Partial<OpenClawCodePendingApproval>;
+  if (
+    typeof candidate.issueKey !== "string" ||
+    typeof candidate.notifyChannel !== "string" ||
+    typeof candidate.notifyTarget !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    issueKey: candidate.issueKey,
+    notifyChannel: candidate.notifyChannel,
+    notifyTarget: candidate.notifyTarget,
+    approvalKind:
+      candidate.approvalKind === "manual" || candidate.approvalKind === "execution-start-gated"
+        ? candidate.approvalKind
+        : undefined,
+  };
+}
+
 function buildStatusSnapshot(params: {
   run: WorkflowRun;
   status: string;
@@ -502,7 +528,12 @@ function normalizeState(raw: unknown): OpenClawCodeQueueState {
     : [];
   return {
     version: 1,
-    pendingApprovals: Array.isArray(candidate.pendingApprovals) ? candidate.pendingApprovals : [],
+    pendingApprovals: Array.isArray(candidate.pendingApprovals)
+      ? candidate.pendingApprovals.flatMap((value) => {
+          const pending = normalizePendingApproval(value);
+          return pending ? [pending] : [];
+        })
+      : [],
     queue: Array.isArray(candidate.queue) ? candidate.queue : [],
     currentRun:
       candidate.currentRun && typeof candidate.currentRun === "object"
@@ -816,6 +847,36 @@ export class OpenClawCodeChatopsStore {
       state.pendingApprovals.push(pending);
       state.statusByIssue[pending.issueKey] = status;
       return true;
+    });
+  }
+
+  async upsertPendingApproval(
+    pending: OpenClawCodePendingApproval,
+    status = "Awaiting chat approval.",
+  ): Promise<"added" | "updated" | "already-tracked"> {
+    return await this.mutateState((state) => {
+      if (
+        state.currentRun?.issueKey === pending.issueKey ||
+        state.queue.some((entry) => entry.issueKey === pending.issueKey)
+      ) {
+        return "already-tracked";
+      }
+      const existingIndex = state.pendingApprovals.findIndex(
+        (entry) => entry.issueKey === pending.issueKey,
+      );
+      if (existingIndex >= 0) {
+        const existing = state.pendingApprovals[existingIndex];
+        state.pendingApprovals[existingIndex] = {
+          ...existing,
+          ...pending,
+          approvalKind: pending.approvalKind ?? existing?.approvalKind,
+        };
+        state.statusByIssue[pending.issueKey] = status;
+        return "updated";
+      }
+      state.pendingApprovals.push(pending);
+      state.statusByIssue[pending.issueKey] = status;
+      return "added";
     });
   }
 

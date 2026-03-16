@@ -146,6 +146,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] make `/occode-start` respect execution-start gate decisions
 - [x] make auto webhook intake respect execution-start gate decisions
 - [x] make `/occode-intake` respect execution-start gate decisions
+- [x] auto-resume execution-start-held work after chat gate approval
 - [ ] show policy explanation when auto-merge is disallowed
 - [ ] show policy explanation when suitability blocks autonomous execution
 - [ ] show promotion-readiness and rollback-readiness in chat-facing operator views

@@ -100,6 +100,24 @@ function issueKeyMatchesRepo(issueKey: string, repo: { owner: string; repo: stri
   return issueKey.toLowerCase().startsWith(`${formatRepoKey(repo).toLowerCase()}#`);
 }
 
+function parseIssueKey(
+  issueKey: string,
+): { owner: string; repo: string; number: number } | undefined {
+  const match = issueKey.match(/^([^/]+)\/([^#]+)#(\d+)$/);
+  if (!match) {
+    return undefined;
+  }
+  const number = Number.parseInt(match[3] ?? "", 10);
+  if (!Number.isInteger(number)) {
+    return undefined;
+  }
+  return {
+    owner: match[1] ?? "",
+    repo: match[2] ?? "",
+    number,
+  };
+}
+
 function formatStageLabel(stage: string): string {
   return stage
     .split("-")
@@ -642,6 +660,7 @@ async function queueOrGateIssueExecution(params: {
         issueKey: formatIssueKey(params.issue),
         notifyChannel: params.destination.channel,
         notifyTarget: params.destination.target,
+        approvalKind: "execution-start-gated",
       },
       params.gatedStatus ?? "Awaiting execution-start gate approval.",
     );
@@ -746,7 +765,8 @@ function buildExecutionStartGateDeferredMessage(params: {
         ? `Suggestions: ${params.gate.suggestions.slice(0, 2).join(" ; ")}`
         : undefined,
     `Use /occode-gates ${params.issue.owner}/${params.issue.repo} to inspect the current gate state.`,
-    `Use /occode-gate-decide ${params.issue.owner}/${params.issue.repo} execution-start approved [note] and then /occode-start ${issueKey} when a human accepts the current execution-start risk.`,
+    `Use /occode-gate-decide ${params.issue.owner}/${params.issue.repo} execution-start approved [note] when a human accepts the current execution-start risk.`,
+    "Once the gate is approved, openclawcode will resume this held execution automatically.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -946,9 +966,78 @@ function buildExecutionStartGateBlockedMessage(params: {
         : undefined,
     `Use /occode-gates ${formatRepoKey(params.repo)} to inspect all stage gates.`,
     `Use /occode-gate-decide ${formatRepoKey(params.repo)} execution-start approved [note] after a human accepts the current execution-start risk.`,
+    "Once the gate is approved, openclawcode will resume any held execution-start work automatically.",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+async function holdExecutionStartAttempt(params: {
+  store: OpenClawCodeChatopsStore;
+  issue: {
+    owner: string;
+    repo: string;
+    number: number;
+  };
+  destination: {
+    channel: string;
+    target: string;
+  };
+}): Promise<"added" | "updated" | "already-tracked"> {
+  return await params.store.upsertPendingApproval(
+    {
+      issueKey: formatIssueKey(params.issue),
+      notifyChannel: params.destination.channel,
+      notifyTarget: params.destination.target,
+      approvalKind: "execution-start-gated",
+    },
+    "Awaiting execution-start gate approval.",
+  );
+}
+
+async function resumeExecutionStartHeldApprovals(params: {
+  api: OpenClawPluginApi;
+  store: OpenClawCodeChatopsStore;
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+}): Promise<string[]> {
+  const state = await params.store.snapshot();
+  const heldApprovals = state.pendingApprovals.filter(
+    (entry) =>
+      entry.approvalKind === "execution-start-gated" &&
+      issueKeyMatchesRepo(entry.issueKey, {
+        owner: params.repoConfig.owner,
+        repo: params.repoConfig.repo,
+      }),
+  );
+
+  const resumedIssueKeys: string[] = [];
+  for (const pending of heldApprovals) {
+    const issue = parseIssueKey(pending.issueKey);
+    if (!issue) {
+      continue;
+    }
+    const queued = await params.store.promotePendingApprovalToQueue({
+      issueKey: pending.issueKey,
+      request: buildRunRequestFromCommand({
+        command: {
+          action: "start",
+          issue,
+        },
+        config: params.repoConfig,
+      }),
+      fallbackNotifyChannel: pending.notifyChannel,
+      fallbackNotifyTarget: pending.notifyTarget,
+      status: "Execution-start gate approved and queued.",
+    });
+    if (queued) {
+      resumedIssueKeys.push(pending.issueKey);
+    }
+  }
+
+  if (resumedIssueKeys.length > 0) {
+    kickQueueDrain(params.api, params.store);
+  }
+  return resumedIssueKeys;
 }
 
 function buildInboxMessage(params: {
@@ -2186,8 +2275,26 @@ export default {
           repo: command.issue.repo,
           number: command.issue.number,
         });
+        const currentStatus = await store.getStatus(issueKey);
+        const pendingApproval = await store.getPendingApproval(issueKey);
+        if (await store.isQueuedOrRunning(issueKey)) {
+          return { text: `${issueKey} is already in progress.\n${currentStatus ?? "Queued."}` };
+        }
         const executionStartGate = await readExecutionStartGate(repoConfig.repoRoot);
         if (executionStartGate && executionStartGate.gate.readiness !== "ready") {
+          await holdExecutionStartAttempt({
+            store,
+            issue: command.issue,
+            destination: {
+              channel:
+                pendingApproval?.notifyChannel ?? ctx.channel?.trim() ?? repoConfig.notifyChannel,
+              target:
+                resolveCommandNotifyTarget(ctx) ||
+                ctx.senderId?.trim() ||
+                pendingApproval?.notifyTarget ||
+                repoConfig.notifyTarget,
+            },
+          });
           return {
             text: buildExecutionStartGateBlockedMessage({
               repo: {
@@ -2197,11 +2304,6 @@ export default {
               gate: executionStartGate.gate,
             }),
           };
-        }
-        const currentStatus = await store.getStatus(issueKey);
-        const pendingApproval = await store.getPendingApproval(issueKey);
-        if (await store.isQueuedOrRunning(issueKey)) {
-          return { text: `${issueKey} is already in progress.\n${currentStatus ?? "Queued."}` };
         }
 
         const request = buildRunRequestFromCommand({
@@ -2678,6 +2780,16 @@ export default {
             actor: resolveCommandNotifyTarget(ctx) ?? ctx.senderId ?? ctx.channel,
           });
           const gate = artifact.gates.find((entry) => entry.gateId === parsed.gateId);
+          const resumedIssueKeys =
+            parsed.gateId === "execution-start" &&
+            parsed.decision === "approved" &&
+            gate?.readiness === "ready"
+              ? await resumeExecutionStartHeldApprovals({
+                  api,
+                  store,
+                  repoConfig,
+                })
+              : [];
           return {
             text: [
               `Recorded stage-gate decision for ${formatRepoKey(parsed.repo)}`,
@@ -2685,6 +2797,10 @@ export default {
               `Decision: ${parsed.decision}`,
               gate ? `Readiness: ${gate.readiness}` : undefined,
               parsed.note ? `Note: ${parsed.note}` : undefined,
+              resumedIssueKeys.length > 0
+                ? `Resumed held executions: ${resumedIssueKeys.length}`
+                : undefined,
+              ...resumedIssueKeys.slice(0, 5).map((issueKey) => `- ${issueKey}`),
             ]
               .filter(Boolean)
               .join("\n"),

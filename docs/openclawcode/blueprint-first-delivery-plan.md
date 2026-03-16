@@ -192,9 +192,19 @@ Current foothold:
 - issue-driven workflow runs now capture the current blueprint, role-routing,
   and stage-gate snapshot so the first blueprint-first state also reaches
   `.openclawcode/runs/*` and `openclaw code run --json`
-- the remaining gap is runtime integration:
-  - decisions do not yet steer live workflow execution
-  - chat surfaces do not yet expose these gates
+- chat surfaces now expose:
+  - `/occode-blueprint`
+  - `/occode-gates`
+  - `/occode-gate-decide`
+  - blueprint backlog and routing summaries in `/occode-inbox` and `/occode-status`
+- `execution-start` now actively steers live execution:
+  - `/occode-start` refuses to queue when the gate is not ready
+  - auto webhook intake and `/occode-intake` hold execution behind the same gate
+  - once a human records `execution-start approved`, held execution-start work resumes automatically
+- the remaining gap is deeper runtime integration:
+  - manual worktree takeover is still missing
+  - provider switching is still missing
+  - structured resume after manual edits is still missing
 
 ### Phase B7: Proofs And Productization
 
@@ -239,3 +249,4 @@ The near-term implementation order is:
 - made `/occode-start` honor execution-start gate readiness and approval
 - made auto webhook intake and `/occode-intake` honor execution-start gate
   readiness and approval
+- made chat gate approval automatically resume held execution-start work

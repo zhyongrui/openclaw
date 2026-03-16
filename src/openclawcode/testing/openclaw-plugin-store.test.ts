@@ -376,6 +376,42 @@ describe("OpenClawCodeChatopsStore", () => {
     }
   });
 
+  it("can update an existing pending approval into an execution-start gate hold", async () => {
+    const fixture = await createStore();
+
+    try {
+      const pending = {
+        issueKey: "zhyongrui/openclawcode#1071",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:123",
+      };
+      await fixture.store.addPendingApproval(pending);
+
+      const outcome = await fixture.store.upsertPendingApproval(
+        {
+          issueKey: pending.issueKey,
+          notifyChannel: "feishu",
+          notifyTarget: "user:current-chat",
+          approvalKind: "execution-start-gated",
+        },
+        "Awaiting execution-start gate approval.",
+      );
+
+      expect(outcome).toBe("updated");
+      expect(await fixture.store.getPendingApproval(pending.issueKey)).toEqual({
+        issueKey: pending.issueKey,
+        notifyChannel: "feishu",
+        notifyTarget: "user:current-chat",
+        approvalKind: "execution-start-gated",
+      });
+      expect(await fixture.store.getStatus(pending.issueKey)).toBe(
+        "Awaiting execution-start gate approval.",
+      );
+    } finally {
+      await fs.rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
   it("can promote directly to queue when no pending approval exists", async () => {
     const fixture = await createStore();
 

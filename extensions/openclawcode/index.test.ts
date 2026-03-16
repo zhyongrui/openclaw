@@ -1329,6 +1329,7 @@ describe("openclawcode extension", () => {
           issueKey: "zhyongrui/openclawcode#206",
           notifyChannel: "telegram",
           notifyTarget: "chat:primary",
+          approvalKind: "execution-start-gated",
         },
       ]);
       expect(snapshot.statusByIssue["zhyongrui/openclawcode#206"]).toBe(
@@ -1339,6 +1340,25 @@ describe("openclawcode extension", () => {
           message: expect.stringContaining("execution start is currently gated"),
         }),
       });
+
+      const decision = await fixture.commands.get("occode-gate-decide")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-gate-decide execution-start approved Accepted for this run",
+        args: "execution-start approved Accepted for this run",
+        senderId: "user:operator",
+        config: {},
+      });
+
+      expect(decision?.text).toContain("Decision: approved");
+      expect(decision?.text).toContain("Readiness: ready");
+      expect(decision?.text).toContain("Resumed held executions: 1");
+      const resumed = await fixture.store.snapshot();
+      expect(resumed.pendingApprovals).toEqual([]);
+      expect(resumed.queue).toHaveLength(1);
+      expect(resumed.statusByIssue["zhyongrui/openclawcode#206"]).toBe(
+        "Execution-start gate approved and queued.",
+      );
     } finally {
       await cleanupPluginFixture(fixture);
     }
@@ -1531,6 +1551,7 @@ describe("openclawcode extension", () => {
           issueKey: "zhyongrui/openclawcode#223",
           notifyChannel: "feishu",
           notifyTarget: "user:intake-chat",
+          approvalKind: "execution-start-gated",
         },
       ]);
       expect(snapshot.statusByIssue["zhyongrui/openclawcode#223"]).toBe(
@@ -1960,14 +1981,24 @@ describe("openclawcode extension", () => {
 
       const snapshot = await fixture.store.snapshot();
       expect(snapshot.queue).toHaveLength(0);
-      expect(snapshot.pendingApprovals).toHaveLength(1);
+      expect(snapshot.pendingApprovals).toEqual([
+        {
+          issueKey: "zhyongrui/openclawcode#240",
+          notifyChannel: "telegram",
+          notifyTarget: "user:current-chat",
+          approvalKind: "execution-start-gated",
+        },
+      ]);
+      expect(snapshot.statusByIssue["zhyongrui/openclawcode#240"]).toBe(
+        "Awaiting execution-start gate approval.",
+      );
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
     }
   });
 
-  it("allows /occode-start after execution-start is approved in chat", async () => {
+  it("automatically resumes held /occode-start work after execution-start is approved in chat", async () => {
     const fixture = await registerPluginFixture();
     try {
       await fixture.store.addPendingApproval({
@@ -2036,6 +2067,16 @@ describe("openclawcode extension", () => {
       await writeProjectWorkItemInventory(fixture.repoRoot);
       await writeProjectDiscoveryInventory(fixture.repoRoot);
 
+      const blocked = await fixture.commands.get("occode-start")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-start #241",
+        args: "#241",
+        to: "user:current-chat",
+        config: {},
+      });
+      expect(blocked?.text).toContain("Execution start is currently gated");
+
       const decision = await fixture.commands.get("occode-gate-decide")?.handler({
         channel: "telegram",
         isAuthorizedSender: true,
@@ -2046,22 +2087,108 @@ describe("openclawcode extension", () => {
       });
       expect(decision?.text).toContain("Decision: approved");
       expect(decision?.text).toContain("Readiness: ready");
-
-      const result = await fixture.commands.get("occode-start")?.handler({
-        channel: "telegram",
-        isAuthorizedSender: true,
-        commandBody: "/occode-start #241",
-        args: "#241",
-        to: "user:current-chat",
-        config: {},
-      });
-
-      expect(result).toEqual({
-        text: "Queued zhyongrui/openclawcode#241. I will post status updates here.",
-      });
+      expect(decision?.text).toContain("Resumed held executions: 1");
       const snapshot = await fixture.store.snapshot();
       expect(snapshot.queue).toHaveLength(1);
       expect(snapshot.pendingApprovals).toEqual([]);
+      expect(snapshot.statusByIssue["zhyongrui/openclawcode#241"]).toBe(
+        "Execution-start gate approved and queued.",
+      );
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not auto-resume untouched manual approvals when execution-start is approved", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.addPendingApproval({
+        issueKey: "zhyongrui/openclawcode#242",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+      });
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Manual Approval Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:05:00.000Z",
+          "statusChangedAt: 2026-03-16T00:05:00.000Z",
+          "agreedAt: 2026-03-16T00:05:00.000Z",
+          "---",
+          "",
+          "# Manual Approval Blueprint",
+          "",
+          "## Goal",
+          "Keep ordinary pending approvals manual until someone explicitly starts them.",
+          "",
+          "## Success Criteria",
+          "- Gate approval alone does not bypass manual approval.",
+          "",
+          "## Scope",
+          "- In scope: preserve manual approval semantics.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Only execution-start-held items should auto resume.",
+          "",
+          "## Risks",
+          "- Auto-resuming manual approvals would skip operator intent.",
+          "",
+          "## Assumptions",
+          "- Operators can still use /occode-start later.",
+          "",
+          "## Human Gates",
+          "- Execution start: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: OpenClaw Default",
+          "- Doc-writer: Claude Code",
+          "",
+          "## Workstreams",
+          "- Preserve manual approval semantics.",
+          "",
+          "## Open Questions",
+          "- Should gate approval alone bypass manual review? No.",
+          "",
+          "## Change Log",
+          "- 2026-03-16: protect manual approvals from auto resume.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      await writeProjectDiscoveryInventory(fixture.repoRoot);
+
+      const decision = await fixture.commands.get("occode-gate-decide")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-gate-decide execution-start approved Accepted for this repo",
+        args: "execution-start approved Accepted for this repo",
+        senderId: "user:operator",
+        config: {},
+      });
+
+      expect(decision?.text).toContain("Decision: approved");
+      expect(decision?.text).not.toContain("Resumed held executions:");
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.queue).toEqual([]);
+      expect(snapshot.pendingApprovals).toEqual([
+        {
+          issueKey: "zhyongrui/openclawcode#242",
+          notifyChannel: "telegram",
+          notifyTarget: "chat:primary",
+        },
+      ]);
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });

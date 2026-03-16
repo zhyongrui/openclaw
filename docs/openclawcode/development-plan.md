@@ -1951,8 +1951,8 @@ CLI.
 - `/occode-gate-decide` records `approved`, `changes-requested`, or `blocked`
   decisions directly into `.openclawcode/stage-gates.json`
 - this is still only the first handoff slice:
-  - it does not yet resume runs automatically
   - it does not yet switch providers from chat
+  - it does not yet support manual worktree takeover or post-edit resume
 
 ## Gate-Aware Start Control
 
@@ -1962,8 +1962,10 @@ The first stage-gate write path now actually influences execution.
 - `/occode-start` now refreshes the stage-gate artifact before queueing
 - if `execution-start` is still gated, `/occode-start` returns a gate-specific
   message instead of queueing the issue
-- once a human records `execution-start approved`, the same `/occode-start`
-  path can proceed and enqueue the issue
+- when `/occode-start` is blocked by `execution-start`, that attempted start is
+  now stored as a resumable execution-start hold
+- once a human records `execution-start approved`, the held start attempt is
+  resumed automatically without requiring another `/occode-start`
 
 ## Gate-Aware Autonomous Intake
 
@@ -1978,3 +1980,5 @@ only manual `/occode-start`.
   - still creates the GitHub issue
   - but stops before queueing when `execution-start` is not ready
   - stores the issue as a pending approval with gate guidance
+- the same gate approval now resumes these held autonomous intake items
+  automatically, instead of forcing another manual start step
