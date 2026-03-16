@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +11,7 @@ import {
   DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS,
   DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS,
   openclawCodeBlueprintInitCommand,
+  openclawCodeBlueprintSetSectionCommand,
   openclawCodeBlueprintSetProviderRoleCommand,
   openclawCodeRoleRoutingRefreshCommand,
   openclawCodeRoleRoutingShowCommand,
@@ -19,7 +21,11 @@ import {
   openclawCodeBlueprintSetStatusCommand,
   openclawCodeBlueprintShowCommand,
   openclawCodeListValidationIssuesCommand,
+  openclawCodePromotionGateRefreshCommand,
+  openclawCodePromotionGateShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
+  openclawCodeRollbackSuggestionRefreshCommand,
+  openclawCodeRollbackSuggestionShowCommand,
   openclawCodeRunCommand,
   openclawCodeSeedValidationIssueCommand,
   openclawCodeSeedValidationIssueTemplateIds,
@@ -749,6 +755,10 @@ describe("openclawCodeRunCommand", () => {
           reviewUrl: "https://github.com/openclaw/openclaw/pull/42#pullrequestreview-9",
           requestedCoderAgentId: "codex-rerun",
           requestedVerifierAgentId: "claude-rerun",
+          manualTakeoverRequestedAt: "2026-01-01T23:50:00.000Z",
+          manualTakeoverActor: "user:operator",
+          manualTakeoverWorktreePath: "/repo/.openclawcode/worktrees/issue-2",
+          manualResumeNote: "Human updated the worktree before rerun.",
         },
       }),
     );
@@ -805,6 +815,10 @@ describe("openclawCodeRunCommand", () => {
     );
     expect(payload.rerunRequestedCoderAgentId).toBe("codex-rerun");
     expect(payload.rerunRequestedVerifierAgentId).toBe("claude-rerun");
+    expect(payload.rerunManualTakeoverRequestedAt).toBe("2026-01-01T23:50:00.000Z");
+    expect(payload.rerunManualTakeoverActor).toBe("user:operator");
+    expect(payload.rerunManualTakeoverWorktreePath).toBe("/repo/.openclawcode/worktrees/issue-2");
+    expect(payload.rerunManualResumeNote).toBe("Human updated the worktree before rerun.");
   });
 
   it("reports false when rerun context does not include review metadata", async () => {
@@ -828,6 +842,10 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.rerunReviewSubmittedAt).toBeNull();
     expect(payload.rerunRequestedCoderAgentId).toBeNull();
     expect(payload.rerunRequestedVerifierAgentId).toBeNull();
+    expect(payload.rerunManualTakeoverRequestedAt).toBeNull();
+    expect(payload.rerunManualTakeoverActor).toBeNull();
+    expect(payload.rerunManualTakeoverWorktreePath).toBeNull();
+    expect(payload.rerunManualResumeNote).toBeNull();
     expect(payload.rerunReviewSummary).toBeNull();
     expect(payload.rerunReviewUrl).toBeNull();
   });
@@ -1524,6 +1542,40 @@ describe("openclawCodeRunCommand", () => {
     );
     const content = await readFile(path.join(repoRoot, "PROJECT-BLUEPRINT.md"), "utf8");
     expect(content).toContain("- Reviewer: Claude Code");
+  });
+
+  it("updates one blueprint section and refreshes clarification and gate artifacts", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-blueprint-section-set-"));
+
+    await openclawCodeBlueprintSetSectionCommand(
+      {
+        repoRoot,
+        section: "goal",
+        body: "Capture blueprint-first goals from chat before issue creation starts.",
+        createIfMissing: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.updatedSection).toBe("Goal");
+    expect(payload.blueprint.goalSummary).toBe(
+      "Capture blueprint-first goals from chat before issue creation starts.",
+    );
+    expect(payload.clarification.questions).not.toContain(
+      "Replace the default Goal placeholder with the actual project objective.",
+    );
+    expect(payload.stageGates.gates).toContainEqual(
+      expect.objectContaining({
+        gateId: "goal-agreement",
+      }),
+    );
+    const content = await readFile(path.join(repoRoot, "PROJECT-BLUEPRINT.md"), "utf8");
+    expect(content).toContain(
+      "Capture blueprint-first goals from chat before issue creation starts.",
+    );
+    expect(content).toContain("updated `Goal` via openclawcode blueprint workflow.");
   });
 
   it("reports clarification questions and suggestions for the default blueprint scaffold", async () => {
@@ -2254,6 +2306,125 @@ describe("openclawCodeRunCommand", () => {
     );
   });
 
+  it("persists a machine-readable promotion gate artifact", async () => {
+    const repoRoot = await createPromotionArtifactRepoRoot();
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeRoleRoutingRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeStageGatesRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeStageGatesDecideCommand(
+      {
+        repoRoot,
+        gate: "merge-promotion",
+        decision: "approved",
+        actor: "operator",
+        note: "Promotion approved after proofs.",
+        json: true,
+      },
+      runtime,
+    );
+    runtime.log.mockClear();
+
+    await openclawCodePromotionGateRefreshCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    let payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      exists: true,
+      schemaVersion: 1,
+      branchName: "sync/upstream-2026-03-16",
+      baseBranch: "main",
+      setupCheckAvailable: true,
+      lowRiskProofReady: true,
+      fallbackProofReady: false,
+      promotionReady: true,
+      ready: true,
+      mergePromotionGateReadiness: "ready",
+      blockerCount: 0,
+    });
+    expect(payload.rollbackTargetCommitSha).toMatch(/[0-9a-f]{40}/);
+
+    const persisted = JSON.parse(
+      await readFile(path.join(repoRoot, ".openclawcode", "promotion-gate.json"), "utf8"),
+    );
+    expect(persisted.ready).toBe(true);
+
+    runtime.log.mockClear();
+    await openclawCodePromotionGateShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.exists).toBe(true);
+    expect(payload.artifactPath).toBe(path.join(repoRoot, ".openclawcode", "promotion-gate.json"));
+  });
+
+  it("persists a machine-readable rollback suggestion artifact", async () => {
+    const repoRoot = await createPromotionArtifactRepoRoot();
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeRoleRoutingRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeStageGatesRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodePromotionGateRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+
+    await openclawCodeRollbackSuggestionRefreshCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    let payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      exists: true,
+      schemaVersion: 1,
+      branchName: "sync/upstream-2026-03-16",
+      baseBranch: "main",
+      targetBranch: "main",
+      promotionArtifactExists: true,
+      promotionReady: true,
+      recommended: true,
+    });
+    expect(payload.targetRef).toMatch(/^main@[0-9a-f]{40}$/);
+
+    const persisted = JSON.parse(
+      await readFile(path.join(repoRoot, ".openclawcode", "rollback-suggestion.json"), "utf8"),
+    );
+    expect(persisted.targetBranch).toBe("main");
+
+    runtime.log.mockClear();
+    await openclawCodeRollbackSuggestionShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.exists).toBe(true);
+    expect(payload.reason).toContain("baseline branch");
+  });
+
   it("renders a dry-run validation issue template without creating a GitHub issue", async () => {
     await openclawCodeSeedValidationIssueCommand(
       {
@@ -2554,6 +2725,120 @@ async function createValidationAssessmentRepoRoot(params: { fieldName: string })
   await writeFile(
     path.join(repoRoot, "docs/openclawcode/run-json-contract.md"),
     `- \`${params.fieldName}\`\n`,
+    "utf8",
+  );
+  return repoRoot;
+}
+
+function runGitTestCommand(cwd: string, args: string[]) {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+  }
+}
+
+async function createPromotionArtifactRepoRoot(): Promise<string> {
+  const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-promotion-artifact-"));
+  await mkdir(path.join(repoRoot, "scripts"), { recursive: true });
+  await writeFile(path.join(repoRoot, "README.md"), "# promotion artifact repo\n", "utf8");
+  runGitTestCommand(repoRoot, ["init", "-b", "main"]);
+  runGitTestCommand(repoRoot, ["config", "user.email", "test@example.com"]);
+  runGitTestCommand(repoRoot, ["config", "user.name", "OpenClawCode Test"]);
+  runGitTestCommand(repoRoot, ["add", "README.md"]);
+  runGitTestCommand(repoRoot, ["commit", "-m", "init"]);
+  runGitTestCommand(repoRoot, ["checkout", "-b", "sync/upstream-2026-03-16"]);
+  await writeFile(
+    path.join(repoRoot, "scripts", "openclawcode-setup-check.sh"),
+    `#!/usr/bin/env bash
+set -euo pipefail
+cat <<'EOF'
+{
+  "ok": true,
+  "strict": true,
+  "repoRoot": ${JSON.stringify(repoRoot)},
+  "operatorRoot": "/tmp/openclaw-operator",
+  "readiness": {
+    "basic": true,
+    "strict": true,
+    "lowRiskProofReady": true,
+    "fallbackProofReady": false,
+    "promotionReady": true,
+    "gatewayReachable": true,
+    "routeProbeReady": true,
+    "routeProbeSkipped": false,
+    "builtStartupProofRequested": true,
+    "builtStartupProofReady": true,
+    "nextAction": "ready-for-promotion"
+  },
+  "summary": {
+    "pass": 19,
+    "warn": 0,
+    "fail": 0
+  }
+}
+EOF
+`,
+    "utf8",
+  );
+  await writeFile(
+    path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+    [
+      "---",
+      "schemaVersion: 1",
+      "title: Promotion Blueprint",
+      "status: agreed",
+      "createdAt: 2026-03-16T00:00:00.000Z",
+      "updatedAt: 2026-03-16T00:00:00.000Z",
+      "statusChangedAt: 2026-03-16T00:00:00.000Z",
+      "agreedAt: 2026-03-16T00:00:00.000Z",
+      "---",
+      "",
+      "# Promotion Blueprint",
+      "",
+      "## Goal",
+      "Ship machine-readable promotion and rollback artifacts.",
+      "",
+      "## Success Criteria",
+      "- Persist promotion readiness for automation.",
+      "",
+      "## Scope",
+      "- In scope: repo-local release artifacts.",
+      "- Out of scope: live promotion itself.",
+      "",
+      "## Non-Goals",
+      "- None.",
+      "",
+      "## Constraints",
+      "- Technical: use deterministic files.",
+      "",
+      "## Risks",
+      "- Promotion may be attempted without a stable rollback target.",
+      "",
+      "## Assumptions",
+      "- main is the long-lived baseline branch.",
+      "",
+      "## Human Gates",
+      "- Goal agreement: required",
+      "- Merge or promotion: operator may intervene",
+      "",
+      "## Provider Strategy",
+      "- Planner: Claude Code",
+      "- Coder: Codex",
+      "- Verifier: Codex",
+      "",
+      "## Workstreams",
+      "- Persist promotion and rollback artifacts.",
+      "",
+      "## Open Questions",
+      "- None.",
+      "",
+      "## Change Log",
+      "- 2026-03-16: promotion artifact baseline.",
+      "",
+    ].join("\n"),
     "utf8",
   );
   return repoRoot;

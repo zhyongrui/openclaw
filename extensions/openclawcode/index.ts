@@ -34,10 +34,14 @@ import {
 } from "../../src/integrations/openclaw-plugin/index.js";
 import {
   inspectProjectBlueprintClarifications,
+  parseProjectBlueprintSectionName,
   parseProjectBlueprintRoleId,
   projectBlueprintRoleIds,
+  projectBlueprintSectionIds,
   readProjectBlueprintDocument,
+  updateProjectBlueprintSection,
   updateProjectBlueprintProviderRole,
+  updateProjectBlueprintStatus,
 } from "../../src/openclawcode/blueprint.js";
 import type { GitHubIssueClient } from "../../src/openclawcode/github/index.js";
 import { GitHubRestClient } from "../../src/openclawcode/github/index.js";
@@ -937,6 +941,130 @@ async function queueOrGateIssueExecution(params: {
   };
 }
 
+async function createAndHandleChatIntakeIssue(params: {
+  store: OpenClawCodeChatopsStore;
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  destination: {
+    channel: string;
+    target: string;
+  };
+  draft: {
+    title: string;
+    body: string;
+  };
+}): Promise<{ text: string; shouldKickQueue: boolean; issueCreated: boolean }> {
+  const github = new GitHubRestClient();
+  let createdIssue: Awaited<ReturnType<GitHubRestClient["createIssue"]>>;
+  try {
+    createdIssue = await github.createIssue({
+      owner: params.repoConfig.owner,
+      repo: params.repoConfig.repo,
+      title: params.draft.title,
+      body: params.draft.body,
+    });
+  } catch (error) {
+    return {
+      text: `Failed to create a GitHub issue for ${params.repoConfig.owner}/${params.repoConfig.repo}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      shouldKickQueue: false,
+      issueCreated: false,
+    };
+  }
+
+  const decision = decideIssueWebhookIntake({
+    event: buildSyntheticIssueWebhookEvent({ issue: createdIssue }),
+    config: {
+      ...params.repoConfig,
+      triggerLabels: [],
+      skipLabels: [],
+    },
+  });
+  const issueKey = formatIssueKey(createdIssue);
+  if (!decision.accept || !decision.issue) {
+    return {
+      text: [
+        `Created GitHub issue ${issueKey}.`,
+        createdIssue.url,
+        `Automatic intake was skipped: ${decision.reason}`,
+        `Use /occode-start ${issueKey} if you want to run it manually.`,
+      ].join("\n"),
+      shouldKickQueue: false,
+      issueCreated: true,
+    };
+  }
+
+  if (decision.precheck?.decision === "escalate") {
+    const accepted = await recordPrecheckedEscalationSnapshot({
+      store: params.store,
+      issue: decision.issue,
+      destination: params.destination,
+      summary: decision.precheck.summary,
+      suitabilityDecision: decision.precheck.decision,
+    });
+    if (!accepted) {
+      return {
+        text: [
+          `Created GitHub issue ${issueKey}.`,
+          createdIssue.url,
+          (await params.store.getStatus(issueKey)) ?? `${issueKey} is already tracked.`,
+        ].join("\n"),
+        shouldKickQueue: false,
+        issueCreated: true,
+      };
+    }
+    return {
+      text: buildIntakeEscalatedMessage({
+        issue: createdIssue,
+        summary: decision.precheck.summary,
+      }),
+      shouldKickQueue: false,
+      issueCreated: true,
+    };
+  }
+
+  const queued = await queueOrGateIssueExecution({
+    store: params.store,
+    repoConfig: params.repoConfig,
+    issue: decision.issue,
+    destination: params.destination,
+    queuedStatus: "Queued from chat intake.",
+    gatedStatus: "Awaiting execution-start gate approval.",
+  });
+  if (queued.outcome === "already-tracked") {
+    return {
+      text: [
+        `Created GitHub issue ${issueKey}.`,
+        createdIssue.url,
+        (await params.store.getStatus(issueKey)) ?? `${issueKey} is already queued or running.`,
+      ].join("\n"),
+      shouldKickQueue: false,
+      issueCreated: true,
+    };
+  }
+  if (queued.outcome === "queued") {
+    const providerPause = await params.store.getActiveProviderPause();
+    return {
+      text: buildIntakeQueuedMessage({
+        issue: createdIssue,
+        pause: providerPause,
+      }),
+      shouldKickQueue: true,
+      issueCreated: true,
+    };
+  }
+
+  return {
+    text: buildExecutionStartGateDeferredMessage({
+      issue: createdIssue,
+      gate: queued.gate,
+      source: "chat-intake",
+    }),
+    shouldKickQueue: false,
+    issueCreated: true,
+  };
+}
+
 function buildIntakeQueuedMessage(params: {
   issue: {
     owner: string;
@@ -1015,6 +1143,192 @@ function buildExecutionStartGateDeferredMessage(params: {
     `Use /occode-gates ${params.issue.owner}/${params.issue.repo} to inspect the current gate state.`,
     `Use /occode-gate-decide ${params.issue.owner}/${params.issue.repo} execution-start approved [note] when a human accepts the current execution-start risk.`,
     "Once the gate is approved, openclawcode will resume this held execution automatically.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+type ChatIntakeClarificationReport = {
+  needsConfirmation: boolean;
+  questions: string[];
+  suggestions: string[];
+};
+
+function analyzeChatIntakeDraft(params: {
+  title: string;
+  bodySynthesized: boolean;
+}): ChatIntakeClarificationReport {
+  const questions = new Set<string>();
+  const suggestions = new Set<string>();
+  const wordCount = params.title
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean).length;
+
+  if (params.bodySynthesized) {
+    questions.add("What exact behavior, contract, or operator surface should change?");
+    questions.add("What proof should show the request succeeded?");
+    questions.add("Are there any files, commands, or constraints the workflow must avoid?");
+  }
+  if (wordCount <= 5) {
+    questions.add(
+      "Can you restate the request with a slightly more specific user-visible outcome?",
+    );
+  }
+  suggestions.add(
+    "Use `/occode-intake-edit` to refine the generated title or body before issue creation.",
+  );
+  suggestions.add(
+    "Use `/occode-intake-confirm` only after the draft is specific enough to execute safely.",
+  );
+
+  return {
+    needsConfirmation: params.bodySynthesized || questions.size > 0,
+    questions: [...questions],
+    suggestions: [...suggestions],
+  };
+}
+
+function buildPendingIntakeDraftMessage(params: {
+  repo: { owner: string; repo: string };
+  draft: {
+    title: string;
+    body: string;
+    bodySynthesized: boolean;
+  };
+  clarification: ChatIntakeClarificationReport;
+}): string {
+  return [
+    `openclawcode drafted a chat intake issue for ${formatRepoKey(params.repo)} but is waiting for confirmation.`,
+    `Title: ${params.draft.title}`,
+    `Body source: ${params.draft.bodySynthesized ? "generated from one-line intake" : "edited draft"}`,
+    "Body preview:",
+    params.draft.body,
+    `Clarifications: ${params.clarification.questions.length}`,
+    ...params.clarification.questions.slice(0, 3).map((question) => `- ${question}`),
+    `Suggestions: ${params.clarification.suggestions.length}`,
+    ...params.clarification.suggestions.slice(0, 2).map((suggestion) => `- ${suggestion}`),
+    `Use /occode-intake-edit ${formatRepoKey(params.repo)} <title>\\n<body...> to refine the draft.`,
+    `Use /occode-intake-confirm ${formatRepoKey(params.repo)} when the draft is ready to create on GitHub.`,
+    `Use /occode-intake-reject ${formatRepoKey(params.repo)} [reason] to discard the pending draft.`,
+  ].join("\n");
+}
+
+function parseRepoScopedMultilineBody(params: {
+  commandBody: string;
+  commandName: string;
+  defaults: { owner?: string; repo?: string };
+}):
+  | {
+      repo: { owner: string; repo: string };
+      body: string;
+    }
+  | undefined {
+  const normalized = params.commandBody.replace(/\r\n/g, "\n").trim();
+  const [firstLine = "", ...remainingLines] = normalized.split("\n");
+  const firstLineArgs = firstLine
+    .replace(new RegExp(`^/${params.commandName}\\b\\s*`, "i"), "")
+    .trim();
+  const tokens = firstLineArgs
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  let repo = parseChatopsRepoReference("", params.defaults);
+  let remainderTokens = tokens;
+  const explicitRepo = tokens.length > 0 ? parseChatopsRepoReference(tokens[0] ?? "") : null;
+  if (explicitRepo) {
+    repo = explicitRepo;
+    remainderTokens = tokens.slice(1);
+  }
+  const lines = [remainderTokens.join(" ").trim(), ...remainingLines];
+  while (lines.length > 0 && lines[0]?.trim().length === 0) {
+    lines.shift();
+  }
+  const body = lines.join("\n").trim();
+  if (!repo || !body) {
+    return undefined;
+  }
+  return {
+    repo,
+    body,
+  };
+}
+
+function parseBlueprintEditArgs(params: {
+  commandBody: string;
+  defaults: { owner?: string; repo?: string };
+}):
+  | {
+      repo: { owner: string; repo: string };
+      sectionName: ReturnType<typeof parseProjectBlueprintSectionName>;
+      body: string;
+    }
+  | undefined {
+  const normalized = params.commandBody.replace(/\r\n/g, "\n").trim();
+  const [firstLine = "", ...remainingLines] = normalized.split("\n");
+  const firstLineArgs = firstLine.replace(/^\/occode-blueprint-edit\b\s*/i, "").trim();
+  const tokens = firstLineArgs
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  let repo = parseChatopsRepoReference("", params.defaults);
+  let remainderTokens = tokens;
+  const explicitRepo = tokens.length > 0 ? parseChatopsRepoReference(tokens[0] ?? "") : null;
+  if (explicitRepo) {
+    repo = explicitRepo;
+    remainderTokens = tokens.slice(1);
+  }
+  const sectionToken = remainderTokens[0];
+  const lines = [remainderTokens.slice(1).join(" ").trim(), ...remainingLines];
+  while (lines.length > 0 && lines[0]?.trim().length === 0) {
+    lines.shift();
+  }
+  const body = lines.join("\n").trim();
+  if (!repo || !sectionToken || !body) {
+    return undefined;
+  }
+  return {
+    repo,
+    sectionName: parseProjectBlueprintSectionName(sectionToken),
+    body,
+  };
+}
+
+function buildBlueprintGoalUpdateMessage(params: {
+  repo: { owner: string; repo: string };
+  blueprint: Awaited<ReturnType<typeof readProjectBlueprintDocument>>;
+  clarification: Awaited<ReturnType<typeof inspectProjectBlueprintClarifications>>;
+  executionStartReadiness: string | undefined;
+}): string {
+  const lines = [
+    `openclawcode updated the blueprint goal for ${formatRepoKey(params.repo)}.`,
+    `Status: ${params.blueprint.status ?? "unknown"}`,
+    params.blueprint.revisionId ? `Revision: ${params.blueprint.revisionId}` : undefined,
+    params.blueprint.goalSummary ? `Goal: ${params.blueprint.goalSummary}` : undefined,
+    params.executionStartReadiness
+      ? `Execution-start gate: ${params.executionStartReadiness}`
+      : undefined,
+    `Clarifications: ${params.clarification.questionCount}`,
+    ...params.clarification.questions.slice(0, 3).map((question) => `- ${question}`),
+    `Suggestions: ${params.clarification.suggestionCount}`,
+    ...params.clarification.suggestions.slice(0, 2).map((suggestion) => `- ${suggestion}`),
+  ];
+  return lines.filter(Boolean).join("\n");
+}
+
+function buildBlueprintAgreementMessage(params: {
+  repo: { owner: string; repo: string };
+  blueprint: Awaited<ReturnType<typeof readProjectBlueprintDocument>>;
+  executionStartReadiness: string | undefined;
+}): string {
+  return [
+    `openclawcode marked the blueprint as agreed for ${formatRepoKey(params.repo)}.`,
+    `Status: ${params.blueprint.status ?? "unknown"}`,
+    params.blueprint.revisionId ? `Revision: ${params.blueprint.revisionId}` : undefined,
+    params.executionStartReadiness
+      ? `Execution-start gate: ${params.executionStartReadiness}`
+      : undefined,
+    "Use /occode-gates to inspect any remaining human decisions before execution.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -1148,6 +1462,33 @@ function parseRuntimeRerouteArgs(params: {
     issue: command.issue,
     roleId: roleToken,
     agentId,
+  };
+}
+
+function parseIssueCommandWithOptionalNote(params: {
+  args: string;
+  defaults: { owner?: string; repo?: string };
+}):
+  | {
+      issue: { owner: string; repo: string; number: number };
+      note: string | null;
+    }
+  | undefined {
+  const tokens = params.args
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (tokens.length === 0) {
+    return undefined;
+  }
+  const command = parseChatopsCommand(`/occode-status ${tokens[0] ?? ""}`, params.defaults);
+  if (!command) {
+    return undefined;
+  }
+  const note = tokens.slice(1).join(" ").trim();
+  return {
+    issue: command.issue,
+    note: note.length > 0 ? note : null,
   };
 }
 
@@ -1715,6 +2056,21 @@ function resolveInteractiveNotificationDestination(params: {
     binding: params.binding,
     snapshot: params.snapshot,
   });
+}
+
+function buildManualTakeoverLines(
+  takeover: Awaited<ReturnType<OpenClawCodeChatopsStore["getManualTakeover"]>> | undefined,
+): string[] {
+  if (!takeover) {
+    return [];
+  }
+  return [
+    `Manual takeover: active | requestedAt=${takeover.requestedAt}`,
+    `- worktree=${takeover.worktreePath}`,
+    takeover.branchName ? `- branch=${takeover.branchName}` : undefined,
+    takeover.actor ? `- actor=${takeover.actor}` : undefined,
+    takeover.note ? `- note=${takeover.note}` : undefined,
+  ].filter((line): line is string => Boolean(line));
 }
 
 function extractStatusSummary(status: string): string | undefined {
@@ -2498,102 +2854,273 @@ export default {
           repoConfig,
           binding,
         });
-        const github = new GitHubRestClient();
-        let createdIssue: Awaited<ReturnType<GitHubRestClient["createIssue"]>>;
-        try {
-          createdIssue = await github.createIssue({
-            owner: repoConfig.owner,
-            repo: repoConfig.repo,
+        const repoKey = formatRepoKey(command.repo);
+        const draftHandle = {
+          repoKey,
+          notifyChannel: destination.channel,
+          notifyTarget: destination.target,
+        };
+        if (command.draft.bodySynthesized) {
+          const clarification = analyzeChatIntakeDraft({
+            title: command.draft.title,
+            bodySynthesized: command.draft.bodySynthesized,
+          });
+          await store.upsertPendingIntakeDraft({
+            ...draftHandle,
             title: command.draft.title,
             body: command.draft.body,
+            sourceRequest: command.draft.sourceRequest,
+            bodySynthesized: command.draft.bodySynthesized,
+            clarificationQuestions: clarification.questions,
+            clarificationSuggestions: clarification.suggestions,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           });
-        } catch (error) {
           return {
-            text: `Failed to create a GitHub issue for ${repoConfig.owner}/${repoConfig.repo}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          };
-        }
-        const decision = decideIssueWebhookIntake({
-          event: buildSyntheticIssueWebhookEvent({ issue: createdIssue }),
-          config: {
-            ...repoConfig,
-            triggerLabels: [],
-            skipLabels: [],
-          },
-        });
-        const issueKey = formatIssueKey(createdIssue);
-        if (!decision.accept || !decision.issue) {
-          return {
-            text: [
-              `Created GitHub issue ${issueKey}.`,
-              createdIssue.url,
-              `Automatic intake was skipped: ${decision.reason}`,
-              `Use /occode-start ${issueKey} if you want to run it manually.`,
-            ].join("\n"),
-          };
-        }
-
-        if (decision.precheck?.decision === "escalate") {
-          const accepted = await recordPrecheckedEscalationSnapshot({
-            store,
-            issue: decision.issue,
-            destination,
-            summary: decision.precheck.summary,
-            suitabilityDecision: decision.precheck.decision,
-          });
-          if (!accepted) {
-            return {
-              text: [
-                `Created GitHub issue ${issueKey}.`,
-                createdIssue.url,
-                (await store.getStatus(issueKey)) ?? `${issueKey} is already tracked.`,
-              ].join("\n"),
-            };
-          }
-          return {
-            text: buildIntakeEscalatedMessage({
-              issue: createdIssue,
-              summary: decision.precheck.summary,
+            text: buildPendingIntakeDraftMessage({
+              repo: command.repo,
+              draft: command.draft,
+              clarification,
             }),
           };
         }
 
-        const queued = await queueOrGateIssueExecution({
+        const result = await createAndHandleChatIntakeIssue({
           store,
           repoConfig,
-          issue: decision.issue,
           destination,
-          queuedStatus: "Queued from chat intake.",
-          gatedStatus: "Awaiting execution-start gate approval.",
+          draft: {
+            title: command.draft.title,
+            body: command.draft.body,
+          },
         });
-        if (queued.outcome === "already-tracked") {
+        if (result.issueCreated) {
+          await store.removePendingIntakeDraft(draftHandle);
+        }
+        if (result.shouldKickQueue) {
+          kickQueueDrain(api, store);
+        }
+        return {
+          text: result.text,
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-intake-edit",
+      description: "Edit the pending chat-native intake draft before creating the GitHub issue.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const parsed = parseRepoScopedMultilineBody({
+          commandBody: ctx.commandBody,
+          commandName: "occode-intake-edit",
+          defaults: {
+            owner: defaultRepo?.owner,
+            repo: defaultRepo?.repo,
+          },
+        });
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-intake-edit owner/repo <title>\n<body...>\n" +
+              "Or, when exactly one repo is configured: /occode-intake-edit <title>\n<body...>",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.repo.owner}/${parsed.repo.repo}.`,
+          };
+        }
+
+        const binding = await store.getRepoBinding(formatRepoKey(parsed.repo));
+        const destination = resolveInteractiveNotificationDestination({
+          ctx,
+          repoConfig,
+          binding,
+        });
+        const draftHandle = {
+          repoKey: formatRepoKey(parsed.repo),
+          notifyChannel: destination.channel,
+          notifyTarget: destination.target,
+        };
+        const existing = await store.getPendingIntakeDraft(draftHandle);
+        if (!existing) {
           return {
             text: [
-              `Created GitHub issue ${issueKey}.`,
-              createdIssue.url,
-              (await store.getStatus(issueKey)) ?? `${issueKey} is already queued or running.`,
+              `No pending intake draft found for ${formatRepoKey(parsed.repo)} in this chat.`,
+              `Start with /occode-intake ${formatRepoKey(parsed.repo)} <one-line request> first.`,
             ].join("\n"),
           };
         }
-        if (queued.outcome === "queued") {
-          const providerPause = await store.getActiveProviderPause();
-          kickQueueDrain(api, store);
 
+        const [nextTitleLine, ...restLines] = parsed.body.split("\n").map((line) => line.trimEnd());
+        const nextTitle = nextTitleLine?.trim() || existing.title;
+        const nextBody = restLines.join("\n").trim() || existing.body;
+        const clarification = analyzeChatIntakeDraft({
+          title: nextTitle,
+          bodySynthesized: false,
+        });
+        await store.upsertPendingIntakeDraft({
+          ...existing,
+          ...draftHandle,
+          title: nextTitle,
+          body: nextBody,
+          sourceRequest: parsed.body,
+          bodySynthesized: false,
+          clarificationQuestions: clarification.questions,
+          clarificationSuggestions: clarification.suggestions,
+          updatedAt: new Date().toISOString(),
+        });
+        return {
+          text: buildPendingIntakeDraftMessage({
+            repo: parsed.repo,
+            draft: {
+              title: nextTitle,
+              body: nextBody,
+              bodySynthesized: false,
+            },
+            clarification,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-intake-confirm",
+      description: "Create and queue the pending chat-native intake draft for the current repo.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const repo = parseChatopsRepoReference(ctx.args ?? "", {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!repo) {
           return {
-            text: buildIntakeQueuedMessage({
-              issue: createdIssue,
-              pause: providerPause,
-            }),
+            text:
+              "Usage: /occode-intake-confirm owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-intake-confirm",
           };
         }
 
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+
+        const binding = await store.getRepoBinding(formatRepoKey(repo));
+        const destination = resolveInteractiveNotificationDestination({
+          ctx,
+          repoConfig,
+          binding,
+        });
+        const draftHandle = {
+          repoKey: formatRepoKey(repo),
+          notifyChannel: destination.channel,
+          notifyTarget: destination.target,
+        };
+        const draft = await store.getPendingIntakeDraft(draftHandle);
+        if (!draft) {
+          return {
+            text: [
+              `No pending intake draft found for ${formatRepoKey(repo)} in this chat.`,
+              `Use /occode-intake ${formatRepoKey(repo)} <request> to create one first.`,
+            ].join("\n"),
+          };
+        }
+
+        const result = await createAndHandleChatIntakeIssue({
+          store,
+          repoConfig,
+          destination,
+          draft: {
+            title: draft.title,
+            body: draft.body,
+          },
+        });
+        if (result.issueCreated) {
+          await store.removePendingIntakeDraft(draftHandle);
+        }
+        if (result.shouldKickQueue) {
+          kickQueueDrain(api, store);
+        }
         return {
-          text: buildExecutionStartGateDeferredMessage({
-            issue: createdIssue,
-            gate: queued.gate,
-            source: "chat-intake",
-          }),
+          text: result.text,
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-intake-reject",
+      description: "Discard the pending chat-native intake draft for the current repo.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const args = (ctx.args ?? "").trim();
+        const tokens = args
+          .split(/\s+/)
+          .map((token) => token.trim())
+          .filter(Boolean);
+        const explicitRepo = tokens.length > 0 ? parseChatopsRepoReference(tokens[0] ?? "") : null;
+        const repo =
+          explicitRepo ??
+          parseChatopsRepoReference("", {
+            owner: defaultRepo?.owner,
+            repo: defaultRepo?.repo,
+          });
+        if (!repo) {
+          return {
+            text:
+              "Usage: /occode-intake-reject owner/repo [reason]\n" +
+              "Or, when exactly one repo is configured: /occode-intake-reject [reason]",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+
+        const binding = await store.getRepoBinding(formatRepoKey(repo));
+        const destination = resolveInteractiveNotificationDestination({
+          ctx,
+          repoConfig,
+          binding,
+        });
+        const draftHandle = {
+          repoKey: formatRepoKey(repo),
+          notifyChannel: destination.channel,
+          notifyTarget: destination.target,
+        };
+        const existing = await store.getPendingIntakeDraft(draftHandle);
+        if (!existing) {
+          return {
+            text: [
+              `No pending intake draft found for ${formatRepoKey(repo)} in this chat.`,
+              `Use /occode-intake ${formatRepoKey(repo)} <request> to create one first.`,
+            ].join("\n"),
+          };
+        }
+
+        await store.removePendingIntakeDraft(draftHandle);
+        const reason =
+          (explicitRepo ? tokens.slice(1) : tokens).join(" ").trim() || "No reason provided.";
+        return {
+          text: [
+            `openclawcode discarded the pending intake draft for ${formatRepoKey(repo)}.`,
+            `Reason: ${reason}`,
+            `Use /occode-intake ${formatRepoKey(repo)} <request> to start a new draft.`,
+          ].join("\n"),
         };
       },
     });
@@ -2927,6 +3454,214 @@ export default {
     });
 
     api.registerCommand({
+      name: "occode-takeover",
+      description:
+        "Record that a human is taking over the current issue worktree before resuming autonomous execution later.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const parsed = parseIssueCommandWithOptionalNote({
+          args: ctx.args ?? "",
+          defaults: {
+            owner: defaultRepo?.owner,
+            repo: defaultRepo?.repo,
+          },
+        });
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-takeover owner/repo#123 [note]\n" +
+              "Or, when exactly one repo is configured: /occode-takeover #123 [note]",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.issue);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.issue.owner}/${parsed.issue.repo}.`,
+          };
+        }
+
+        const issueKey = formatIssueKey(parsed.issue);
+        const currentStatus = await store.getStatus(issueKey);
+        if (await store.isQueuedOrRunning(issueKey)) {
+          return { text: `${issueKey} is already in progress.\n${currentStatus ?? "Queued."}` };
+        }
+        if (await store.isPendingApproval(issueKey)) {
+          return {
+            text: [
+              `${issueKey} has not started yet, so there is no prepared worktree to take over.`,
+              `Use /occode-start ${issueKey} for the first run.`,
+            ].join("\n"),
+          };
+        }
+
+        const snapshot = await store.getStatusSnapshot(issueKey);
+        if (!snapshot || !snapshot.worktreePath) {
+          return {
+            text: [
+              `No tracked worktree is available for ${issueKey}.`,
+              "Wait for at least one workflow run to prepare a workspace before taking over manually.",
+            ].join("\n"),
+          };
+        }
+
+        const binding = await store.getRepoBinding(formatRepoKey(parsed.issue));
+        const destination = resolveInteractiveNotificationDestination({
+          ctx,
+          repoConfig,
+          binding,
+          snapshot,
+        });
+        await store.upsertManualTakeover({
+          issueKey,
+          runId: snapshot.runId,
+          stage: snapshot.stage,
+          branchName: snapshot.branchName,
+          worktreePath: snapshot.worktreePath,
+          notifyChannel: destination.channel,
+          notifyTarget: destination.target,
+          actor: resolveCommandNotifyTarget(ctx) ?? ctx.senderId ?? ctx.channel,
+          note: parsed.note ?? undefined,
+          requestedAt: new Date().toISOString(),
+        });
+
+        return {
+          text: [
+            `Recorded manual takeover for ${issueKey}.`,
+            `Stage: ${formatStageLabel(snapshot.stage)}`,
+            `Worktree: ${snapshot.worktreePath}`,
+            snapshot.branchName ? `Branch: ${snapshot.branchName}` : undefined,
+            parsed.note ? `Note: ${parsed.note}` : undefined,
+            `Use /occode-resume-after-edit ${issueKey} [note] when the human edits are ready for a structured rerun.`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-resume-after-edit",
+      description:
+        "Queue a structured rerun after a human finished editing a manually taken-over worktree.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const parsed = parseIssueCommandWithOptionalNote({
+          args: ctx.args ?? "",
+          defaults: {
+            owner: defaultRepo?.owner,
+            repo: defaultRepo?.repo,
+          },
+        });
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-resume-after-edit owner/repo#123 [note]\n" +
+              "Or, when exactly one repo is configured: /occode-resume-after-edit #123 [note]",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.issue);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.issue.owner}/${parsed.issue.repo}.`,
+          };
+        }
+
+        const issueKey = formatIssueKey(parsed.issue);
+        const currentStatus = await store.getStatus(issueKey);
+        if (await store.isQueuedOrRunning(issueKey)) {
+          return { text: `${issueKey} is already in progress.\n${currentStatus ?? "Queued."}` };
+        }
+
+        const takeover = await store.getManualTakeover(issueKey);
+        if (!takeover) {
+          return {
+            text: [
+              `No active manual takeover is recorded for ${issueKey}.`,
+              `Use /occode-takeover ${issueKey} before requesting a structured resume.`,
+            ].join("\n"),
+          };
+        }
+
+        const snapshot = await store.getStatusSnapshot(issueKey);
+        if (!snapshot) {
+          return {
+            text: `No tracked openclawcode run found for ${issueKey}.`,
+          };
+        }
+
+        const binding = await store.getRepoBinding(formatRepoKey(parsed.issue));
+        const destination = resolveInteractiveNotificationDestination({
+          ctx,
+          repoConfig,
+          binding,
+          snapshot,
+        });
+        const rerunContext = {
+          reason: `${resolveRerunReason(snapshot)} Manual takeover resume requested after human edits.`,
+          requestedAt: new Date().toISOString(),
+          priorRunId: snapshot.runId,
+          priorStage: snapshot.stage,
+          reviewDecision: snapshot.latestReviewDecision,
+          reviewSubmittedAt: snapshot.latestReviewSubmittedAt,
+          reviewSummary: snapshot.latestReviewSummary,
+          reviewUrl: snapshot.latestReviewUrl,
+          requestedCoderAgentId: snapshot.rerunRequestedCoderAgentId,
+          requestedVerifierAgentId: snapshot.rerunRequestedVerifierAgentId,
+          manualTakeoverRequestedAt: takeover.requestedAt,
+          manualTakeoverActor: takeover.actor,
+          manualTakeoverWorktreePath: takeover.worktreePath,
+          manualResumeNote: parsed.note ?? takeover.note,
+        } as const;
+        const request = buildRunRequestFromCommand({
+          command: {
+            action: "rerun",
+            issue: parsed.issue,
+          },
+          config: repoConfig,
+          rerunContext,
+          runtimeAgentOverrides: {
+            coderAgentId: rerunContext.requestedCoderAgentId,
+            verifierAgentId: rerunContext.requestedVerifierAgentId,
+          },
+        });
+        const stageLabel = formatStageLabel(snapshot.stage);
+        const queued = await store.enqueue(
+          {
+            issueKey,
+            notifyChannel: destination.channel,
+            notifyTarget: destination.target,
+            request,
+          },
+          `Queued rerun after manual takeover from ${stageLabel} state.`,
+        );
+        if (!queued) {
+          return { text: `${issueKey} is already queued or running.` };
+        }
+        await store.removeManualTakeover(issueKey);
+        const providerPause = await store.getActiveProviderPause();
+        kickQueueDrain(api, store);
+        return {
+          text: appendProviderPauseText({
+            text: [
+              `Queued rerun for ${issueKey} after manual edits from ${stageLabel} state.`,
+              `Worktree: ${takeover.worktreePath}`,
+              parsed.note ? `Resume note: ${parsed.note}` : undefined,
+            ]
+              .filter(Boolean)
+              .join("\n"),
+            pause: providerPause,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
       name: "occode-bind",
       description: "Bind the current chat as the notification target for an openclawcode repo.",
       acceptsArgs: true,
@@ -3067,6 +3802,7 @@ export default {
         }
         const resolvedStatusText =
           statusText ?? `No openclawcode status recorded yet for ${issueKey}.`;
+        const manualTakeover = await store.getManualTakeover(issueKey);
         const providerPause = await store.getActiveProviderPause();
         const providerLines = providerPause
           ? buildProviderPauseLines({ pause: providerPause })
@@ -3089,6 +3825,7 @@ export default {
             : resolvedStatusText;
         const resolvedWithOperatorContext = [
           resolvedWithProvider,
+          ...buildManualTakeoverLines(manualTakeover),
           ...(currentSnapshot ? buildTopLevelSuitabilityPolicyLines(currentSnapshot) : []),
           ...(currentSnapshot ? buildTopLevelAutoMergePolicyLines(currentSnapshot) : []),
           ...buildOperatorContextLines(repoConfig),
@@ -3195,6 +3932,175 @@ export default {
           text: buildPromotionChecklistMessage({
             repoConfig,
             probe: setupCheck,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-goal",
+      description:
+        "Capture or update the repo-level project goal in PROJECT-BLUEPRINT.md from chat.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const parsed = parseRepoScopedMultilineBody({
+          commandBody: ctx.commandBody,
+          commandName: "occode-goal",
+          defaults: {
+            owner: defaultRepo?.owner,
+            repo: defaultRepo?.repo,
+          },
+        });
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-goal owner/repo <goal text>\n" +
+              "Or, when exactly one repo is configured: /occode-goal <goal text>",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.repo.owner}/${parsed.repo.repo}.`,
+          };
+        }
+
+        const blueprint = await updateProjectBlueprintSection({
+          repoRoot: repoConfig.repoRoot,
+          sectionName: "Goal",
+          body: parsed.body,
+          createIfMissing: true,
+          title: `${repoConfig.repo} project blueprint`,
+        });
+        const clarification = await inspectProjectBlueprintClarifications(repoConfig.repoRoot);
+        const stageGates = await writeProjectStageGateArtifact(repoConfig.repoRoot);
+        return {
+          text: buildBlueprintGoalUpdateMessage({
+            repo: parsed.repo,
+            blueprint,
+            clarification,
+            executionStartReadiness: stageGates.gates.find(
+              (entry) => entry.gateId === "execution-start",
+            )?.readiness,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-blueprint-edit",
+      description:
+        "Update one blueprint section from chat without opening PROJECT-BLUEPRINT.md manually.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        let parsed:
+          | {
+              repo: { owner: string; repo: string };
+              sectionName: ReturnType<typeof parseProjectBlueprintSectionName>;
+              body: string;
+            }
+          | undefined;
+        try {
+          parsed = parseBlueprintEditArgs({
+            commandBody: ctx.commandBody,
+            defaults: {
+              owner: defaultRepo?.owner,
+              repo: defaultRepo?.repo,
+            },
+          });
+        } catch (error) {
+          return {
+            text: (error as Error).message,
+          };
+        }
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-blueprint-edit owner/repo <section>\n<body...>\n" +
+              `Sections: ${projectBlueprintSectionIds().join(", ")}\n` +
+              "Or, when exactly one repo is configured: /occode-blueprint-edit <section>\n<body...>",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.repo.owner}/${parsed.repo.repo}.`,
+          };
+        }
+
+        const blueprint = await updateProjectBlueprintSection({
+          repoRoot: repoConfig.repoRoot,
+          sectionName: parsed.sectionName,
+          body: parsed.body,
+          createIfMissing: true,
+          title: `${repoConfig.repo} project blueprint`,
+        });
+        const clarification = await inspectProjectBlueprintClarifications(repoConfig.repoRoot);
+        if (parsed.sectionName === "Provider Strategy") {
+          await writeProjectRoleRoutingPlan(repoConfig.repoRoot);
+        }
+        const stageGates = await writeProjectStageGateArtifact(repoConfig.repoRoot);
+        return {
+          text: [
+            `Updated blueprint section \`${parsed.sectionName}\` for ${formatRepoKey(parsed.repo)}.`,
+            buildBlueprintGoalUpdateMessage({
+              repo: parsed.repo,
+              blueprint,
+              clarification,
+              executionStartReadiness: stageGates.gates.find(
+                (entry) => entry.gateId === "execution-start",
+              )?.readiness,
+            }),
+          ].join("\n"),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-blueprint-agree",
+      description: "Mark the current repo blueprint as agreed directly from chat.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const repo = parseChatopsRepoReference(ctx.args ?? "", {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!repo) {
+          return {
+            text:
+              "Usage: /occode-blueprint-agree owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-blueprint-agree",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+
+        await updateProjectBlueprintStatus({
+          repoRoot: repoConfig.repoRoot,
+          status: "agreed",
+        });
+        const blueprint = await readProjectBlueprintDocument(repoConfig.repoRoot);
+        const stageGates = await writeProjectStageGateArtifact(repoConfig.repoRoot);
+        return {
+          text: buildBlueprintAgreementMessage({
+            repo,
+            blueprint,
+            executionStartReadiness: stageGates.gates.find(
+              (entry) => entry.gateId === "execution-start",
+            )?.readiness,
           }),
         };
       },

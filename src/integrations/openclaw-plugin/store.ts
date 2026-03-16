@@ -25,6 +25,33 @@ export interface OpenClawCodePendingApproval {
   approvalKind?: OpenClawCodePendingApprovalKind;
 }
 
+export interface OpenClawCodePendingIntakeDraft {
+  repoKey: string;
+  notifyChannel: string;
+  notifyTarget: string;
+  title: string;
+  body: string;
+  sourceRequest: string;
+  bodySynthesized: boolean;
+  clarificationQuestions: string[];
+  clarificationSuggestions: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OpenClawCodeManualTakeover {
+  issueKey: string;
+  runId: string;
+  stage: WorkflowStage;
+  branchName?: string;
+  worktreePath: string;
+  notifyChannel: string;
+  notifyTarget: string;
+  actor?: string;
+  note?: string;
+  requestedAt: string;
+}
+
 export interface OpenClawCodeIssueStatusSnapshot {
   issueKey: string;
   status: string;
@@ -35,6 +62,7 @@ export interface OpenClawCodeIssueStatusSnapshot {
   repo: string;
   issueNumber: number;
   branchName?: string;
+  worktreePath?: string;
   pullRequestNumber?: number;
   pullRequestUrl?: string;
   notifyChannel?: string;
@@ -103,6 +131,8 @@ export interface OpenClawCodeProviderPause {
 interface OpenClawCodeQueueState {
   version: 1;
   pendingApprovals: OpenClawCodePendingApproval[];
+  pendingIntakeDrafts: OpenClawCodePendingIntakeDraft[];
+  manualTakeovers: OpenClawCodeManualTakeover[];
   queue: OpenClawCodeQueuedRun[];
   currentRun?: OpenClawCodeQueuedRun;
   statusByIssue: Record<string, string>;
@@ -123,12 +153,85 @@ function cloneDefaultState(): OpenClawCodeQueueState {
   return {
     version: 1,
     pendingApprovals: [],
+    pendingIntakeDrafts: [],
+    manualTakeovers: [],
     queue: [],
     statusByIssue: {},
     statusSnapshotsByIssue: {},
     repoBindingsByRepo: {},
     githubDeliveriesById: {},
     recentProviderFailures: [],
+  };
+}
+
+function normalizePendingIntakeDraft(raw: unknown): OpenClawCodePendingIntakeDraft | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const candidate = raw as Partial<OpenClawCodePendingIntakeDraft>;
+  if (
+    typeof candidate.repoKey !== "string" ||
+    typeof candidate.notifyChannel !== "string" ||
+    typeof candidate.notifyTarget !== "string" ||
+    typeof candidate.title !== "string" ||
+    typeof candidate.body !== "string" ||
+    typeof candidate.sourceRequest !== "string" ||
+    typeof candidate.bodySynthesized !== "boolean" ||
+    typeof candidate.createdAt !== "string" ||
+    typeof candidate.updatedAt !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    repoKey: candidate.repoKey,
+    notifyChannel: candidate.notifyChannel,
+    notifyTarget: candidate.notifyTarget,
+    title: candidate.title,
+    body: candidate.body,
+    sourceRequest: candidate.sourceRequest,
+    bodySynthesized: candidate.bodySynthesized,
+    clarificationQuestions: Array.isArray(candidate.clarificationQuestions)
+      ? candidate.clarificationQuestions.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+    clarificationSuggestions: Array.isArray(candidate.clarificationSuggestions)
+      ? candidate.clarificationSuggestions.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+    createdAt: candidate.createdAt,
+    updatedAt: candidate.updatedAt,
+  };
+}
+
+function normalizeManualTakeover(raw: unknown): OpenClawCodeManualTakeover | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const candidate = raw as Partial<OpenClawCodeManualTakeover>;
+  if (
+    typeof candidate.issueKey !== "string" ||
+    typeof candidate.runId !== "string" ||
+    typeof candidate.stage !== "string" ||
+    typeof candidate.worktreePath !== "string" ||
+    typeof candidate.notifyChannel !== "string" ||
+    typeof candidate.notifyTarget !== "string" ||
+    typeof candidate.requestedAt !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    issueKey: candidate.issueKey,
+    runId: candidate.runId,
+    stage: candidate.stage,
+    branchName: typeof candidate.branchName === "string" ? candidate.branchName : undefined,
+    worktreePath: candidate.worktreePath,
+    notifyChannel: candidate.notifyChannel,
+    notifyTarget: candidate.notifyTarget,
+    actor: typeof candidate.actor === "string" ? candidate.actor : undefined,
+    note: typeof candidate.note === "string" ? candidate.note : undefined,
+    requestedAt: candidate.requestedAt,
   };
 }
 
@@ -159,6 +262,7 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
     repo: candidate.repo,
     issueNumber: candidate.issueNumber,
     branchName: typeof candidate.branchName === "string" ? candidate.branchName : undefined,
+    worktreePath: typeof candidate.worktreePath === "string" ? candidate.worktreePath : undefined,
     pullRequestNumber:
       typeof candidate.pullRequestNumber === "number" ? candidate.pullRequestNumber : undefined,
     pullRequestUrl:
@@ -424,6 +528,7 @@ function buildStatusSnapshot(params: {
     repo: params.run.issue.repo,
     issueNumber: params.run.issue.number,
     branchName: params.run.workspace?.branchName ?? params.run.buildResult?.branchName,
+    worktreePath: params.run.workspace?.worktreePath,
     pullRequestNumber: params.run.draftPullRequest?.number,
     pullRequestUrl: params.run.draftPullRequest?.url,
     notifyChannel: params.notifyChannel,
@@ -575,6 +680,18 @@ function normalizeState(raw: unknown): OpenClawCodeQueueState {
           return pending ? [pending] : [];
         })
       : [],
+    pendingIntakeDrafts: Array.isArray(candidate.pendingIntakeDrafts)
+      ? candidate.pendingIntakeDrafts.flatMap((value) => {
+          const draft = normalizePendingIntakeDraft(value);
+          return draft ? [draft] : [];
+        })
+      : [],
+    manualTakeovers: Array.isArray(candidate.manualTakeovers)
+      ? candidate.manualTakeovers.flatMap((value) => {
+          const takeover = normalizeManualTakeover(value);
+          return takeover ? [takeover] : [];
+        })
+      : [],
     queue: Array.isArray(candidate.queue) ? candidate.queue : [],
     currentRun:
       candidate.currentRun && typeof candidate.currentRun === "object"
@@ -657,6 +774,27 @@ export class OpenClawCodeChatopsStore {
     await this.flushMutations();
     const state = await this.loadState();
     return state.pendingApprovals.find((entry) => entry.issueKey === issueKey);
+  }
+
+  async getPendingIntakeDraft(params: {
+    repoKey: string;
+    notifyChannel: string;
+    notifyTarget: string;
+  }): Promise<OpenClawCodePendingIntakeDraft | undefined> {
+    await this.flushMutations();
+    const state = await this.loadState();
+    return state.pendingIntakeDrafts.find(
+      (entry) =>
+        entry.repoKey === params.repoKey &&
+        entry.notifyChannel === params.notifyChannel &&
+        entry.notifyTarget === params.notifyTarget,
+    );
+  }
+
+  async getManualTakeover(issueKey: string): Promise<OpenClawCodeManualTakeover | undefined> {
+    await this.flushMutations();
+    const state = await this.loadState();
+    return state.manualTakeovers.find((entry) => entry.issueKey === issueKey);
   }
 
   async getStatusSnapshot(issueKey: string): Promise<OpenClawCodeIssueStatusSnapshot | undefined> {
@@ -918,6 +1056,78 @@ export class OpenClawCodeChatopsStore {
       state.pendingApprovals.push(pending);
       state.statusByIssue[pending.issueKey] = status;
       return "added";
+    });
+  }
+
+  async upsertPendingIntakeDraft(
+    draft: OpenClawCodePendingIntakeDraft,
+  ): Promise<"added" | "updated"> {
+    return await this.mutateState((state) => {
+      const existingIndex = state.pendingIntakeDrafts.findIndex(
+        (entry) =>
+          entry.repoKey === draft.repoKey &&
+          entry.notifyChannel === draft.notifyChannel &&
+          entry.notifyTarget === draft.notifyTarget,
+      );
+      if (existingIndex >= 0) {
+        const existing = state.pendingIntakeDrafts[existingIndex];
+        state.pendingIntakeDrafts[existingIndex] = {
+          ...existing,
+          ...draft,
+          createdAt: existing?.createdAt ?? draft.createdAt,
+        };
+        return "updated";
+      }
+      state.pendingIntakeDrafts.push(draft);
+      return "added";
+    });
+  }
+
+  async removePendingIntakeDraft(params: {
+    repoKey: string;
+    notifyChannel: string;
+    notifyTarget: string;
+  }): Promise<boolean> {
+    return await this.mutateState((state) => {
+      const index = state.pendingIntakeDrafts.findIndex(
+        (entry) =>
+          entry.repoKey === params.repoKey &&
+          entry.notifyChannel === params.notifyChannel &&
+          entry.notifyTarget === params.notifyTarget,
+      );
+      if (index < 0) {
+        return false;
+      }
+      state.pendingIntakeDrafts.splice(index, 1);
+      return true;
+    });
+  }
+
+  async upsertManualTakeover(takeover: OpenClawCodeManualTakeover): Promise<"added" | "updated"> {
+    return await this.mutateState((state) => {
+      const existingIndex = state.manualTakeovers.findIndex(
+        (entry) => entry.issueKey === takeover.issueKey,
+      );
+      if (existingIndex >= 0) {
+        state.manualTakeovers[existingIndex] = {
+          ...state.manualTakeovers[existingIndex],
+          ...takeover,
+        };
+        return "updated";
+      }
+      state.manualTakeovers.push(takeover);
+      return "added";
+    });
+  }
+
+  async removeManualTakeover(issueKey: string): Promise<boolean> {
+    return await this.mutateState((state) => {
+      const index = state.manualTakeovers.findIndex((entry) => entry.issueKey === issueKey);
+      if (index < 0) {
+        return false;
+      }
+      state.manualTakeovers.splice(index, 1);
+      return true;
     });
   }
 

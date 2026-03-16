@@ -222,6 +222,10 @@ those nested objects.
 - `rerunReviewUrl`
 - `rerunRequestedCoderAgentId`
 - `rerunRequestedVerifierAgentId`
+- `rerunManualTakeoverRequestedAt`
+- `rerunManualTakeoverActor`
+- `rerunManualTakeoverWorktreePath`
+- `rerunManualResumeNote`
 
 ## Nullability Rules
 

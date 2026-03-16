@@ -376,6 +376,92 @@ describe("OpenClawCodeChatopsStore", () => {
     }
   });
 
+  it("persists one pending intake draft per repo and chat target", async () => {
+    const fixture = await createStore();
+
+    try {
+      const createdAt = "2026-03-16T10:00:00.000Z";
+      const draft = {
+        repoKey: "zhyongrui/openclawcode",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:123",
+        title: "Expose issueCount in run json",
+        body: "Summary\nExpose issueCount in run json",
+        sourceRequest: "Expose issueCount in run json",
+        bodySynthesized: true,
+        clarificationQuestions: ["What proof should show the request succeeded?"],
+        clarificationSuggestions: ["Use /occode-intake-edit before /occode-intake-confirm."],
+        createdAt,
+        updatedAt: createdAt,
+      };
+
+      expect(await fixture.store.upsertPendingIntakeDraft(draft)).toBe("added");
+      expect(
+        await fixture.store.upsertPendingIntakeDraft({
+          ...draft,
+          title: "Expose issueCount and issueRepo in run json",
+          bodySynthesized: false,
+          updatedAt: "2026-03-16T10:05:00.000Z",
+        }),
+      ).toBe("updated");
+
+      const saved = await fixture.store.getPendingIntakeDraft({
+        repoKey: draft.repoKey,
+        notifyChannel: draft.notifyChannel,
+        notifyTarget: draft.notifyTarget,
+      });
+      expect(saved).toMatchObject({
+        title: "Expose issueCount and issueRepo in run json",
+        bodySynthesized: false,
+        createdAt,
+      });
+
+      expect(
+        await fixture.store.removePendingIntakeDraft({
+          repoKey: draft.repoKey,
+          notifyChannel: draft.notifyChannel,
+          notifyTarget: draft.notifyTarget,
+        }),
+      ).toBe(true);
+      expect(await fixture.store.snapshot()).toMatchObject({
+        pendingIntakeDrafts: [],
+      });
+    } finally {
+      await fs.rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("persists and clears manual takeover records per issue", async () => {
+    const fixture = await createStore();
+
+    try {
+      expect(
+        await fixture.store.upsertManualTakeover({
+          issueKey: "zhyongrui/openclawcode#140",
+          runId: "run-140",
+          stage: "ready-for-human-review",
+          branchName: "openclawcode/issue-140",
+          worktreePath: "/tmp/openclawcode-140",
+          notifyChannel: "telegram",
+          notifyTarget: "chat:123",
+          actor: "user:operator",
+          note: "Human is testing a manual patch.",
+          requestedAt: "2026-03-16T10:10:00.000Z",
+        }),
+      ).toBe("added");
+
+      expect(await fixture.store.getManualTakeover("zhyongrui/openclawcode#140")).toMatchObject({
+        worktreePath: "/tmp/openclawcode-140",
+        actor: "user:operator",
+      });
+
+      expect(await fixture.store.removeManualTakeover("zhyongrui/openclawcode#140")).toBe(true);
+      expect(await fixture.store.getManualTakeover("zhyongrui/openclawcode#140")).toBeUndefined();
+    } finally {
+      await fs.rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
   it("can update an existing pending approval into an execution-start gate hold", async () => {
     const fixture = await createStore();
 

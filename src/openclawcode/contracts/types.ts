@@ -96,6 +96,10 @@ export interface WorkflowRerunContext {
   reviewUrl?: string;
   requestedCoderAgentId?: string;
   requestedVerifierAgentId?: string;
+  manualTakeoverRequestedAt?: string;
+  manualTakeoverActor?: string;
+  manualTakeoverWorktreePath?: string;
+  manualResumeNote?: string;
 }
 
 export interface WorkflowAttemptSummary {

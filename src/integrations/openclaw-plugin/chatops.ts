@@ -89,6 +89,8 @@ export interface OpenClawCodeChatopsIssueDraftCommand {
   draft: {
     title: string;
     body: string;
+    bodySynthesized: boolean;
+    sourceRequest: string;
   };
 }
 
@@ -514,20 +516,23 @@ export function parseChatopsIssueDraftCommand(
   }
 
   const title = draftLines[firstContentIndex]?.trim() ?? "";
-  const body = draftLines
+  const explicitBody = draftLines
     .slice(firstContentIndex + 1)
     .join("\n")
     .trim();
   if (!title) {
     return null;
   }
+  const bodySynthesized = explicitBody.length === 0;
 
   return {
     action: "intake",
     repo,
     draft: {
       title,
-      body: body || buildMinimalChatIssueBody(title),
+      body: explicitBody || buildMinimalChatIssueBody(title),
+      bodySynthesized,
+      sourceRequest: title,
     },
   };
 }

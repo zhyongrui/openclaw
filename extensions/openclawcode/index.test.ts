@@ -1629,34 +1629,10 @@ describe("openclawcode extension", () => {
     }
   });
 
-  it("accepts a one-line request for /occode-intake and synthesizes a minimal body", async () => {
+  it("turns a one-line /occode-intake request into a pending draft with clarification prompts", async () => {
     const fixture = await registerPluginFixture();
     try {
-      vi.stubEnv("GH_TOKEN", "test-token");
-      const fetchMock = vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify(
-            createGitHubIssueResponse({
-              issueNumber: 222,
-              title: "Expose issueCount in openclaw code run --json output",
-              body: [
-                "Summary",
-                "Expose issueCount in openclaw code run --json output",
-                "",
-                "Problem to solve",
-                "This issue was drafted directly from chat intake and needs the workflow to translate the request into the concrete code change.",
-                "",
-                "Requested from chat intake",
-                "Expose issueCount in openclaw code run --json output",
-              ].join("\n"),
-            }),
-          ),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      );
+      const fetchMock = vi.fn();
       vi.stubGlobal("fetch", fetchMock);
 
       const result = await fixture.commands.get("occode-intake")?.handler({
@@ -1671,29 +1647,162 @@ describe("openclawcode extension", () => {
         config: {},
       });
 
-      expect(result).toEqual({
+      expect(result?.text).toContain("waiting for confirmation");
+      expect(result?.text).toContain("Clarifications: 3");
+      expect(result?.text).toContain("Use `/occode-intake-confirm`");
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.pendingIntakeDrafts).toHaveLength(1);
+      expect(snapshot.pendingIntakeDrafts[0]).toMatchObject({
+        repoKey: "zhyongrui/openclawcode",
+        title: "Expose issueCount in openclaw code run --json output",
+        bodySynthesized: true,
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("supports editing and confirming a pending chat intake draft before issue creation", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      vi.stubEnv("GH_TOKEN", "test-token");
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify(
+            createGitHubIssueResponse({
+              issueNumber: 222,
+              title: "Expose issueCount and issueRepo in openclaw code run --json output",
+              body: [
+                "Summary",
+                "Expose issueCount and issueRepo in openclaw code run --json output",
+                "",
+                "Problem to solve",
+                "Add two stable top-level mirrors so external automation does not need nested issue reads.",
+                "",
+                "Acceptance",
+                "- [ ] `issueCount` is present at the top level.",
+                "- [ ] `issueRepo` is present at the top level.",
+              ].join("\n"),
+            }),
+          ),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      await fixture.commands.get("occode-intake")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: [
+          "/occode-intake",
+          "Expose issueCount in openclaw code run --json output",
+        ].join("\n"),
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      const edited = await fixture.commands.get("occode-intake-edit")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: [
+          "/occode-intake-edit",
+          "Expose issueCount and issueRepo in openclaw code run --json output",
+          "",
+          "Summary",
+          "Expose issueCount and issueRepo in openclaw code run --json output",
+          "",
+          "Problem to solve",
+          "Add two stable top-level mirrors so external automation does not need nested issue reads.",
+          "",
+          "Acceptance",
+          "- [ ] `issueCount` is present at the top level.",
+          "- [ ] `issueRepo` is present at the top level.",
+        ].join("\n"),
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      expect(edited?.text).toContain("Body source: edited draft");
+      expect(edited?.text).toContain("Expose issueCount and issueRepo");
+
+      const confirmed = await fixture.commands.get("occode-intake-confirm")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-intake-confirm",
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      expect(confirmed).toEqual({
         text: [
           "openclawcode created and queued a new GitHub issue from chat.",
           "Issue: zhyongrui/openclawcode#222",
-          "Title: Expose issueCount in openclaw code run --json output",
+          "Title: Expose issueCount and issueRepo in openclaw code run --json output",
           "URL: https://github.com/zhyongrui/openclawcode/issues/222",
           "Status: queued for execution",
           "Use /occode-status zhyongrui/openclawcode#222 to inspect progress.",
         ].join("\n"),
       });
       expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
-        title: "Expose issueCount in openclaw code run --json output",
+        title: "Expose issueCount and issueRepo in openclaw code run --json output",
         body: [
           "Summary",
-          "Expose issueCount in openclaw code run --json output",
+          "Expose issueCount and issueRepo in openclaw code run --json output",
           "",
           "Problem to solve",
-          "This issue was drafted directly from chat intake and needs the workflow to translate the request into the concrete code change.",
+          "Add two stable top-level mirrors so external automation does not need nested issue reads.",
           "",
-          "Requested from chat intake",
-          "Expose issueCount in openclaw code run --json output",
+          "Acceptance",
+          "- [ ] `issueCount` is present at the top level.",
+          "- [ ] `issueRepo` is present at the top level.",
         ].join("\n"),
       });
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.pendingIntakeDrafts).toEqual([]);
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("supports rejecting a pending chat intake draft before issue creation", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.commands.get("occode-intake")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: [
+          "/occode-intake",
+          "Expose issueCount in openclaw code run --json output",
+        ].join("\n"),
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      const rejected = await fixture.commands.get("occode-intake-reject")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-intake-reject too broad for one issue",
+        args: "too broad for one issue",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      expect(rejected?.text).toContain("discarded the pending intake draft");
+      expect(rejected?.text).toContain("Reason: too broad for one issue");
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.pendingIntakeDrafts).toEqual([]);
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -3725,6 +3834,149 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("captures a repo-level goal from chat before issue creation", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      const result = await fixture.commands.get("occode-goal")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody:
+          "/occode-goal Move the operator from issue-first execution to blueprint-first planning.",
+        args: "Move the operator from issue-first execution to blueprint-first planning.",
+        config: {},
+      });
+
+      expect(result?.text).toContain("updated the blueprint goal");
+      expect(result?.text).toContain("Goal: Move the operator from issue-first execution");
+      expect(result?.text).toContain("Clarifications:");
+
+      const content = await fs.readFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        "utf8",
+      );
+      expect(content).toContain(
+        "Move the operator from issue-first execution to blueprint-first planning.",
+      );
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("marks the blueprint as agreed from chat", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.commands.get("occode-goal")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-goal Deliver blueprint-first releases safely.",
+        args: "Deliver blueprint-first releases safely.",
+        config: {},
+      });
+
+      const result = await fixture.commands.get("occode-blueprint-agree")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-blueprint-agree",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain("marked the blueprint as agreed");
+      expect(result?.text).toContain("Status: agreed");
+      const content = await fs.readFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        "utf8",
+      );
+      expect(content).toContain("status: agreed");
+      expect(content).toContain("agreedAt:");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("updates arbitrary blueprint sections from chat without manual file edits", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Mutable Blueprint",
+          "status: clarified",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:05:00.000Z",
+          "statusChangedAt: 2026-03-16T00:05:00.000Z",
+          "---",
+          "",
+          "# Mutable Blueprint",
+          "",
+          "## Goal",
+          "Clarify the target from chat.",
+          "",
+          "## Success Criteria",
+          "- Operators can update sections from chat.",
+          "",
+          "## Scope",
+          "- In scope: section editing.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Keep edits deterministic.",
+          "",
+          "## Risks",
+          "- None.",
+          "",
+          "## Assumptions",
+          "- None.",
+          "",
+          "## Human Gates",
+          "- Goal agreement: required",
+          "",
+          "## Provider Strategy",
+          "- Planner:",
+          "- Coder:",
+          "- Reviewer:",
+          "- Verifier:",
+          "- Doc-writer:",
+          "",
+          "## Workstreams",
+          "- [ ] Add a chat edit command.",
+          "",
+          "## Open Questions",
+          "- Who is allowed to edit the blueprint from chat?",
+          "",
+          "## Change Log",
+          "- 2026-03-16: mutable blueprint test scaffold.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await fixture.commands.get("occode-blueprint-edit")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: ["/occode-blueprint-edit open-questions", "- None."].join("\n"),
+        args: "open-questions",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Updated blueprint section `Open Questions`");
+      const content = await fs.readFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        "utf8",
+      );
+      expect(content).toContain("## Open Questions\n- None.");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("shows provider-role routing through /occode-routing", async () => {
     const fixture = await registerPluginFixture();
     try {
@@ -3887,6 +4139,99 @@ describe("openclawcode extension", () => {
         "utf8",
       );
       expect(content).toContain("- Reviewer: Claude Code");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("records a manual takeover and exposes it through /occode-status", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 241,
+          stage: "ready-for-human-review",
+        }),
+        "openclawcode status for zhyongrui/openclawcode#241\nStage: Ready For Human Review",
+      );
+
+      const takeover = await fixture.commands.get("occode-takeover")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-takeover #241 human validating the worktree locally",
+        args: "#241 human validating the worktree locally",
+        to: "user:takeover-chat",
+        config: {},
+      });
+
+      expect(takeover?.text).toContain("Recorded manual takeover for zhyongrui/openclawcode#241.");
+      expect(takeover?.text).toContain("Worktree: /tmp/openclawcode-241");
+
+      const status = await fixture.commands.get("occode-status")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-status #241",
+        args: "#241",
+        to: "user:takeover-chat",
+        config: {},
+      });
+
+      expect(status?.text).toContain("Manual takeover: active");
+      expect(status?.text).toContain("worktree=/tmp/openclawcode-241");
+      expect(await fixture.store.getManualTakeover("zhyongrui/openclawcode#241")).toMatchObject({
+        note: "human validating the worktree locally",
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("queues a structured rerun after manual edits and clears the takeover hold", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 242,
+          stage: "ready-for-human-review",
+        }),
+        "openclawcode status for zhyongrui/openclawcode#242\nStage: Ready For Human Review",
+      );
+      await fixture.store.upsertManualTakeover({
+        issueKey: "zhyongrui/openclawcode#242",
+        runId: "run-242",
+        stage: "ready-for-human-review",
+        branchName: "openclawcode/issue-242",
+        worktreePath: "/tmp/openclawcode-242",
+        notifyChannel: "telegram",
+        notifyTarget: "user:takeover-chat",
+        actor: "user:takeover-chat",
+        note: "Human updated the worktree locally.",
+        requestedAt: "2026-03-16T12:00:00.000Z",
+      });
+
+      const result = await fixture.commands.get("occode-resume-after-edit")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-resume-after-edit #242 rerun after human edits",
+        args: "#242 rerun after human edits",
+        to: "user:takeover-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain(
+        "Queued rerun for zhyongrui/openclawcode#242 after manual edits from Ready For Human Review state.",
+      );
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.manualTakeovers).toEqual([]);
+      expect(snapshot.queue).toHaveLength(1);
+      expect(snapshot.queue[0]?.request.rerunContext).toMatchObject({
+        manualTakeoverRequestedAt: "2026-03-16T12:00:00.000Z",
+        manualTakeoverActor: "user:takeover-chat",
+        manualTakeoverWorktreePath: "/tmp/openclawcode-242",
+        manualResumeNote: "rerun after human edits",
+      });
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });

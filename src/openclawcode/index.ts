@@ -4,6 +4,7 @@ export * from "./discovery.js";
 export * from "./github/index.js";
 export * from "./orchestrator/index.js";
 export * from "./persistence/index.js";
+export * from "./promotion-artifacts.js";
 export * from "./role-routing.js";
 export * from "./roles/index.js";
 export * from "./runtime/index.js";

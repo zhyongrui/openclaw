@@ -4,15 +4,21 @@ import {
   openclawCodeBlueprintDecomposeCommand,
   openclawCodeBlueprintInitCommand,
   openclawCodeBlueprintRoleIds,
+  openclawCodeBlueprintSectionIds,
+  openclawCodeBlueprintSetSectionCommand,
   openclawCodeBlueprintSetProviderRoleCommand,
   openclawCodeBlueprintSetStatusCommand,
   openclawCodeBlueprintShowCommand,
   openclawCodeBlueprintStatusIds,
   openclawCodeDiscoverWorkItemsCommand,
   openclawCodeListValidationIssuesCommand,
+  openclawCodePromotionGateRefreshCommand,
+  openclawCodePromotionGateShowCommand,
   openclawCodeRoleRoutingRefreshCommand,
   openclawCodeRoleRoutingShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
+  openclawCodeRollbackSuggestionRefreshCommand,
+  openclawCodeRollbackSuggestionShowCommand,
   openclawCodeRunCommand,
   openclawCodeSeedValidationIssueCommand,
   openclawCodeSeedValidationIssueTemplateIds,
@@ -61,6 +67,10 @@ ${formatHelpExamples([
     "Update one provider role in the blueprint and refresh routing artifacts.",
   ],
   [
+    'openclaw code blueprint-set-section --section goal --body "Clarify the repo-level objective before issue creation." --json',
+    "Update one blueprint section without opening the markdown file manually.",
+  ],
+  [
     "openclaw code blueprint-decompose --json",
     "Derive and persist repo-local work items from the fixed project blueprint.",
   ],
@@ -80,6 +90,14 @@ ${formatHelpExamples([
   [
     "openclaw code stage-gates-refresh --json",
     "Persist the current stage-gate artifact for blueprint-backed execution.",
+  ],
+  [
+    "openclaw code promotion-gate-refresh --json",
+    "Persist the current promotion-readiness artifact for release and sync decisions.",
+  ],
+  [
+    "openclaw code rollback-suggestion-refresh --json",
+    "Persist the current rollback-target artifact for release and sync decisions.",
   ],
   [
     'openclaw code stage-gates-decide --gate execution-start --decision approved --note "Proceed with autonomous execution" --json',
@@ -215,6 +233,34 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             role: opts.role as string,
             provider: opts.provider as string | undefined,
             clear: Boolean(opts.clear),
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("blueprint-set-section")
+    .description("Update one blueprint section and refresh clarification and gate artifacts")
+    .requiredOption(
+      "--section <section>",
+      `Blueprint section (${openclawCodeBlueprintSectionIds().join(", ")})`,
+    )
+    .requiredOption("--body <text>", "Replacement text for the selected blueprint section")
+    .option("--append", "Append the new text instead of replacing the section body", false)
+    .option("--create-if-missing", "Create the blueprint scaffold if it does not exist", false)
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeBlueprintSetSectionCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            section: opts.section as string,
+            body: opts.body as string,
+            append: Boolean(opts.append),
+            createIfMissing: Boolean(opts.createIfMissing),
             json: Boolean(opts.json),
           },
           defaultRuntime,
@@ -362,6 +408,74 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             decision: opts.decision as string,
             actor: opts.actor as string | undefined,
             note: opts.note as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("promotion-gate-refresh")
+    .description("Persist the current promotion-readiness artifact")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodePromotionGateRefreshCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("promotion-gate-show")
+    .description("Show the latest persisted promotion-readiness artifact")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodePromotionGateShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("rollback-suggestion-refresh")
+    .description("Persist the current rollback-target suggestion artifact")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeRollbackSuggestionRefreshCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("rollback-suggestion-show")
+    .description("Show the latest persisted rollback-target suggestion artifact")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeRollbackSuggestionShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
             json: Boolean(opts.json),
           },
           defaultRuntime,

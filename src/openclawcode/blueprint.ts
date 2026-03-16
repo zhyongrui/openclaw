@@ -33,9 +33,42 @@ export const PROJECT_BLUEPRINT_REQUIRED_SECTIONS = [
   "Workstreams",
   "Open Questions",
 ] as const;
+export const PROJECT_BLUEPRINT_SECTION_IDS = [
+  "goal",
+  "success-criteria",
+  "scope",
+  "non-goals",
+  "constraints",
+  "risks",
+  "assumptions",
+  "human-gates",
+  "provider-strategy",
+  "workstreams",
+  "open-questions",
+] as const;
+
+const PROJECT_BLUEPRINT_SECTION_ALIASES = {
+  goal: "Goal",
+  "success-criteria": "Success Criteria",
+  successcriteria: "Success Criteria",
+  scope: "Scope",
+  "non-goals": "Non-Goals",
+  nongoals: "Non-Goals",
+  constraints: "Constraints",
+  risks: "Risks",
+  assumptions: "Assumptions",
+  "human-gates": "Human Gates",
+  humangates: "Human Gates",
+  "provider-strategy": "Provider Strategy",
+  providerstrategy: "Provider Strategy",
+  workstreams: "Workstreams",
+  "open-questions": "Open Questions",
+  openquestions: "Open Questions",
+} as const satisfies Record<string, (typeof PROJECT_BLUEPRINT_REQUIRED_SECTIONS)[number]>;
 
 export type ProjectBlueprintStatus = (typeof PROJECT_BLUEPRINT_STATUSES)[number];
 export type ProjectBlueprintRoleId = (typeof PROJECT_BLUEPRINT_ROLE_IDS)[number];
+export type ProjectBlueprintSectionName = (typeof PROJECT_BLUEPRINT_REQUIRED_SECTIONS)[number];
 
 export interface ProjectBlueprintRoleAssignments {
   planner: string | null;
@@ -155,6 +188,16 @@ export interface UpdateProjectBlueprintProviderRoleOptions {
   now?: string;
 }
 
+export interface UpdateProjectBlueprintSectionOptions {
+  repoRoot: string;
+  sectionName: ProjectBlueprintSectionName;
+  body: string;
+  append?: boolean;
+  createIfMissing?: boolean;
+  title?: string;
+  now?: string;
+}
+
 function isProjectBlueprintStatus(value: string): value is ProjectBlueprintStatus {
   return PROJECT_BLUEPRINT_STATUSES.includes(value as ProjectBlueprintStatus);
 }
@@ -177,6 +220,11 @@ function normalizeProjectBlueprintRoleId(value: string): ProjectBlueprintRoleId 
     default:
       return null;
   }
+}
+
+function normalizeProjectBlueprintSectionName(value: string): ProjectBlueprintSectionName | null {
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, "-");
+  return PROJECT_BLUEPRINT_SECTION_ALIASES[normalized] ?? null;
 }
 
 function normalizeProjectBlueprintStatus(value: string | undefined): ProjectBlueprintStatus | null {
@@ -476,6 +524,10 @@ export function projectBlueprintRoleIds(): string[] {
   return ["planner", "coder", "reviewer", "verifier", "doc-writer"];
 }
 
+export function projectBlueprintSectionIds(): string[] {
+  return [...PROJECT_BLUEPRINT_SECTION_IDS];
+}
+
 export function parseProjectBlueprintStatus(value: string): ProjectBlueprintStatus {
   if (!isProjectBlueprintStatus(value)) {
     throw new Error(`--status must be one of: ${PROJECT_BLUEPRINT_STATUSES.join(", ")}`);
@@ -489,6 +541,14 @@ export function parseProjectBlueprintRoleId(value: string): ProjectBlueprintRole
     throw new Error(`--role must be one of: ${projectBlueprintRoleIds().join(", ")}`);
   }
   return roleId;
+}
+
+export function parseProjectBlueprintSectionName(value: string): ProjectBlueprintSectionName {
+  const sectionName = normalizeProjectBlueprintSectionName(value);
+  if (!sectionName) {
+    throw new Error(`--section must be one of: ${projectBlueprintSectionIds().join(", ")}`);
+  }
+  return sectionName;
 }
 
 export async function readProjectBlueprint(repoRoot: string): Promise<ProjectBlueprintSummary> {
@@ -611,15 +671,36 @@ function replaceProjectBlueprintSectionBody(params: {
   sectionBody: string;
 }): string {
   const normalized = params.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const escapedSectionName = params.sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`(^##\\s+${escapedSectionName}\\n)([\\s\\S]*?)(?=^##\\s+|\\Z)`, "m");
-  if (!pattern.test(normalized)) {
+  const headings = [...normalized.matchAll(/^##\s+(.+)$/gm)];
+  const targetIndex = headings.findIndex((heading) => heading[1]?.trim() === params.sectionName);
+  if (targetIndex < 0) {
     throw new Error(`Project blueprint is missing the required \`${params.sectionName}\` section.`);
   }
-  return normalized.replace(
-    pattern,
-    (_match, heading: string) => `${heading}${params.sectionBody.trimEnd()}\n\n`,
-  );
+  const targetHeading = headings[targetIndex];
+  const targetStart = targetHeading?.index;
+  const headingText = targetHeading?.[0];
+  if (targetStart == null || !headingText) {
+    throw new Error(`Project blueprint is missing the required \`${params.sectionName}\` section.`);
+  }
+  const sectionStart = targetStart + headingText.length + 1;
+  const sectionEnd = headings[targetIndex + 1]?.index ?? normalized.length;
+  return `${normalized.slice(0, sectionStart)}${params.sectionBody.trimEnd()}\n\n${normalized.slice(sectionEnd).trimStart()}`;
+}
+
+function appendProjectBlueprintChangeLogEntry(params: { content: string; entry: string }): string {
+  const normalized = params.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const existingSections = extractSectionNames(normalized);
+  if (!existingSections.includes("Change Log")) {
+    return `${normalized.trimEnd()}\n\n## Change Log\n- ${params.entry}\n`;
+  }
+  const currentBodies = extractSectionBodies(normalized);
+  const currentBody = currentBodies["Change Log"]?.trim() ?? "";
+  const nextBody = currentBody ? `${currentBody}\n- ${params.entry}` : `- ${params.entry}`;
+  return replaceProjectBlueprintSectionBody({
+    content: normalized,
+    sectionName: "Change Log",
+    sectionBody: nextBody,
+  });
 }
 
 export async function updateProjectBlueprintProviderRole(
@@ -659,6 +740,73 @@ export async function updateProjectBlueprintProviderRole(
 
   await writeFile(blueprintPath, `${renderFrontmatter(frontmatter)}\n${body.trimStart()}`, "utf8");
   return await readProjectBlueprint(repoRoot);
+}
+
+export async function updateProjectBlueprintSection(
+  options: UpdateProjectBlueprintSectionOptions,
+): Promise<ProjectBlueprintDocument> {
+  const repoRoot = path.resolve(options.repoRoot);
+  const trimmedBody = options.body.trim();
+  if (!trimmedBody) {
+    throw new Error("--body must not be empty.");
+  }
+
+  let blueprint = await readProjectBlueprintDocument(repoRoot);
+  if (!blueprint.exists) {
+    if (!options.createIfMissing) {
+      throw new Error(
+        `Project blueprint does not exist at ${resolveProjectBlueprintPath(repoRoot)}. Run \`openclaw code blueprint-init\` first.`,
+      );
+    }
+    await createProjectBlueprint({
+      repoRoot,
+      title: options.title,
+      goal: options.sectionName === "Goal" ? trimmedBody : undefined,
+    });
+    blueprint = await readProjectBlueprintDocument(repoRoot);
+  }
+
+  if (!blueprint.content) {
+    throw new Error("Project blueprint content could not be loaded.");
+  }
+
+  const now = options.now ?? new Date().toISOString();
+  const currentBody = blueprint.sectionBodies[options.sectionName]?.trim() ?? "";
+  const sectionBody =
+    options.append && currentBody.length > 0 ? `${currentBody}\n${trimmedBody}` : trimmedBody;
+  const updatedSectionContent = replaceProjectBlueprintSectionBody({
+    content: blueprint.content,
+    sectionName: options.sectionName,
+    sectionBody,
+  });
+  const contentWithChangeLog = appendProjectBlueprintChangeLogEntry({
+    content: updatedSectionContent,
+    entry: `${now.slice(0, 10)}: updated \`${options.sectionName}\` via openclawcode blueprint workflow.`,
+  });
+  const current = parseProjectBlueprintContent({
+    repoRoot,
+    blueprintPath: blueprint.blueprintPath,
+    content: contentWithChangeLog,
+  });
+  const { body } = splitFrontmatter(contentWithChangeLog);
+  const frontmatter: ProjectBlueprintFrontmatter = {
+    schemaVersion: current.schemaVersion ?? PROJECT_BLUEPRINT_SCHEMA_VERSION,
+    title: current.title ?? `${path.basename(repoRoot)} project blueprint`,
+    status: current.status ?? "draft",
+    createdAt: current.createdAt ?? now,
+    updatedAt: now,
+    statusChangedAt: current.statusChangedAt ?? now,
+  };
+  if (current.agreedAt) {
+    frontmatter.agreedAt = current.agreedAt;
+  }
+
+  await writeFile(
+    current.blueprintPath,
+    `${renderFrontmatter(frontmatter)}\n${body.trimStart()}`,
+    "utf8",
+  );
+  return await readProjectBlueprintDocument(repoRoot);
 }
 
 export async function readProjectBlueprintDocument(

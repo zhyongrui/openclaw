@@ -4,10 +4,13 @@ import {
   createProjectBlueprint,
   inspectProjectBlueprintClarifications,
   parseProjectBlueprintRoleId,
+  parseProjectBlueprintSectionName,
   parseProjectBlueprintStatus,
   projectBlueprintRoleIds,
+  projectBlueprintSectionIds,
   projectBlueprintStatusIds,
   readProjectBlueprint,
+  updateProjectBlueprintSection,
   updateProjectBlueprintProviderRole,
   updateProjectBlueprintStatus,
   type ProjectBlueprintStatus,
@@ -31,6 +34,8 @@ import {
   AgentBackedVerifier,
   readProjectDiscoveryInventory,
   readProjectRoleRoutingPlan,
+  readProjectPromotionGateArtifact,
+  readProjectRollbackSuggestionArtifact,
   readProjectStageGateArtifact,
   readProjectWorkItemInventory,
   recordProjectStageGateDecision,
@@ -43,6 +48,8 @@ import {
   projectStageGateIds,
   writeProjectStageGateArtifact,
   writeProjectDiscoveryInventory,
+  writeProjectPromotionGateArtifact,
+  writeProjectRollbackSuggestionArtifact,
   writeProjectRoleRoutingPlan,
   writeProjectWorkItemInventory,
   resolveAutoMergeDisposition,
@@ -132,6 +139,15 @@ export interface OpenClawCodeBlueprintSetProviderRoleOpts {
   json?: boolean;
 }
 
+export interface OpenClawCodeBlueprintSetSectionOpts {
+  repoRoot?: string;
+  section: string;
+  body: string;
+  append?: boolean;
+  createIfMissing?: boolean;
+  json?: boolean;
+}
+
 export interface OpenClawCodeBlueprintClarifyOpts {
   repoRoot?: string;
   json?: boolean;
@@ -178,6 +194,26 @@ export interface OpenClawCodeStageGatesDecideOpts {
   decision: string;
   actor?: string;
   note?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodePromotionGateRefreshOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodePromotionGateShowOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeRollbackSuggestionRefreshOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeRollbackSuggestionShowOpts {
+  repoRoot?: string;
   json?: boolean;
 }
 
@@ -428,6 +464,74 @@ function logProjectStageGateArtifact(params: {
   runtime.log(`Needs human decision: ${artifact.needsHumanDecisionCount}`);
   for (const gate of artifact.gates) {
     runtime.log(`- ${gate.gateId}: ${gate.readiness} | ${gate.title}`);
+  }
+}
+
+function logProjectPromotionGateArtifact(params: {
+  artifact: Awaited<ReturnType<typeof readProjectPromotionGateArtifact>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { artifact, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(artifact, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${artifact.repoRoot}`);
+  runtime.log(`Promotion-gate path: ${artifact.artifactPath}`);
+  runtime.log(`Exists: ${artifact.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${artifact.generatedAt ?? "not yet generated"}`);
+  runtime.log(`Branch: ${artifact.branchName ?? "unknown"}`);
+  runtime.log(`Commit: ${artifact.commitSha ?? "unknown"}`);
+  runtime.log(`Base branch: ${artifact.baseBranch ?? "unknown"}`);
+  runtime.log(`Promotion ready: ${artifact.ready ? "yes" : "no"}`);
+  runtime.log(`Setup-check available: ${artifact.setupCheckAvailable ? "yes" : "no"}`);
+  runtime.log(`Merge-promotion gate: ${artifact.mergePromotionGateReadiness ?? "unknown"}`);
+  if (artifact.blockers.length > 0) {
+    runtime.log("Blockers:");
+    for (const blocker of artifact.blockers) {
+      runtime.log(`- ${blocker}`);
+    }
+  }
+  if (artifact.suggestions.length > 0) {
+    runtime.log("Suggestions:");
+    for (const suggestion of artifact.suggestions) {
+      runtime.log(`- ${suggestion}`);
+    }
+  }
+}
+
+function logProjectRollbackSuggestionArtifact(params: {
+  artifact: Awaited<ReturnType<typeof readProjectRollbackSuggestionArtifact>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { artifact, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(artifact, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${artifact.repoRoot}`);
+  runtime.log(`Rollback path: ${artifact.artifactPath}`);
+  runtime.log(`Exists: ${artifact.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${artifact.generatedAt ?? "not yet generated"}`);
+  runtime.log(`Current branch: ${artifact.branchName ?? "unknown"}`);
+  runtime.log(`Target ref: ${artifact.targetRef ?? "unknown"}`);
+  runtime.log(`Recommended: ${artifact.recommended ? "yes" : "no"}`);
+  runtime.log(`Reason: ${artifact.reason}`);
+  if (artifact.blockers.length > 0) {
+    runtime.log("Blockers:");
+    for (const blocker of artifact.blockers) {
+      runtime.log(`- ${blocker}`);
+    }
+  }
+  if (artifact.suggestions.length > 0) {
+    runtime.log("Suggestions:");
+    for (const suggestion of artifact.suggestions) {
+      runtime.log(`- ${suggestion}`);
+    }
   }
 }
 
@@ -895,6 +999,10 @@ function toWorkflowRunJson(run: WorkflowRun) {
     rerunReviewUrl: run.rerunContext?.reviewUrl ?? null,
     rerunRequestedCoderAgentId: run.rerunContext?.requestedCoderAgentId ?? null,
     rerunRequestedVerifierAgentId: run.rerunContext?.requestedVerifierAgentId ?? null,
+    rerunManualTakeoverRequestedAt: run.rerunContext?.manualTakeoverRequestedAt ?? null,
+    rerunManualTakeoverActor: run.rerunContext?.manualTakeoverActor ?? null,
+    rerunManualTakeoverWorktreePath: run.rerunContext?.manualTakeoverWorktreePath ?? null,
+    rerunManualResumeNote: run.rerunContext?.manualResumeNote ?? null,
     runSummary: resolveRunSummary(run),
     autoMergeDisposition: autoMergeDisposition.autoMergeDisposition,
     autoMergeDispositionReason: autoMergeDisposition.autoMergeDispositionReason,
@@ -1098,6 +1206,51 @@ export async function openclawCodeBlueprintSetProviderRoleCommand(
   });
 }
 
+export async function openclawCodeBlueprintSetSectionCommand(
+  opts: OpenClawCodeBlueprintSetSectionOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const sectionName = parseProjectBlueprintSectionName(opts.section);
+  const summary = await updateProjectBlueprintSection({
+    repoRoot,
+    sectionName,
+    body: opts.body,
+    append: Boolean(opts.append),
+    createIfMissing: Boolean(opts.createIfMissing),
+  });
+  const clarification = await inspectProjectBlueprintClarifications(repoRoot);
+  const stageGates = await writeProjectStageGateArtifact(repoRoot);
+  if (opts.json) {
+    runtime.log(
+      JSON.stringify(
+        {
+          blueprint: summary,
+          clarification,
+          stageGates,
+          updatedSection: sectionName,
+          append: Boolean(opts.append),
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  runtime.log(`Repo root: ${repoRoot}`);
+  runtime.log(`Updated section: ${sectionName}`);
+  runtime.log(`Blueprint revision: ${summary.revisionId ?? "unknown"}`);
+  runtime.log(
+    `Execution-start gate: ${stageGates.gates.find((gate) => gate.gateId === "execution-start")?.readiness ?? "unknown"}`,
+  );
+  logProjectBlueprintClarificationReport({
+    report: clarification,
+    runtime,
+    json: false,
+  });
+}
+
 export async function openclawCodeBlueprintDecomposeCommand(
   opts: OpenClawCodeBlueprintDecomposeOpts,
   runtime: RuntimeEnv,
@@ -1210,6 +1363,58 @@ export async function openclawCodeStageGatesDecideCommand(
     note: opts.note,
   });
   logProjectStageGateArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodePromotionGateRefreshCommand(
+  opts: OpenClawCodePromotionGateRefreshOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await writeProjectPromotionGateArtifact(repoRoot);
+  logProjectPromotionGateArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodePromotionGateShowCommand(
+  opts: OpenClawCodePromotionGateShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await readProjectPromotionGateArtifact(repoRoot);
+  logProjectPromotionGateArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeRollbackSuggestionRefreshCommand(
+  opts: OpenClawCodeRollbackSuggestionRefreshOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await writeProjectRollbackSuggestionArtifact(repoRoot);
+  logProjectRollbackSuggestionArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeRollbackSuggestionShowCommand(
+  opts: OpenClawCodeRollbackSuggestionShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await readProjectRollbackSuggestionArtifact(repoRoot);
+  logProjectRollbackSuggestionArtifact({
     artifact,
     runtime,
     json: Boolean(opts.json),
@@ -1527,4 +1732,8 @@ export function openclawCodeBlueprintStatusIds(): ProjectBlueprintStatus[] {
 
 export function openclawCodeBlueprintRoleIds(): string[] {
   return projectBlueprintRoleIds();
+}
+
+export function openclawCodeBlueprintSectionIds(): string[] {
+  return projectBlueprintSectionIds();
 }
