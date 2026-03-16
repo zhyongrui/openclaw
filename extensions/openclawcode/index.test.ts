@@ -6,6 +6,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OpenClawCodeChatopsStore } from "../../src/integrations/openclaw-plugin/index.js";
 import type { WorkflowRun } from "../../src/openclawcode/contracts/index.js";
+import { writeProjectWorkItemInventory } from "../../src/openclawcode/work-items.js";
 import type {
   OpenClawPluginCommandDefinition,
   OpenClawPluginService,
@@ -2778,6 +2779,89 @@ describe("openclawcode extension", () => {
           "- #66 | command-layer | command-json-number | [Feature]: Expose stageRecordCount in openclaw code run --json output",
         ].join("\n"),
       });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows blueprint work-item backlog through /occode-inbox", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Inbox Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:00:00.000Z",
+          "statusChangedAt: 2026-03-16T00:00:00.000Z",
+          "agreedAt: 2026-03-16T00:00:00.000Z",
+          "---",
+          "",
+          "# Inbox Blueprint",
+          "",
+          "## Goal",
+          "Surface work-item backlog counts in chat-visible inbox output.",
+          "",
+          "## Success Criteria",
+          "- /occode-inbox shows projected work-item totals and readiness.",
+          "",
+          "## Scope",
+          "- In scope: operator-facing backlog summaries.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Keep the output compact.",
+          "",
+          "## Risks",
+          "- Backlog drift could stay invisible without chat exposure.",
+          "",
+          "## Assumptions",
+          "- The blueprint has already been agreed.",
+          "",
+          "## Human Gates",
+          "- Merge promotion: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "",
+          "## Workstreams",
+          "- Add a compact backlog summary to /occode-inbox.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-16: backlog inbox proof.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      const inventory = await writeProjectWorkItemInventory(fixture.repoRoot);
+
+      const result = await fixture.commands.get("occode-inbox")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-inbox",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain(
+        "Blueprint backlog: 1 items | planned=1 | discovered=0 | stale=no",
+      );
+      expect(result?.text).toContain(
+        `- blueprint: agreed | revision ${inventory.blueprintRevisionId}`,
+      );
+      expect(result?.text).toContain(
+        "- issue projection: ready | execution: ready | blockers=0 | suggestions=0",
+      );
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });

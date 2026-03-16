@@ -579,7 +579,7 @@ Tasks:
 
 - `[ ]` expose blueprint discussion in existing chat surfaces
 - `[x]` expose blueprint status in operator status views
-- `[ ]` expose work-item backlog in chat
+- `[x]` expose work-item backlog in chat
 - `[x]` expose stage gates and pending approvals in chat
 - `[x]` expose provider-role decisions in chat
 - `[ ]` expose handoff and resume actions in chat

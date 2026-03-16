@@ -38,6 +38,7 @@ import {
   type ValidationIssueClass,
   type ValidationIssueTemplateId,
 } from "../../src/openclawcode/validation-issues.js";
+import { readProjectWorkItemInventory } from "../../src/openclawcode/work-items.js";
 
 const DEFAULT_POLL_INTERVAL_MS = 3_000;
 const DEFAULT_RUN_TIMEOUT_MS = 30 * 60_000;
@@ -645,10 +646,33 @@ function buildIntakeEscalatedMessage(params: {
     .join("\n");
 }
 
+function buildWorkItemBacklogLines(
+  inventory: Awaited<ReturnType<typeof readProjectWorkItemInventory>> | undefined,
+): string[] {
+  if (!inventory || (!inventory.exists && !inventory.blueprintExists)) {
+    return [];
+  }
+
+  const revisionId =
+    inventory.currentBlueprintRevisionId ?? inventory.blueprintRevisionId ?? "unknown";
+  const stale =
+    inventory.artifactStale == null ? "unknown" : inventory.artifactStale ? "yes" : "no";
+  const headline = inventory.exists
+    ? `Blueprint backlog: ${inventory.workItemCount} items | planned=${inventory.plannedWorkItemCount} | discovered=${inventory.discoveredWorkItemCount} | stale=${stale}`
+    : `Blueprint backlog: artifact missing | planned=0 | discovered=0 | stale=${stale}`;
+
+  return [
+    headline,
+    `- blueprint: ${inventory.blueprintStatus ?? "unknown"} | revision ${revisionId}`,
+    `- issue projection: ${inventory.readyForIssueProjection ? "ready" : "blocked"} | execution: ${inventory.readyForExecution ? "ready" : "blocked"} | blockers=${inventory.blockerCount} | suggestions=${inventory.suggestionCount}`,
+  ];
+}
+
 function buildInboxMessage(params: {
   repo: { owner: string; repo: string };
   state: Awaited<ReturnType<OpenClawCodeChatopsStore["snapshot"]>>;
   validationPool?: ValidationPoolSummary;
+  workItems?: Awaited<ReturnType<typeof readProjectWorkItemInventory>>;
 }): string {
   const repoKey = formatRepoKey(params.repo);
   const pending = params.state.pendingApprovals.filter((entry) =>
@@ -777,6 +801,7 @@ function buildInboxMessage(params: {
     lines.push("Recent ledger: 0");
   }
 
+  lines.push(...buildWorkItemBacklogLines(params.workItems));
   lines.push(...buildValidationPoolLines(params.validationPool));
 
   return lines.join("\n");
@@ -2187,6 +2212,9 @@ export default {
             repo: repoConfig.repo,
           },
         }).catch(() => undefined);
+        const workItems = await readProjectWorkItemInventory(repoConfig.repoRoot).catch(
+          () => undefined,
+        );
         return {
           text: buildInboxMessage({
             repo: {
@@ -2195,6 +2223,7 @@ export default {
             },
             state,
             validationPool,
+            workItems,
           }),
         };
       },

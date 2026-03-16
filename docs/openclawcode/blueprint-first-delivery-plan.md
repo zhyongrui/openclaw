@@ -232,3 +232,4 @@ The near-term implementation order is:
 - persisted blueprint-first snapshots into workflow run artifacts
 - surfaced blueprint status, role routing, and stage-gate summaries in
   operator-facing status messages
+- surfaced blueprint work-item backlog summaries in `/occode-inbox`

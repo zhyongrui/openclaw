@@ -1905,3 +1905,17 @@ repo-local artifacts and `run --json`.
 - the run-status integration test now covers those new status lines
 - this gives `/occode-status` a first blueprint-first operator foothold without
   changing the persisted plugin snapshot schema
+
+## Blueprint-First Inbox Backlog Snapshot
+
+`/occode-inbox` now also reads the repo-local work-item inventory so operators
+can see blueprint execution projection without leaving chat.
+
+- when `.openclawcode/work-items.json` exists, inbox output now includes:
+  - total work-item count
+  - planned/discovered breakdown
+  - staleness against the current blueprint revision
+  - issue-projection and execution readiness
+  - blocker/suggestion counts
+- when a blueprint exists but the work-item artifact is missing, inbox output
+  now shows that gap explicitly instead of silently omitting blueprint context

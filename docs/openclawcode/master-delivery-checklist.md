@@ -128,6 +128,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] show validation issue annotations in `/occode-status`
 - [x] show structured failure diagnostics in `/occode-status`
 - [x] show structured failure diagnostics in `/occode-inbox`
+- [x] show blueprint work-item backlog summaries in `/occode-inbox`
 - [x] show blueprint status and revision in `/occode-status`
 - [x] show provider-role routing decisions in `/occode-status`
 - [x] show stage-gate readiness summaries in `/occode-status`
