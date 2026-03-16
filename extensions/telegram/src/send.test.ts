@@ -16,11 +16,14 @@ const {
   buildInlineKeyboard,
   createForumTopicTelegram,
   editMessageTelegram,
+  pinMessageTelegram,
   reactMessageTelegram,
+  renameForumTopicTelegram,
   sendMessageTelegram,
   sendTypingTelegram,
   sendPollTelegram,
   sendStickerTelegram,
+  unpinMessageTelegram,
 } = await importTelegramSendModule();
 
 async function expectChatNotFoundWithChatId(
@@ -212,6 +215,45 @@ describe("sendMessageTelegram", () => {
 
     expect(botApi.sendChatAction).toHaveBeenCalledWith("-1001234567890", "typing", {
       message_thread_id: 271,
+    });
+  });
+
+  it("pins and unpins Telegram messages", async () => {
+    loadConfig.mockReturnValue({
+      channels: {
+        telegram: {
+          botToken: "tok",
+        },
+      },
+    });
+    botApi.pinChatMessage.mockResolvedValue(true);
+    botApi.unpinChatMessage.mockResolvedValue(true);
+
+    await pinMessageTelegram("-1001234567890", 101, { accountId: "default" });
+    await unpinMessageTelegram("-1001234567890", 101, { accountId: "default" });
+
+    expect(botApi.pinChatMessage).toHaveBeenCalledWith("-1001234567890", 101, {
+      disable_notification: true,
+    });
+    expect(botApi.unpinChatMessage).toHaveBeenCalledWith("-1001234567890", 101);
+  });
+
+  it("renames a Telegram forum topic", async () => {
+    loadConfig.mockReturnValue({
+      channels: {
+        telegram: {
+          botToken: "tok",
+        },
+      },
+    });
+    botApi.editForumTopic.mockResolvedValue(true);
+
+    await renameForumTopicTelegram("-1001234567890", 271, "Codex Thread", {
+      accountId: "default",
+    });
+
+    expect(botApi.editForumTopic).toHaveBeenCalledWith("-1001234567890", 271, {
+      name: "Codex Thread",
     });
   });
 
@@ -775,10 +817,11 @@ describe("sendMessageTelegram", () => {
     }
   });
 
-  it("retries on transient errors with retry_after", async () => {
+  it("retries pre-connect send errors and honors retry_after when present", async () => {
     vi.useFakeTimers();
     const chatId = "123";
-    const err = Object.assign(new Error("429"), {
+    const err = Object.assign(new Error("getaddrinfo ENOTFOUND api.telegram.org"), {
+      code: "ENOTFOUND",
       parameters: { retry_after: 0.5 },
     });
     const sendMessage = vi
@@ -823,29 +866,25 @@ describe("sendMessageTelegram", () => {
     expect(sendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it("retries when grammY network envelope message includes failed-after wording", async () => {
+  it("does not retry generic grammY failed-after envelopes for non-idempotent sends", async () => {
     const chatId = "123";
     const sendMessage = vi
       .fn()
       .mockRejectedValueOnce(
         new Error("Network request for 'sendMessage' failed after 1 attempts."),
-      )
-      .mockResolvedValueOnce({
-        message_id: 7,
-        chat: { id: chatId },
-      });
+      );
     const api = { sendMessage } as unknown as {
       sendMessage: typeof sendMessage;
     };
 
-    const result = await sendMessageTelegram(chatId, "hi", {
-      token: "tok",
-      api,
-      retry: { attempts: 2, minDelayMs: 0, maxDelayMs: 0, jitter: 0 },
-    });
-
-    expect(sendMessage).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({ messageId: "7", chatId });
+    await expect(
+      sendMessageTelegram(chatId, "hi", {
+        token: "tok",
+        api,
+        retry: { attempts: 2, minDelayMs: 0, maxDelayMs: 0, jitter: 0 },
+      }),
+    ).rejects.toThrow(/failed after 1 attempts/i);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it("sends GIF media as animation", async () => {
