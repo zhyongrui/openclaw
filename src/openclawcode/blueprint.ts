@@ -148,8 +148,35 @@ export interface UpdateProjectBlueprintStatusOptions {
   now?: string;
 }
 
+export interface UpdateProjectBlueprintProviderRoleOptions {
+  repoRoot: string;
+  roleId: ProjectBlueprintRoleId;
+  provider: string | null;
+  now?: string;
+}
+
 function isProjectBlueprintStatus(value: string): value is ProjectBlueprintStatus {
   return PROJECT_BLUEPRINT_STATUSES.includes(value as ProjectBlueprintStatus);
+}
+
+function normalizeProjectBlueprintRoleId(value: string): ProjectBlueprintRoleId | null {
+  const normalized = value.trim().toLowerCase();
+  switch (normalized) {
+    case "planner":
+      return "planner";
+    case "coder":
+      return "coder";
+    case "reviewer":
+      return "reviewer";
+    case "verifier":
+      return "verifier";
+    case "doc-writer":
+    case "docwriter":
+    case "doc_writer":
+      return "docWriter";
+    default:
+      return null;
+  }
 }
 
 function normalizeProjectBlueprintStatus(value: string | undefined): ProjectBlueprintStatus | null {
@@ -445,11 +472,23 @@ export function projectBlueprintStatusIds(): ProjectBlueprintStatus[] {
   return [...PROJECT_BLUEPRINT_STATUSES];
 }
 
+export function projectBlueprintRoleIds(): string[] {
+  return ["planner", "coder", "reviewer", "verifier", "doc-writer"];
+}
+
 export function parseProjectBlueprintStatus(value: string): ProjectBlueprintStatus {
   if (!isProjectBlueprintStatus(value)) {
     throw new Error(`--status must be one of: ${PROJECT_BLUEPRINT_STATUSES.join(", ")}`);
   }
   return value;
+}
+
+export function parseProjectBlueprintRoleId(value: string): ProjectBlueprintRoleId {
+  const roleId = normalizeProjectBlueprintRoleId(value);
+  if (!roleId) {
+    throw new Error(`--role must be one of: ${projectBlueprintRoleIds().join(", ")}`);
+  }
+  return roleId;
 }
 
 export async function readProjectBlueprint(repoRoot: string): Promise<ProjectBlueprintSummary> {
@@ -550,6 +589,72 @@ export async function updateProjectBlueprintStatus(
   }
   if (options.status === "agreed" && !frontmatter.agreedAt) {
     frontmatter.agreedAt = now;
+  }
+
+  await writeFile(blueprintPath, `${renderFrontmatter(frontmatter)}\n${body.trimStart()}`, "utf8");
+  return await readProjectBlueprint(repoRoot);
+}
+
+function renderProjectBlueprintProviderStrategyBody(
+  assignments: ProjectBlueprintRoleAssignments,
+): string {
+  return PROJECT_BLUEPRINT_ROLE_IDS.map((roleId) => {
+    const label = PROJECT_BLUEPRINT_PROVIDER_ROLE_LABELS[roleId];
+    const value = assignments[roleId];
+    return `- ${label}:${value ? ` ${value}` : ""}`;
+  }).join("\n");
+}
+
+function replaceProjectBlueprintSectionBody(params: {
+  content: string;
+  sectionName: string;
+  sectionBody: string;
+}): string {
+  const normalized = params.content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const escapedSectionName = params.sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(^##\\s+${escapedSectionName}\\n)([\\s\\S]*?)(?=^##\\s+|\\Z)`, "m");
+  if (!pattern.test(normalized)) {
+    throw new Error(`Project blueprint is missing the required \`${params.sectionName}\` section.`);
+  }
+  return normalized.replace(
+    pattern,
+    (_match, heading: string) => `${heading}${params.sectionBody.trimEnd()}\n\n`,
+  );
+}
+
+export async function updateProjectBlueprintProviderRole(
+  options: UpdateProjectBlueprintProviderRoleOptions,
+): Promise<ProjectBlueprintSummary> {
+  const repoRoot = path.resolve(options.repoRoot);
+  const blueprintPath = resolveProjectBlueprintPath(repoRoot);
+  const currentContent = await readFile(blueprintPath, "utf8");
+  const current = parseProjectBlueprintContent({
+    repoRoot,
+    blueprintPath,
+    content: currentContent,
+  });
+  const now = options.now ?? new Date().toISOString();
+  const assignments: ProjectBlueprintRoleAssignments = {
+    ...current.providerRoleAssignments,
+    [options.roleId]: options.provider?.trim() ? options.provider.trim() : null,
+  };
+
+  const updatedContent = replaceProjectBlueprintSectionBody({
+    content: currentContent,
+    sectionName: "Provider Strategy",
+    sectionBody: renderProjectBlueprintProviderStrategyBody(assignments),
+  });
+  const { body } = splitFrontmatter(updatedContent);
+  const frontmatter: ProjectBlueprintFrontmatter = {
+    schemaVersion: current.schemaVersion ?? PROJECT_BLUEPRINT_SCHEMA_VERSION,
+    title: current.title ?? `${path.basename(repoRoot)} project blueprint`,
+    status: current.status ?? "draft",
+    createdAt: current.createdAt ?? now,
+    updatedAt: now,
+    statusChangedAt: current.statusChangedAt ?? now,
+  };
+  if (current.agreedAt) {
+    frontmatter.agreedAt = current.agreedAt;
   }
 
   await writeFile(blueprintPath, `${renderFrontmatter(frontmatter)}\n${body.trimStart()}`, "utf8");

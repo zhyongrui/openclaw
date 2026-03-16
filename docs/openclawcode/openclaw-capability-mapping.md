@@ -587,6 +587,7 @@ Tasks:
 - `[x]` let approved execution-start gates unblock chat-started execution
 - `[x]` hold autonomous intake paths behind execution-start when human signoff is still required
 - `[x]` expose first handoff and automatic execution-start resume actions in chat
+- `[x]` expose first provider-role reroute controls in chat and CLI
 
 Acceptance:
 

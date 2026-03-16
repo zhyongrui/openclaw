@@ -1982,3 +1982,21 @@ only manual `/occode-start`.
   - stores the issue as a pending approval with gate guidance
 - the same gate approval now resumes these held autonomous intake items
   automatically, instead of forcing another manual start step
+
+## Chat/CLI Provider Reroute Controls
+
+The first provider-routing write path is now live before execution starts.
+
+- new local command:
+  - `openclaw code blueprint-set-provider-role --role <role> --provider <provider>`
+- new chat commands:
+  - `/occode-routing`
+  - `/occode-route-set`
+- these commands mutate the blueprint `Provider Strategy` section directly
+- after each mutation, openclawcode now refreshes:
+  - `.openclawcode/role-routing.json`
+  - `.openclawcode/stage-gates.json`
+- this closes the pre-run reroute gap, but not the mid-run one:
+  - operators can reroute planner/coder/reviewer/verifier/doc-writer before a
+    run starts
+  - they still cannot switch providers in the middle of an active run yet

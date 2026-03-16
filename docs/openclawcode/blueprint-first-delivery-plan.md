@@ -194,6 +194,8 @@ Current foothold:
   `.openclawcode/runs/*` and `openclaw code run --json`
 - chat surfaces now expose:
   - `/occode-blueprint`
+  - `/occode-routing`
+  - `/occode-route-set`
   - `/occode-gates`
   - `/occode-gate-decide`
   - blueprint backlog and routing summaries in `/occode-inbox` and `/occode-status`
@@ -201,9 +203,12 @@ Current foothold:
   - `/occode-start` refuses to queue when the gate is not ready
   - auto webhook intake and `/occode-intake` hold execution behind the same gate
   - once a human records `execution-start approved`, held execution-start work resumes automatically
+- provider reroute now has a first live write path:
+  - one blueprint provider-role assignment can be changed from CLI or chat
+  - role-routing and stage-gate artifacts refresh immediately after the change
 - the remaining gap is deeper runtime integration:
   - manual worktree takeover is still missing
-  - provider switching is still missing
+  - provider switching mid-run is still missing
   - structured resume after manual edits is still missing
 
 ### Phase B7: Proofs And Productization
@@ -250,3 +255,5 @@ The near-term implementation order is:
 - made auto webhook intake and `/occode-intake` honor execution-start gate
   readiness and approval
 - made chat gate approval automatically resume held execution-start work
+- added CLI/chat provider-role reroute controls that mutate blueprint routing
+  and refresh downstream artifacts

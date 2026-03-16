@@ -42,6 +42,11 @@ loop with:
   - `/occode-rerun`
   - `/occode-status`
   - `/occode-inbox`
+  - `/occode-blueprint`
+  - `/occode-routing`
+  - `/occode-route-set`
+  - `/occode-gates`
+  - `/occode-gate-decide`
   - `/occode-skip`
   - `/occode-sync`
   - `/occode-bind`
@@ -56,6 +61,7 @@ loop with:
   - `openclaw code blueprint-show`
   - `openclaw code blueprint-clarify`
   - `openclaw code blueprint-set-status`
+  - `openclaw code blueprint-set-provider-role`
   - `openclaw code blueprint-decompose`
   - `openclaw code work-items-show`
   - `openclaw code discover-work-items`

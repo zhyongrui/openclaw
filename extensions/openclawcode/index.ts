@@ -33,10 +33,17 @@ import {
 } from "../../src/integrations/openclaw-plugin/index.js";
 import {
   inspectProjectBlueprintClarifications,
+  parseProjectBlueprintRoleId,
+  projectBlueprintRoleIds,
   readProjectBlueprintDocument,
+  updateProjectBlueprintProviderRole,
 } from "../../src/openclawcode/blueprint.js";
 import type { GitHubIssueClient } from "../../src/openclawcode/github/index.js";
 import { GitHubRestClient } from "../../src/openclawcode/github/index.js";
+import {
+  readProjectRoleRoutingPlan,
+  writeProjectRoleRoutingPlan,
+} from "../../src/openclawcode/role-routing.js";
 import {
   readProjectStageGateArtifact,
   recordProjectStageGateDecision,
@@ -808,6 +815,66 @@ function buildBlueprintProviderStrategyLine(
     .map(([role, value]) => `${role}=${value}`);
 
   return entries.length > 0 ? `Provider strategy: ${entries.join(", ")}` : undefined;
+}
+
+function buildRoleRoutingSummaryMessage(params: {
+  repo: { owner: string; repo: string };
+  plan: Awaited<ReturnType<typeof readProjectRoleRoutingPlan>>;
+}): string {
+  const routeLine = params.plan.routes
+    .map((route) => {
+      const role = route.roleId === "docWriter" ? "doc-writer" : route.roleId;
+      return `${role}=${route.adapterId}`;
+    })
+    .join(", ");
+  return [
+    `openclawcode role routing for ${formatRepoKey(params.repo)}`,
+    `Role routing: ${routeLine}`,
+    `Mixed mode: ${params.plan.mixedMode ? "yes" : "no"}`,
+    `Fallback configured: ${params.plan.fallbackConfigured ? "yes" : "no"}`,
+    `Unresolved roles: ${params.plan.unresolvedRoleCount}`,
+    ...params.plan.blockers.slice(0, 3).map((blocker) => `- blocker: ${blocker}`),
+    ...params.plan.suggestions.slice(0, 2).map((suggestion) => `- suggestion: ${suggestion}`),
+  ].join("\n");
+}
+
+function parseRoleRoutingSetArgs(params: {
+  args: string;
+  defaults: { owner?: string; repo?: string };
+}):
+  | {
+      repo: { owner: string; repo: string };
+      roleId: ReturnType<typeof parseProjectBlueprintRoleId>;
+      provider: string | null;
+    }
+  | undefined {
+  const tokens = params.args
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (tokens.length < 2) {
+    return undefined;
+  }
+  const firstRepo = parseChatopsRepoReference(tokens[0] ?? "", params.defaults);
+  const offset = firstRepo ? 1 : 0;
+  const repo = firstRepo ?? parseChatopsRepoReference("", params.defaults);
+  const roleToken = tokens[offset];
+  const providerToken = tokens
+    .slice(offset + 1)
+    .join(" ")
+    .trim();
+  if (!repo || !roleToken || providerToken.length === 0) {
+    return undefined;
+  }
+  const loweredProvider = providerToken.toLowerCase();
+  return {
+    repo,
+    roleId: parseProjectBlueprintRoleId(roleToken),
+    provider:
+      loweredProvider === "clear" || loweredProvider === "none" || loweredProvider === "null"
+        ? null
+        : providerToken,
+  };
 }
 
 function buildBlueprintSummaryMessage(params: {
@@ -2700,6 +2767,127 @@ export default {
             clarification,
           }),
         };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-routing",
+      description: "Show the current provider-role routing plan for an openclawcode repo.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const repo = parseChatopsRepoReference(ctx.args ?? "", {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!repo) {
+          return {
+            text:
+              "Usage: /occode-routing owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-routing",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+
+        const plan = await writeProjectRoleRoutingPlan(repoConfig.repoRoot);
+        return {
+          text: buildRoleRoutingSummaryMessage({
+            repo: {
+              owner: repoConfig.owner,
+              repo: repoConfig.repo,
+            },
+            plan,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-route-set",
+      description: "Update one provider-role assignment for an openclawcode repo from chat.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        let parsed:
+          | {
+              repo: { owner: string; repo: string };
+              roleId: ReturnType<typeof parseProjectBlueprintRoleId>;
+              provider: string | null;
+            }
+          | undefined;
+        try {
+          parsed = parseRoleRoutingSetArgs({
+            args: ctx.args ?? "",
+            defaults: {
+              owner: defaultRepo?.owner,
+              repo: defaultRepo?.repo,
+            },
+          });
+        } catch (error) {
+          return {
+            text: (error as Error).message,
+          };
+        }
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-route-set owner/repo <role> <provider|clear>\n" +
+              `Roles: ${projectBlueprintRoleIds().join(", ")}\n` +
+              "Or, when exactly one repo is configured: /occode-route-set <role> <provider|clear>",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.repo.owner}/${parsed.repo.repo}.`,
+          };
+        }
+
+        try {
+          const blueprint = await updateProjectBlueprintProviderRole({
+            repoRoot: repoConfig.repoRoot,
+            roleId: parsed.roleId,
+            provider: parsed.provider,
+          });
+          const plan = await writeProjectRoleRoutingPlan(repoConfig.repoRoot);
+          const stageGates = await writeProjectStageGateArtifact(repoConfig.repoRoot);
+          const executionRoutingGate = stageGates.gates.find(
+            (entry) => entry.gateId === "execution-routing",
+          );
+          return {
+            text: [
+              `Updated provider routing for ${formatRepoKey(parsed.repo)}`,
+              `Role: ${parsed.roleId === "docWriter" ? "doc-writer" : parsed.roleId}`,
+              `Provider: ${parsed.provider ?? "cleared"}`,
+              `Blueprint revision: ${blueprint.revisionId ?? "unknown"}`,
+              executionRoutingGate
+                ? `Execution routing gate: ${executionRoutingGate.readiness}`
+                : undefined,
+              buildRoleRoutingSummaryMessage({
+                repo: {
+                  owner: repoConfig.owner,
+                  repo: repoConfig.repo,
+                },
+                plan,
+              }),
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          };
+        } catch (error) {
+          return {
+            text: (error as Error).message,
+          };
+        }
       },
     });
 

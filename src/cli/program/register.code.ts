@@ -3,6 +3,8 @@ import {
   openclawCodeBlueprintClarifyCommand,
   openclawCodeBlueprintDecomposeCommand,
   openclawCodeBlueprintInitCommand,
+  openclawCodeBlueprintRoleIds,
+  openclawCodeBlueprintSetProviderRoleCommand,
   openclawCodeBlueprintSetStatusCommand,
   openclawCodeBlueprintShowCommand,
   openclawCodeBlueprintStatusIds,
@@ -53,6 +55,10 @@ ${formatHelpExamples([
   [
     "openclaw code blueprint-set-status --status agreed",
     "Record the explicit blueprint agreement checkpoint.",
+  ],
+  [
+    'openclaw code blueprint-set-provider-role --role coder --provider "Codex" --json',
+    "Update one provider role in the blueprint and refresh routing artifacts.",
   ],
   [
     "openclaw code blueprint-decompose --json",
@@ -183,6 +189,32 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
           {
             repoRoot: opts.repoRoot as string | undefined,
             status: opts.status as string,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("blueprint-set-provider-role")
+    .description("Update one provider role assignment in the fixed project blueprint")
+    .requiredOption(
+      "--role <role>",
+      `Blueprint role (${openclawCodeBlueprintRoleIds().join(", ")})`,
+    )
+    .option("--provider <provider>", "Provider assignment text to persist in Provider Strategy")
+    .option("--clear", "Clear the current provider assignment for this role", false)
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeBlueprintSetProviderRoleCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            role: opts.role as string,
+            provider: opts.provider as string | undefined,
+            clear: Boolean(opts.clear),
             json: Boolean(opts.json),
           },
           defaultRuntime,

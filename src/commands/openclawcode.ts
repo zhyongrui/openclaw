@@ -3,9 +3,12 @@ import path from "node:path";
 import {
   createProjectBlueprint,
   inspectProjectBlueprintClarifications,
+  parseProjectBlueprintRoleId,
   parseProjectBlueprintStatus,
+  projectBlueprintRoleIds,
   projectBlueprintStatusIds,
   readProjectBlueprint,
+  updateProjectBlueprintProviderRole,
   updateProjectBlueprintStatus,
   type ProjectBlueprintStatus,
 } from "../openclawcode/blueprint.js";
@@ -114,6 +117,14 @@ export interface OpenClawCodeBlueprintShowOpts {
 export interface OpenClawCodeBlueprintSetStatusOpts {
   repoRoot?: string;
   status: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeBlueprintSetProviderRoleOpts {
+  repoRoot?: string;
+  role: string;
+  provider?: string;
+  clear?: boolean;
   json?: boolean;
 }
 
@@ -1112,6 +1123,54 @@ export async function openclawCodeBlueprintSetStatusCommand(
   });
 }
 
+export async function openclawCodeBlueprintSetProviderRoleCommand(
+  opts: OpenClawCodeBlueprintSetProviderRoleOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const roleId = parseProjectBlueprintRoleId(opts.role);
+  const provider =
+    opts.clear || !opts.provider || opts.provider.trim().toLowerCase() === "clear"
+      ? null
+      : opts.provider.trim();
+  const summary = await updateProjectBlueprintProviderRole({
+    repoRoot,
+    roleId,
+    provider,
+  });
+  const plan = await writeProjectRoleRoutingPlan(repoRoot);
+  const stageGates = await writeProjectStageGateArtifact(repoRoot);
+  if (opts.json) {
+    runtime.log(
+      JSON.stringify(
+        {
+          blueprint: summary,
+          roleRouting: plan,
+          stageGates,
+          updatedRole: roleId,
+          provider,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  runtime.log(`Repo root: ${repoRoot}`);
+  runtime.log(`Updated role: ${opts.role}`);
+  runtime.log(`Provider: ${provider ?? "cleared"}`);
+  runtime.log(`Blueprint revision: ${summary.revisionId ?? "unknown"}`);
+  runtime.log(
+    `Execution routing gate: ${stageGates.gates.find((gate) => gate.gateId === "execution-routing")?.readiness ?? "unknown"}`,
+  );
+  logProjectRoleRoutingPlan({
+    plan,
+    runtime,
+    json: false,
+  });
+}
+
 export async function openclawCodeBlueprintDecomposeCommand(
   opts: OpenClawCodeBlueprintDecomposeOpts,
   runtime: RuntimeEnv,
@@ -1537,4 +1596,8 @@ export function openclawCodeSeedValidationIssueTemplateIds(): ValidationIssueTem
 
 export function openclawCodeBlueprintStatusIds(): ProjectBlueprintStatus[] {
   return projectBlueprintStatusIds();
+}
+
+export function openclawCodeBlueprintRoleIds(): string[] {
+  return projectBlueprintRoleIds();
 }

@@ -3514,6 +3514,174 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("shows provider-role routing through /occode-routing", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Routing Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:05:00.000Z",
+          "statusChangedAt: 2026-03-16T00:05:00.000Z",
+          "agreedAt: 2026-03-16T00:05:00.000Z",
+          "---",
+          "",
+          "# Routing Blueprint",
+          "",
+          "## Goal",
+          "Expose provider-role routing in chat.",
+          "",
+          "## Success Criteria",
+          "- Operators can inspect the current role-routing plan.",
+          "",
+          "## Scope",
+          "- In scope: read-only routing summary.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Keep the summary compact.",
+          "",
+          "## Risks",
+          "- Operators may miss unresolved roles.",
+          "",
+          "## Assumptions",
+          "- Chat users want adapter-level visibility.",
+          "",
+          "## Human Gates",
+          "- Goal agreement: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "",
+          "## Workstreams",
+          "- Show the current role-routing plan in chat.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-16: chat routing summary.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const result = await fixture.commands.get("occode-routing")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-routing",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain("openclawcode role routing for zhyongrui/openclawcode");
+      expect(result?.text).toContain("planner=claude-code");
+      expect(result?.text).toContain("coder=codex");
+      expect(result?.text).toContain("reviewer=claude-code");
+      expect(result?.text).toContain("Unresolved roles: 2");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("updates provider-role routing through /occode-route-set", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Route Set Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-16T00:00:00.000Z",
+          "updatedAt: 2026-03-16T00:05:00.000Z",
+          "statusChangedAt: 2026-03-16T00:05:00.000Z",
+          "agreedAt: 2026-03-16T00:05:00.000Z",
+          "---",
+          "",
+          "# Route Set Blueprint",
+          "",
+          "## Goal",
+          "Let chat operators reroute blueprint roles without editing markdown by hand.",
+          "",
+          "## Success Criteria",
+          "- Chat can update one provider role and refresh artifacts.",
+          "",
+          "## Scope",
+          "- In scope: provider role assignment updates.",
+          "",
+          "## Non-Goals",
+          "- None.",
+          "",
+          "## Constraints",
+          "- Keep the mutation deterministic.",
+          "",
+          "## Risks",
+          "- Routing drift if artifacts are not refreshed.",
+          "",
+          "## Assumptions",
+          "- The blueprint is already agreed.",
+          "",
+          "## Human Gates",
+          "- Goal agreement: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer:",
+          "- Verifier:",
+          "- Doc-writer:",
+          "",
+          "## Workstreams",
+          "- Update routing from chat.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-16: chat route mutation.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      await writeProjectDiscoveryInventory(fixture.repoRoot);
+
+      const result = await fixture.commands.get("occode-route-set")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-route-set reviewer Claude Code",
+        args: "reviewer Claude Code",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Updated provider routing for zhyongrui/openclawcode");
+      expect(result?.text).toContain("Role: reviewer");
+      expect(result?.text).toContain("Provider: Claude Code");
+      expect(result?.text).toContain("Execution routing gate:");
+      expect(result?.text).toContain("reviewer=claude-code");
+
+      const content = await fs.readFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        "utf8",
+      );
+      expect(content).toContain("- Reviewer: Claude Code");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("shows blueprint stage gates through /occode-gates", async () => {
     const fixture = await registerPluginFixture();
     try {

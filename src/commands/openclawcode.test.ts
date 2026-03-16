@@ -10,6 +10,7 @@ import {
   DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS,
   DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS,
   openclawCodeBlueprintInitCommand,
+  openclawCodeBlueprintSetProviderRoleCommand,
   openclawCodeRoleRoutingRefreshCommand,
   openclawCodeRoleRoutingShowCommand,
   openclawCodeStageGatesDecideCommand,
@@ -1459,6 +1460,48 @@ describe("openclawCodeRunCommand", () => {
     const content = await readFile(path.join(repoRoot, "PROJECT-BLUEPRINT.md"), "utf8");
     expect(content).toContain("status: agreed");
     expect(content).toContain("agreedAt:");
+  });
+
+  it("updates one blueprint provider role and refreshes routing artifacts", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-blueprint-route-set-"));
+
+    await openclawCodeBlueprintInitCommand(
+      {
+        repoRoot,
+        title: "Routing Blueprint",
+      },
+      runtime,
+    );
+    runtime.log.mockClear();
+
+    await openclawCodeBlueprintSetProviderRoleCommand(
+      {
+        repoRoot,
+        role: "reviewer",
+        provider: "Claude Code",
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.updatedRole).toBe("reviewer");
+    expect(payload.provider).toBe("Claude Code");
+    expect(payload.blueprint.providerRoleAssignments.reviewer).toBe("Claude Code");
+    expect(payload.roleRouting.routes).toContainEqual(
+      expect.objectContaining({
+        roleId: "reviewer",
+        rawAssignment: "Claude Code",
+        adapterId: "claude-code",
+      }),
+    );
+    expect(payload.stageGates.gates).toContainEqual(
+      expect.objectContaining({
+        gateId: "execution-routing",
+      }),
+    );
+    const content = await readFile(path.join(repoRoot, "PROJECT-BLUEPRINT.md"), "utf8");
+    expect(content).toContain("- Reviewer: Claude Code");
   });
 
   it("reports clarification questions and suggestions for the default blueprint scaffold", async () => {
