@@ -807,6 +807,10 @@ function resolveRoleRouteAdapter(run: WorkflowRun, roleId: string): string | nul
   return run.roleRouting?.routes.find((route) => route.roleId === roleId)?.adapterId ?? null;
 }
 
+function resolveRuntimeRoutingSelection(run: WorkflowRun, roleId: string) {
+  return run.runtimeRouting?.selections.find((selection) => selection.roleId === roleId) ?? null;
+}
+
 function resolveStageGateReadiness(run: WorkflowRun, gateId: string): string | null {
   return run.stageGates?.gates.find((gate) => gate.gateId === gateId)?.readiness ?? null;
 }
@@ -888,6 +892,16 @@ function toWorkflowRunJson(run: WorkflowRun) {
     roleRoutingReviewerAdapter: resolveRoleRouteAdapter(run, "reviewer"),
     roleRoutingVerifierAdapter: resolveRoleRouteAdapter(run, "verifier"),
     roleRoutingDocWriterAdapter: resolveRoleRouteAdapter(run, "docWriter"),
+    runtimeRouting: run.runtimeRouting ?? null,
+    runtimeRoutingSelectionCount: run.runtimeRouting?.selections.length ?? null,
+    runtimeRoutingCoderAgentId:
+      resolveRuntimeRoutingSelection(run, "coder")?.appliedAgentId ?? null,
+    runtimeRoutingCoderAgentSource:
+      resolveRuntimeRoutingSelection(run, "coder")?.agentSource ?? null,
+    runtimeRoutingVerifierAgentId:
+      resolveRuntimeRoutingSelection(run, "verifier")?.appliedAgentId ?? null,
+    runtimeRoutingVerifierAgentSource:
+      resolveRuntimeRoutingSelection(run, "verifier")?.agentSource ?? null,
     stageGates: run.stageGates ?? null,
     stageGateBlockedGateCount: run.stageGates?.blockedGateCount ?? null,
     stageGateNeedsHumanDecisionCount: run.stageGates?.needsHumanDecisionCount ?? null,

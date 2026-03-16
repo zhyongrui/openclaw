@@ -588,6 +588,7 @@ Tasks:
 - `[x]` hold autonomous intake paths behind execution-start when human signoff is still required
 - `[x]` expose first handoff and automatic execution-start resume actions in chat
 - `[x]` expose first provider-role reroute controls in chat and CLI
+- `[x]` carry coder/verifier runtime routing selections into workflow artifacts
 
 Acceptance:
 

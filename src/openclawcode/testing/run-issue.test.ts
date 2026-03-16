@@ -12,6 +12,7 @@ import type {
   IssueRef,
   VerificationReport,
   WorkflowRun,
+  WorkflowRuntimeRoleSelection,
   WorkflowWorkspace,
 } from "../contracts/index.js";
 import type { GitHubIssueClient, PullRequestRef, RepoRef } from "../github/index.js";
@@ -172,6 +173,29 @@ class FakeVerifier implements Verifier {
 
   async verify(): Promise<VerificationReport> {
     return this.report;
+  }
+}
+
+class RuntimeAwareFakeBuilder extends FakeBuilder {
+  constructor(private readonly selection: WorkflowRuntimeRoleSelection) {
+    super();
+  }
+
+  override previewRuntimeRouting(): WorkflowRuntimeRoleSelection {
+    return this.selection;
+  }
+}
+
+class RuntimeAwareFakeVerifier extends FakeVerifier {
+  constructor(
+    report: VerificationReport,
+    private readonly selection: WorkflowRuntimeRoleSelection,
+  ) {
+    super(report);
+  }
+
+  override previewRuntimeRouting(): WorkflowRuntimeRoleSelection {
+    return this.selection;
   }
 }
 
@@ -1505,6 +1529,94 @@ describe("runIssueWorkflow", () => {
         process.env.OPENCLAWCODE_MODEL_FALLBACKS = previousFallbacks;
       }
       await fs.rm(repoRoot, { recursive: true, force: true });
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("captures runtime routing selections before build and verification", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-162",
+        worktreePath: "/repo/.openclawcode/worktrees/run-162",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 162,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: new RuntimeAwareFakeBuilder({
+            roleId: "coder",
+            adapterId: "codex",
+            assignmentSource: "blueprint",
+            configured: true,
+            appliedAgentId: "codex-coder",
+            agentSource: "adapter-env",
+          }),
+          verifier: new RuntimeAwareFakeVerifier(
+            {
+              decision: "approve-for-human-review",
+              summary: "Looks good.",
+              findings: [],
+              missingCoverage: [],
+              followUps: [],
+            },
+            {
+              roleId: "verifier",
+              adapterId: "claude-code",
+              assignmentSource: "blueprint",
+              configured: true,
+              appliedAgentId: "claude-reviewer",
+              agentSource: "role-env",
+            },
+          ),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.runtimeRouting?.selections).toEqual([
+        {
+          roleId: "coder",
+          adapterId: "codex",
+          assignmentSource: "blueprint",
+          configured: true,
+          appliedAgentId: "codex-coder",
+          agentSource: "adapter-env",
+        },
+        {
+          roleId: "verifier",
+          adapterId: "claude-code",
+          assignmentSource: "blueprint",
+          configured: true,
+          appliedAgentId: "claude-reviewer",
+          agentSource: "role-env",
+        },
+      ]);
+      expect(run.history).toEqual(
+        expect.arrayContaining([
+          "Runtime routing for coder: requested codex resolved via adapter-env using codex-coder.",
+          "Runtime routing for verifier: requested claude-code resolved via role-env using claude-reviewer.",
+        ]),
+      );
+
+      const store = new FileSystemWorkflowRunStore(path.join(stateDir, "runs"));
+      const savedRun = await store.get(run.id);
+      expect(savedRun?.runtimeRouting?.selections).toEqual(run.runtimeRouting?.selections);
+    } finally {
       await fs.rm(stateDir, { recursive: true, force: true });
     }
   });

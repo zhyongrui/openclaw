@@ -206,6 +206,10 @@ Current foothold:
 - provider reroute now has a first live write path:
   - one blueprint provider-role assignment can be changed from CLI or chat
   - role-routing and stage-gate artifacts refresh immediately after the change
+- runtime routing now reaches executable roles:
+  - builder/coder and verifier roles resolve agent selection before execution
+  - routing honors explicit CLI overrides first, then role/env and adapter/env mappings
+  - the applied selections are persisted in workflow run artifacts and `openclaw code run --json`
 - the remaining gap is deeper runtime integration:
   - manual worktree takeover is still missing
   - provider switching mid-run is still missing

@@ -1,7 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { classifyFailoverReason } from "../../agents/pi-embedded-helpers/errors.js";
-import type { BuildResult, VerificationReport, WorkflowRun } from "../contracts/index.js";
+import type {
+  BuildResult,
+  VerificationReport,
+  WorkflowRun,
+  WorkflowRuntimeRoleSelection,
+} from "../contracts/index.js";
 import type { AgentRunner, ShellRunner } from "../runtime/index.js";
 import type { Builder, Verifier } from "./interfaces.js";
 import { buildScopeGuardrail, checkBuildScope } from "./scope.js";
@@ -28,6 +33,100 @@ export interface AgentBackedVerifierOptions {
 const DEFAULT_TRANSIENT_RETRY_ATTEMPTS = 2;
 const DEFAULT_TRANSIENT_RETRY_DELAY_MS = 1_000;
 const PROVIDER_INTERNAL_ERROR_RETRY_DELAY_MS = 250;
+const OPENCLAWCODE_ROLE_CODER_AGENT_ID_ENV = "OPENCLAWCODE_ROLE_CODER_AGENT_ID";
+const OPENCLAWCODE_ROLE_VERIFIER_AGENT_ID_ENV = "OPENCLAWCODE_ROLE_VERIFIER_AGENT_ID";
+const OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID_ENV = "OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID";
+const OPENCLAWCODE_ADAPTER_CLAUDE_CODE_AGENT_ID_ENV = "OPENCLAWCODE_ADAPTER_CLAUDE_CODE_AGENT_ID";
+const OPENCLAWCODE_ADAPTER_OPENCLAW_DEFAULT_AGENT_ID_ENV =
+  "OPENCLAWCODE_ADAPTER_OPENCLAW_DEFAULT_AGENT_ID";
+const OPENCLAWCODE_ADAPTER_CUSTOM_AGENT_ID_ENV = "OPENCLAWCODE_ADAPTER_CUSTOM_AGENT_ID";
+
+type AgentBackedRoleId = "coder" | "verifier";
+
+function trimAgentId(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function resolveRoleAgentEnvVar(roleId: AgentBackedRoleId): string {
+  return roleId === "coder"
+    ? OPENCLAWCODE_ROLE_CODER_AGENT_ID_ENV
+    : OPENCLAWCODE_ROLE_VERIFIER_AGENT_ID_ENV;
+}
+
+function resolveAdapterAgentEnvVar(adapterId: string | null): string | null {
+  switch (adapterId) {
+    case "codex":
+      return OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID_ENV;
+    case "claude-code":
+      return OPENCLAWCODE_ADAPTER_CLAUDE_CODE_AGENT_ID_ENV;
+    case "openclaw-default":
+      return OPENCLAWCODE_ADAPTER_OPENCLAW_DEFAULT_AGENT_ID_ENV;
+    case "custom":
+      return OPENCLAWCODE_ADAPTER_CUSTOM_AGENT_ID_ENV;
+    default:
+      return null;
+  }
+}
+
+function findRoleRoute(run: WorkflowRun, roleId: AgentBackedRoleId) {
+  return run.roleRouting?.routes.find((route) => route.roleId === roleId);
+}
+
+function deriveRuntimeRoleSelection(params: {
+  run: WorkflowRun;
+  roleId: AgentBackedRoleId;
+  explicitAgentId?: string;
+  env?: NodeJS.ProcessEnv;
+}): WorkflowRuntimeRoleSelection {
+  const route = findRoleRoute(params.run, params.roleId);
+  const explicitAgentId = trimAgentId(params.explicitAgentId);
+  if (explicitAgentId) {
+    return {
+      roleId: params.roleId,
+      adapterId: route?.adapterId ?? null,
+      assignmentSource: route?.source ?? null,
+      configured: route?.configured ?? false,
+      appliedAgentId: explicitAgentId,
+      agentSource: "cli-override",
+    };
+  }
+
+  const env = params.env ?? process.env;
+  const roleAgentId = trimAgentId(env[resolveRoleAgentEnvVar(params.roleId)]);
+  if (roleAgentId) {
+    return {
+      roleId: params.roleId,
+      adapterId: route?.adapterId ?? null,
+      assignmentSource: route?.source ?? null,
+      configured: route?.configured ?? false,
+      appliedAgentId: roleAgentId,
+      agentSource: "role-env",
+    };
+  }
+
+  const adapterAgentEnvVar = resolveAdapterAgentEnvVar(route?.adapterId ?? null);
+  const adapterAgentId = adapterAgentEnvVar ? trimAgentId(env[adapterAgentEnvVar]) : null;
+  if (adapterAgentId) {
+    return {
+      roleId: params.roleId,
+      adapterId: route?.adapterId ?? null,
+      assignmentSource: route?.source ?? null,
+      configured: route?.configured ?? false,
+      appliedAgentId: adapterAgentId,
+      agentSource: "adapter-env",
+    };
+  }
+
+  return {
+    roleId: params.roleId,
+    adapterId: route?.adapterId ?? null,
+    assignmentSource: route?.source ?? null,
+    configured: route?.configured ?? false,
+    appliedAgentId: null,
+    agentSource: "runner-default",
+  };
+}
 
 function renderIssueBody(run: WorkflowRun): string {
   return run.issue.body?.trim() ? run.issue.body.trim() : "No issue body provided.";
@@ -391,6 +490,14 @@ export class AgentBackedBuilder implements Builder {
     },
   ) {}
 
+  previewRuntimeRouting(run: WorkflowRun): WorkflowRuntimeRoleSelection {
+    return deriveRuntimeRoleSelection({
+      run,
+      roleId: "coder",
+      explicitAgentId: this.options.agentId,
+    });
+  }
+
   async build(run: WorkflowRun): Promise<BuildResult> {
     if (!run.workspace) {
       throw new Error("Workflow workspace is required before build execution.");
@@ -406,7 +513,7 @@ export class AgentBackedBuilder implements Builder {
         await this.options.agentRunner.run({
           prompt,
           workspaceDir: run.workspace.worktreePath,
-          agentId: this.options.agentId,
+          agentId: this.previewRuntimeRouting(run).appliedAgentId ?? undefined,
           timeoutSeconds: this.options.timeoutSeconds,
         }),
     });
@@ -476,6 +583,14 @@ export class AgentBackedBuilder implements Builder {
 export class AgentBackedVerifier implements Verifier {
   constructor(private readonly options: AgentBackedVerifierOptions) {}
 
+  previewRuntimeRouting(run: WorkflowRun): WorkflowRuntimeRoleSelection {
+    return deriveRuntimeRoleSelection({
+      run,
+      roleId: "verifier",
+      explicitAgentId: this.options.agentId,
+    });
+  }
+
   async verify(run: WorkflowRun): Promise<VerificationReport> {
     if (!run.workspace) {
       throw new Error("Workflow workspace is required before verification.");
@@ -490,7 +605,7 @@ export class AgentBackedVerifier implements Verifier {
         await this.options.agentRunner.run({
           prompt,
           workspaceDir: run.workspace.worktreePath,
-          agentId: this.options.agentId,
+          agentId: this.previewRuntimeRouting(run).appliedAgentId ?? undefined,
           timeoutSeconds: this.options.timeoutSeconds,
         }),
     });
@@ -501,6 +616,7 @@ export class AgentBackedVerifier implements Verifier {
 export const __testing = {
   buildBuilderPrompt,
   buildVerifierPrompt,
+  deriveRuntimeRoleSelection,
   isRetryableAgentFailure,
   resolveTransientRetryDelayMs,
 };

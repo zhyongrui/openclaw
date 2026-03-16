@@ -206,6 +206,11 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.roleRoutingVerifierAdapter).toBe("codex");
     expect(payload.roleRoutingDocWriterAdapter).toBe("codex");
     expect(payload.roleRouting.routes).toHaveLength(5);
+    expect(payload.runtimeRoutingSelectionCount).toBe(2);
+    expect(payload.runtimeRoutingCoderAgentId).toBe("codex-coder");
+    expect(payload.runtimeRoutingCoderAgentSource).toBe("adapter-env");
+    expect(payload.runtimeRoutingVerifierAgentId).toBe("codex-verifier");
+    expect(payload.runtimeRoutingVerifierAgentSource).toBe("role-env");
     expect(payload.stageGateBlockedGateCount).toBe(0);
     expect(payload.stageGateNeedsHumanDecisionCount).toBe(1);
     expect(payload.goalAgreementStageGateReadiness).toBe("ready");
@@ -335,6 +340,7 @@ describe("openclawCodeRunCommand", () => {
         verificationReport: undefined,
         blueprintContext: undefined,
         roleRouting: undefined,
+        runtimeRouting: undefined,
         stageGates: undefined,
       }),
     );
@@ -379,6 +385,12 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.roleRoutingReviewerAdapter).toBeNull();
     expect(payload.roleRoutingVerifierAdapter).toBeNull();
     expect(payload.roleRoutingDocWriterAdapter).toBeNull();
+    expect(payload.runtimeRouting).toBeNull();
+    expect(payload.runtimeRoutingSelectionCount).toBeNull();
+    expect(payload.runtimeRoutingCoderAgentId).toBeNull();
+    expect(payload.runtimeRoutingCoderAgentSource).toBeNull();
+    expect(payload.runtimeRoutingVerifierAgentId).toBeNull();
+    expect(payload.runtimeRoutingVerifierAgentSource).toBeNull();
     expect(payload.stageGates).toBeNull();
     expect(payload.stageGateBlockedGateCount).toBeNull();
     expect(payload.stageGateNeedsHumanDecisionCount).toBeNull();
@@ -2652,6 +2664,26 @@ function createRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
           source: "blueprint",
           configured: true,
           fallbackChain: ["openai/gpt-5.4"],
+        },
+      ],
+    },
+    runtimeRouting: {
+      selections: [
+        {
+          roleId: "coder",
+          adapterId: "codex",
+          assignmentSource: "blueprint",
+          configured: true,
+          appliedAgentId: "codex-coder",
+          agentSource: "adapter-env",
+        },
+        {
+          roleId: "verifier",
+          adapterId: "codex",
+          assignmentSource: "blueprint",
+          configured: true,
+          appliedAgentId: "codex-verifier",
+          agentSource: "role-env",
         },
       ],
     },

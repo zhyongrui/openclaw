@@ -4,6 +4,7 @@ import type {
   WorkflowBlueprintContext,
   WorkflowFailureDiagnostics,
   WorkflowRoleRoutingSnapshot,
+  WorkflowRuntimeRoleSelection,
   WorkflowRerunContext,
   WorkflowRun,
   WorkflowStageGateSnapshot,
@@ -296,6 +297,40 @@ async function captureWorkflowPlanningContext(
   };
 }
 
+function formatRuntimeRoutingSelectionNote(selection: WorkflowRuntimeRoleSelection): string {
+  const requestedAdapter = selection.adapterId ?? "runner-default";
+  const appliedAgent =
+    selection.appliedAgentId == null ? "the runner default agent" : selection.appliedAgentId;
+  return [
+    `Runtime routing for ${selection.roleId}:`,
+    `requested ${requestedAdapter}`,
+    `resolved via ${selection.agentSource}`,
+    `using ${appliedAgent}.`,
+  ].join(" ");
+}
+
+function upsertRuntimeRoutingSelection(
+  run: WorkflowRun,
+  selection: WorkflowRuntimeRoleSelection,
+  now: TimestampFactory,
+): WorkflowRun {
+  const selections = [
+    ...(run.runtimeRouting?.selections.filter((entry) => entry.roleId !== selection.roleId) ?? []),
+    selection,
+  ].toSorted((left, right) => left.roleId.localeCompare(right.roleId));
+
+  return noteRun(
+    {
+      ...run,
+      runtimeRouting: {
+        selections,
+      },
+    },
+    formatRuntimeRoutingSelectionNote(selection),
+    now,
+  );
+}
+
 function shouldAutoMerge(run: WorkflowRun): boolean {
   return (
     run.suitability?.decision === "auto-run" &&
@@ -514,6 +549,12 @@ export async function runIssueWorkflow(
   );
   await deps.store.save(run);
 
+  const buildRuntimeRouting = deps.builder.previewRuntimeRouting?.(run);
+  if (buildRuntimeRouting) {
+    run = upsertRuntimeRoutingSelection(run, buildRuntimeRouting, now);
+    await deps.store.save(run);
+  }
+
   run = transitionRun(run, "building", "Build started", now);
   await deps.store.save(run);
 
@@ -597,6 +638,12 @@ export async function runIssueWorkflow(
         body: buildPullRequestBody(run),
       },
     };
+    await deps.store.save(run);
+  }
+
+  const verificationRuntimeRouting = deps.verifier.previewRuntimeRouting?.(run);
+  if (verificationRuntimeRouting) {
+    run = upsertRuntimeRoutingSelection(run, verificationRuntimeRouting, now);
     await deps.store.save(run);
   }
 

@@ -2000,3 +2000,27 @@ The first provider-routing write path is now live before execution starts.
   - operators can reroute planner/coder/reviewer/verifier/doc-writer before a
     run starts
   - they still cannot switch providers in the middle of an active run yet
+
+## Runtime Role Routing For Executable Stages
+
+Provider-role routing now reaches the first real runtime boundary instead of
+stopping at blueprint and chat artifacts.
+
+- `AgentBackedBuilder` now resolves the `coder` role before execution
+- `AgentBackedVerifier` now resolves the `verifier` role before execution
+- resolution precedence is now:
+  - explicit CLI agent override
+  - role-specific env mapping
+  - adapter-specific env mapping
+  - runner default agent
+- the selected runtime routing is now persisted into workflow run artifacts
+- `openclaw code run --json` now exposes stable top-level mirrors for:
+  - coder applied agent id/source
+  - verifier applied agent id/source
+
+This closes the first runtime-routing gap, but not the whole provider-switch
+story yet:
+
+- routing can now affect pre-build and pre-verify execution
+- mid-run provider switching is still open
+- manual worktree takeover and structured resume are still open

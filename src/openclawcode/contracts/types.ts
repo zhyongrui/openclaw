@@ -160,6 +160,19 @@ export interface WorkflowRoleRoutingSnapshot {
   routes: WorkflowRoleRouteSnapshot[];
 }
 
+export interface WorkflowRuntimeRoleSelection {
+  roleId: string;
+  adapterId: string | null;
+  assignmentSource: string | null;
+  configured: boolean;
+  appliedAgentId: string | null;
+  agentSource: "cli-override" | "role-env" | "adapter-env" | "runner-default";
+}
+
+export interface WorkflowRuntimeRoutingSnapshot {
+  selections: WorkflowRuntimeRoleSelection[];
+}
+
 export interface WorkflowStageGateDecisionSnapshot {
   decision: string;
   note: string | null;
@@ -202,6 +215,7 @@ export interface WorkflowRun {
   failureDiagnostics?: WorkflowFailureDiagnostics;
   blueprintContext?: WorkflowBlueprintContext;
   roleRouting?: WorkflowRoleRoutingSnapshot;
+  runtimeRouting?: WorkflowRuntimeRoutingSnapshot;
   stageGates?: WorkflowStageGateSnapshot;
   rerunContext?: WorkflowRerunContext;
   history: string[];

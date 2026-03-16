@@ -59,6 +59,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] add a first general discovery pipeline beyond validation-pool seeding
 - [x] define a provider-neutral role model for planner, coder, reviewer, verifier, and doc-writer
 - [x] map Codex and Claude Code into that shared role model
+- [x] persist runtime-applied coder and verifier routing selections in workflow artifacts
 - [ ] support stage-level human handoff, edit, resume, and provider switching
 - [x] persist blueprint and stage-gate decisions in machine-readable artifacts
 
@@ -224,6 +225,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] expose setup-check readiness in JSON
 - [x] expose setup-check model inventory in JSON
 - [x] expose setup-check built-startup proof readiness in JSON
+- [x] expose runtime-applied coder and verifier routing in top-level run JSON
 - [ ] expose a machine-readable promotion gate artifact that combines:
   - latest setup-check result
   - branch name

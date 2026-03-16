@@ -410,6 +410,122 @@ describe("AgentBackedBuilder scope enforcement", () => {
       await fs.rm(worktreePath, { recursive: true, force: true });
     }
   });
+
+  it("routes coder execution through the adapter-mapped agent when role-routing is configured", async () => {
+    const previousAgentId = process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID;
+    process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID = "codex-coder";
+    const worktreePath = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-agent-backed-"));
+    const agentRunner = new RecordingAgentRunner({
+      text: "Implemented through the codex-coded path.",
+    });
+    const builder = new AgentBackedBuilder({
+      agentRunner,
+      shellRunner: new FakeShellRunner(),
+      testCommands: [],
+      autoCommit: false,
+      collectChangedFiles: async () => [],
+    });
+
+    try {
+      const run = {
+        ...createRun(),
+        roleRouting: {
+          artifactExists: true,
+          blueprintRevisionId: "blueprint_rev_1",
+          mixedMode: true,
+          fallbackConfigured: false,
+          unresolvedRoleCount: 0,
+          routes: [
+            {
+              roleId: "coder",
+              adapterId: "codex",
+              source: "blueprint",
+              configured: true,
+              fallbackChain: [],
+            },
+          ],
+        },
+        workspace: {
+          ...createRun().workspace!,
+          worktreePath,
+        },
+      };
+
+      expect(builder.previewRuntimeRouting(run)).toMatchObject({
+        roleId: "coder",
+        adapterId: "codex",
+        appliedAgentId: "codex-coder",
+        agentSource: "adapter-env",
+      });
+
+      await builder.build(run);
+
+      expect(agentRunner.requests).toHaveLength(1);
+      expect(agentRunner.requests[0]?.agentId).toBe("codex-coder");
+    } finally {
+      if (previousAgentId == null) {
+        delete process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID;
+      } else {
+        process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID = previousAgentId;
+      }
+      await fs.rm(worktreePath, { recursive: true, force: true });
+    }
+  });
+
+  it("lets an explicit builder agent override role-routing resolution", async () => {
+    const previousAgentId = process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID;
+    process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID = "codex-coder";
+    const worktreePath = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-agent-backed-"));
+    const agentRunner = new RecordingAgentRunner({
+      text: "Implemented through the explicit builder agent.",
+    });
+    const builder = new AgentBackedBuilder({
+      agentRunner,
+      shellRunner: new FakeShellRunner(),
+      testCommands: [],
+      agentId: "manual-builder",
+      autoCommit: false,
+      collectChangedFiles: async () => [],
+    });
+
+    try {
+      const run = {
+        ...createRun(),
+        roleRouting: {
+          artifactExists: true,
+          blueprintRevisionId: "blueprint_rev_1",
+          mixedMode: true,
+          fallbackConfigured: false,
+          unresolvedRoleCount: 0,
+          routes: [
+            {
+              roleId: "coder",
+              adapterId: "codex",
+              source: "blueprint",
+              configured: true,
+              fallbackChain: [],
+            },
+          ],
+        },
+        workspace: {
+          ...createRun().workspace!,
+          worktreePath,
+        },
+      };
+
+      await builder.build(run);
+
+      expect(agentRunner.requests).toHaveLength(1);
+      expect(agentRunner.requests[0]?.agentId).toBe("manual-builder");
+    } finally {
+      if (previousAgentId == null) {
+        delete process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID;
+      } else {
+        process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID = previousAgentId;
+      }
+      await fs.rm(worktreePath, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("AgentBackedVerifier", () => {
@@ -479,6 +595,78 @@ describe("AgentBackedVerifier", () => {
       expect(agentRunner.requests).toHaveLength(1);
       expect(agentRunner.requests[0]?.timeoutSeconds).toBe(45);
     } finally {
+      await fs.rm(worktreePath, { recursive: true, force: true });
+    }
+  });
+
+  it("prefers role-specific verifier agent routing over adapter defaults", async () => {
+    const previousRoleAgentId = process.env.OPENCLAWCODE_ROLE_VERIFIER_AGENT_ID;
+    const previousAdapterAgentId = process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID;
+    process.env.OPENCLAWCODE_ROLE_VERIFIER_AGENT_ID = "verifier-role-agent";
+    process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID = "codex-fallback-agent";
+    const worktreePath = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-agent-backed-"));
+    const agentRunner = new RecordingAgentRunner({
+      text: JSON.stringify({
+        decision: "approve-for-human-review",
+        summary: "Looks good through the role-routed verifier.",
+        findings: [],
+        missingCoverage: [],
+        followUps: [],
+      }),
+    });
+    const verifier = new AgentBackedVerifier({
+      agentRunner,
+      transientRetryAttempts: 1,
+      transientRetryDelayMs: 0,
+    });
+
+    try {
+      const run = {
+        ...createRun(),
+        roleRouting: {
+          artifactExists: true,
+          blueprintRevisionId: "blueprint_rev_1",
+          mixedMode: true,
+          fallbackConfigured: false,
+          unresolvedRoleCount: 0,
+          routes: [
+            {
+              roleId: "verifier",
+              adapterId: "codex",
+              source: "blueprint",
+              configured: true,
+              fallbackChain: [],
+            },
+          ],
+        },
+        workspace: {
+          ...createRun().workspace!,
+          worktreePath,
+        },
+      };
+
+      expect(verifier.previewRuntimeRouting(run)).toMatchObject({
+        roleId: "verifier",
+        adapterId: "codex",
+        appliedAgentId: "verifier-role-agent",
+        agentSource: "role-env",
+      });
+
+      await verifier.verify(run);
+
+      expect(agentRunner.requests).toHaveLength(1);
+      expect(agentRunner.requests[0]?.agentId).toBe("verifier-role-agent");
+    } finally {
+      if (previousRoleAgentId == null) {
+        delete process.env.OPENCLAWCODE_ROLE_VERIFIER_AGENT_ID;
+      } else {
+        process.env.OPENCLAWCODE_ROLE_VERIFIER_AGENT_ID = previousRoleAgentId;
+      }
+      if (previousAdapterAgentId == null) {
+        delete process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID;
+      } else {
+        process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID = previousAdapterAgentId;
+      }
       await fs.rm(worktreePath, { recursive: true, force: true });
     }
   });

@@ -33,6 +33,7 @@ Not yet promised as stable:
   - `draftPullRequest`
   - `blueprintContext`
   - `roleRouting`
+  - `runtimeRouting`
   - `stageGates`
   - other internal nested workflow structures
 
@@ -119,6 +120,11 @@ those nested objects.
 - `roleRoutingReviewerAdapter`
 - `roleRoutingVerifierAdapter`
 - `roleRoutingDocWriterAdapter`
+- `runtimeRoutingSelectionCount`
+- `runtimeRoutingCoderAgentId`
+- `runtimeRoutingCoderAgentSource`
+- `runtimeRoutingVerifierAgentId`
+- `runtimeRoutingVerifierAgentSource`
 - `stageGateBlockedGateCount`
 - `stageGateNeedsHumanDecisionCount`
 - `goalAgreementStageGateReadiness`
