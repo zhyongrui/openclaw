@@ -53,7 +53,7 @@ Acceptance:
 
 ### Phase B2: Goal Discussion Loop
 
-Status: partially started through repo-local clarification reporting
+Status: partially landed through repo-local and chat-native goal capture
 
 Deliverables:
 
@@ -74,6 +74,17 @@ Current foothold:
   questions and proactive suggestions from the current blueprint scaffold
 - `openclaw code blueprint-show --json` now exposes revision and defaulted
   section metadata that downstream discussion surfaces can consume directly
+- `openclaw code blueprint-set-section` now updates one blueprint section
+  without opening `PROJECT-BLUEPRINT.md` manually
+- `/occode-goal` now captures repo-level goals from chat before issue creation
+- `/occode-blueprint-agree` now records the explicit agreed checkpoint from chat
+- `/occode-blueprint-edit` now lets operators answer clarifications or update
+  sections directly from chat
+- ambiguous one-line `/occode-intake` now produces a pending draft with:
+  - clarification prompts
+  - `/occode-intake-edit`
+  - `/occode-intake-confirm`
+  - `/occode-intake-reject`
 
 ### Phase B3: Work Item Decomposition
 
@@ -216,10 +227,20 @@ Current foothold:
   - CLI callers can pass `--rerun-coder-agent` and `--rerun-verifier-agent`
   - rerun context preserves requested coder/verifier agent ids
   - executable runtime routing records those selections as `rerun-request`
+- manual human handoff now has a first structured worktree path:
+  - `/occode-takeover owner/repo#123 [note]` records the active human takeover
+  - `/occode-status` shows the active takeover with worktree path and actor
+  - `/occode-resume-after-edit owner/repo#123 [note]` queues a structured rerun
+    after manual edits
+  - rerun artifacts now preserve manual takeover metadata
+- release-readiness artifacts now have a first machine-readable path:
+  - `openclaw code promotion-gate-refresh --json` persists branch, commit,
+    setup-check readiness, merge-promotion readiness, and rollback baseline
+  - `openclaw code rollback-suggestion-refresh --json` persists the current
+    rollback target recommendation
 - the remaining gap is deeper runtime integration:
-  - manual worktree takeover is still missing
   - provider switching mid-run is still missing
-  - structured resume after manual edits is still missing
+  - explicit merge or promotion override flow is still missing
 
 ### Phase B7: Proofs And Productization
 

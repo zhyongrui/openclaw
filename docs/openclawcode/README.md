@@ -38,11 +38,19 @@ loop with:
   plugin
 - chat-facing operator commands:
   - `/occode-intake`
+  - `/occode-intake-confirm`
+  - `/occode-intake-edit`
+  - `/occode-intake-reject`
   - `/occode-start`
   - `/occode-rerun`
+  - `/occode-takeover`
+  - `/occode-resume-after-edit`
   - `/occode-status`
   - `/occode-inbox`
   - `/occode-blueprint`
+  - `/occode-goal`
+  - `/occode-blueprint-agree`
+  - `/occode-blueprint-edit`
   - `/occode-routing`
   - `/occode-route-set`
   - `/occode-gates`
@@ -61,6 +69,7 @@ loop with:
   - `openclaw code blueprint-show`
   - `openclaw code blueprint-clarify`
   - `openclaw code blueprint-set-status`
+  - `openclaw code blueprint-set-section`
   - `openclaw code blueprint-set-provider-role`
   - `openclaw code blueprint-decompose`
   - `openclaw code work-items-show`
@@ -70,11 +79,18 @@ loop with:
   - `openclaw code stage-gates-refresh`
   - `openclaw code stage-gates-show`
   - `openclaw code stage-gates-decide`
+  - `openclaw code promotion-gate-refresh`
+  - `openclaw code promotion-gate-show`
+  - `openclaw code rollback-suggestion-refresh`
+  - `openclaw code rollback-suggestion-show`
   - machine-readable lifecycle inspection, revision metadata, and work-item
     inventory output through `--json`
   - repo-local discovery and provider-role routing artifacts under
     `.openclawcode/`
   - repo-local stage-gate decisions persisted under `.openclawcode/stage-gates.json`
+  - repo-local promotion and rollback artifacts persisted under:
+    - `.openclawcode/promotion-gate.json`
+    - `.openclawcode/rollback-suggestion.json`
 - stable workflow identity metadata now also includes top-level mirrors for:
   - `issueTitle`
   - `issueRepo`
@@ -119,9 +135,23 @@ loop with:
   - create a new GitHub issue from the bound chat
   - accept either a full issue draft or a single-line request and synthesize a
     minimal issue body automatically
+  - hold ambiguous one-line requests behind a pending draft confirmation step
+  - let the operator refine that pending draft through `/occode-intake-edit`
+  - let the operator create the draft later through `/occode-intake-confirm`
   - queue low-risk issues immediately through the existing workflow path
   - precheck obvious high-risk issues into `escalated` snapshots before any
     branch mutation
+  - explicit blueprint-first goal discussion and section editing from chat:
+  - `/occode-goal` captures or refines the repo-level goal before issue creation
+  - `/occode-blueprint-agree` records the explicit agreed checkpoint from chat
+  - `/occode-blueprint-edit` updates a named blueprint section without opening
+    `PROJECT-BLUEPRINT.md` manually
+  - `/occode-intake-reject` lets a teammate discard an ambiguous pending draft
+    instead of forcing issue creation
+- structured manual handoff now also exists for worktree edits:
+  - `/occode-takeover` records a human takeover against the current tracked
+    worktree
+  - `/occode-resume-after-edit` queues a structured rerun after the human is done
 - GitHub-side status healing for review, merged, and closed-without-merge PR
   outcomes
 - explicit request-changes rerun control with rerun artifacts, review context,
@@ -217,6 +247,12 @@ loop with:
 - a repeatable operator setup runbook plus a repo-local setup verification
   script for gateway, webhook, binding, tunnel health, and required GitHub
   webhook event subscriptions
+- machine-readable release-readiness artifacts for sync and promotion work:
+  - `openclaw code promotion-gate-refresh --json` persists the current branch,
+    commit, setup-check readiness, merge-promotion gate state, and rollback
+    baseline into `.openclawcode/promotion-gate.json`
+  - `openclaw code rollback-suggestion-refresh --json` persists the current
+    rollback candidate into `.openclawcode/rollback-suggestion.json`
 - that setup verification script can now also run an isolated built-startup
   proof for the bundled `openclawcode` plugin through
   `--probe-built-startup`, using the same allowlisted diagnostic config that

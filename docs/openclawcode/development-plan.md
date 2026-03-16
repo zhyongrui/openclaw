@@ -2122,3 +2122,92 @@ probe instead of making operators infer promotion state from scattered logs.
 
 This closes the first operator-chat visibility gap for promotion and rollback
 readiness.
+
+## Chat-Native Goal Discussion And Intake Draft Review
+
+The blueprint-first control plane now has its first real pre-issue discussion
+loop instead of stopping at read-only clarification output.
+
+- new CLI surface:
+  - `openclaw code blueprint-set-section`
+- new chat surfaces:
+  - `/occode-goal`
+  - `/occode-blueprint-agree`
+  - `/occode-blueprint-edit`
+  - `/occode-intake-edit`
+  - `/occode-intake-confirm`
+  - `/occode-intake-reject`
+- `/occode-goal` now captures the repo-level goal directly into
+  `PROJECT-BLUEPRINT.md`
+- `/occode-blueprint-agree` now records the explicit agreed checkpoint from
+  chat
+- `/occode-blueprint-edit` now updates named blueprint sections from chat
+- ambiguous one-line `/occode-intake` no longer creates a GitHub issue
+  immediately:
+  - it persists a pending draft
+  - shows clarification prompts
+  - requires confirmation before creation
+  - allows editing the generated draft first
+  - allows explicit rejection of the pending draft from chat
+
+This closes the first product-real gap for:
+
+- goal discussion before issue creation
+- clarification prompts for underspecified one-line intake
+- editing a generated draft before GitHub issue creation
+- confirming or rejecting a generated draft from chat
+
+## Machine-Readable Promotion And Rollback Artifacts
+
+Promotion and rollback planning now has a first repo-local machine-readable
+artifact layer instead of stopping at chat text and setup-check output.
+
+- new CLI surface:
+  - `openclaw code promotion-gate-refresh`
+  - `openclaw code promotion-gate-show`
+  - `openclaw code rollback-suggestion-refresh`
+  - `openclaw code rollback-suggestion-show`
+- `.openclawcode/promotion-gate.json` now persists:
+  - current branch and commit
+  - resolved baseline branch and rollback commit
+  - strict setup-check readiness
+  - low-risk and fallback proof readiness
+  - merge-promotion stage-gate readiness
+  - machine-readable blockers and suggestions
+- `.openclawcode/rollback-suggestion.json` now persists:
+  - current branch and commit
+  - target branch and target commit
+  - a stable rollback ref
+  - promotion artifact linkage
+  - a machine-readable rollback reason
+
+This closes the first contract gap for release-readiness artifacts, but not the
+entire release-control story:
+
+- merge or promotion override still needs live runtime wiring
+- promotion and rollback receipts still need explicit lifecycle hooks
+
+## Manual Takeover And Post-Edit Resume
+
+Stage-level human handoff now has the first structured worktree takeover path
+instead of stopping at gate decisions and rerun-time agent overrides.
+
+- new chat surfaces:
+  - `/occode-takeover`
+  - `/occode-resume-after-edit`
+- plugin store now persists:
+  - pending intake drafts
+  - active manual takeovers
+- `/occode-status` now shows active manual takeover state with the held
+  worktree path
+- `/occode-resume-after-edit` queues a structured rerun and preserves:
+  - manual takeover timestamp
+  - manual takeover actor
+  - manual takeover worktree path
+  - manual resume note
+- those resume signals now also flow into `openclaw code run --json`
+
+This does not yet complete the whole handoff story:
+
+- provider switching mid-run is still missing
+- explicit merge or promotion override flow is still missing

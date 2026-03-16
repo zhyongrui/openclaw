@@ -51,7 +51,7 @@ The program is only "done enough to hand to other people" when all of these are 
 ## Phase -1: Blueprint-First Control Plane
 
 - [x] define a fixed project blueprint document path and schema
-- [ ] support a goal-discussion loop before issue creation
+- [x] support a goal-discussion loop before issue creation
 - [x] support clarification questions when the goal is underspecified
 - [x] support proactive system suggestions while refining the goal
 - [x] support an explicit "blueprint agreed" checkpoint
@@ -122,8 +122,16 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] provide `/occode-status`
 - [x] provide `/occode-inbox`
 - [x] provide `/occode-blueprint`
+- [x] provide `/occode-goal`
+- [x] provide `/occode-blueprint-agree`
+- [x] provide `/occode-blueprint-edit`
 - [x] provide `/occode-gates`
 - [x] provide `/occode-gate-decide`
+- [x] provide `/occode-intake-confirm`
+- [x] provide `/occode-intake-edit`
+- [x] provide `/occode-intake-reject`
+- [x] provide `/occode-takeover`
+- [x] provide `/occode-resume-after-edit`
 - [x] provide `/occode-skip`
 - [x] provide `/occode-sync`
 - [x] show suitability decisions in `/occode-status`
@@ -140,10 +148,11 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] show provider pause information while a pause is active
 - [x] allow `/occode-intake` to accept a single-line request
 - [x] synthesize a minimal issue body from one-line intake
-- [ ] add a confirmation step for ambiguous chat-native intake
-- [ ] allow editing a generated issue draft before creation
-- [ ] support clarification prompts when a one-line request is underspecified
+- [x] add a confirmation step for ambiguous chat-native intake
+- [x] allow editing a generated issue draft before creation
+- [x] support clarification prompts when a one-line request is underspecified
 - [x] show blueprint summary and clarification prompts in chat
+- [x] show active manual takeover state in `/occode-status`
 - [x] allow stage-gate decisions to be recorded from chat
 - [x] make `/occode-start` respect execution-start gate decisions
 - [x] make auto webhook intake respect execution-start gate decisions
@@ -227,14 +236,14 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] expose setup-check model inventory in JSON
 - [x] expose setup-check built-startup proof readiness in JSON
 - [x] expose runtime-applied coder and verifier routing in top-level run JSON
-- [ ] expose a machine-readable promotion gate artifact that combines:
+- [x] expose a machine-readable promotion gate artifact that combines:
   - latest setup-check result
   - branch name
   - commit SHA
   - low-risk-proof readiness
   - fallback-proof readiness
   - promotion readiness
-- [ ] expose a machine-readable rollback suggestion artifact
+- [x] expose a machine-readable rollback suggestion artifact
 - [ ] define a stable contract for chat-visible operator status snapshots
 - [ ] define a stable contract for validation-pool reconciliation output
 - [ ] define a stable contract for promotion and rollback docs metadata
@@ -339,11 +348,11 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] create a GitHub issue from chat
 - [x] queue a low-risk issue directly from chat
 - [x] precheck high-risk chat-intake issues
-- [ ] preview a generated issue before submission
-- [ ] allow the operator to ask for clarification before issue creation
+- [x] preview a generated issue before submission
+- [x] allow the operator to ask for clarification before issue creation
 - [ ] allow the operator to propose multiple scoped issue drafts for ambiguous requests
-- [ ] allow a teammate to confirm or reject the generated issue draft in chat
-- [ ] allow a teammate to edit title or summary in chat before creation
+- [x] allow a teammate to confirm or reject the generated issue draft in chat
+- [x] allow a teammate to edit title or summary in chat before creation
 - [ ] document the supported prompt styles for chat-native intake
 - [ ] document the unsupported or intentionally blocked prompt styles for chat-native intake
 
