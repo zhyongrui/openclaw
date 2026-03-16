@@ -1,5 +1,9 @@
 import type { Command } from "commander";
 import {
+  openclawCodeBlueprintInitCommand,
+  openclawCodeBlueprintSetStatusCommand,
+  openclawCodeBlueprintShowCommand,
+  openclawCodeBlueprintStatusIds,
   openclawCodeListValidationIssuesCommand,
   openclawCodeReconcileValidationIssuesCommand,
   openclawCodeRunCommand,
@@ -16,13 +20,25 @@ import { collectOption } from "./helpers.js";
 export function registerCodeCommands(program: Command) {
   const code = program
     .command("code")
-    .description("Run issue-driven coding workflows")
+    .description("Run issue-driven and blueprint-first coding workflows")
     .addHelpText(
       "after",
       () =>
         `
 ${theme.heading("Examples:")}
 ${formatHelpExamples([
+  [
+    'openclaw code blueprint-init --title "OpenClawCode Blueprint" --goal "Ship blueprint-first autonomous development"',
+    "Create the fixed repo-local project blueprint scaffold.",
+  ],
+  [
+    "openclaw code blueprint-show --json",
+    "Inspect the current project blueprint state in machine-readable form.",
+  ],
+  [
+    "openclaw code blueprint-set-status --status agreed",
+    "Record the explicit blueprint agreement checkpoint.",
+  ],
   [
     "openclaw code run --issue 123",
     "Plan and run the workflow for issue #123 in the current repo.",
@@ -53,6 +69,68 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     )
     .action(() => {
       code.help({ error: true });
+    });
+
+  code
+    .command("blueprint-init")
+    .description("Create the fixed project blueprint scaffold in the current repo")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--title <text>", "Blueprint title")
+    .option("--goal <text>", "Initial goal summary for the blueprint")
+    .option("--force", "Overwrite an existing blueprint scaffold", false)
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeBlueprintInitCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            title: opts.title as string | undefined,
+            goal: opts.goal as string | undefined,
+            force: Boolean(opts.force),
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("blueprint-show")
+    .description("Show the current fixed project blueprint state")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeBlueprintShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("blueprint-set-status")
+    .description("Update the fixed project blueprint lifecycle status")
+    .requiredOption(
+      "--status <status>",
+      `Blueprint status (${openclawCodeBlueprintStatusIds().join(", ")})`,
+    )
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeBlueprintSetStatusCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            status: opts.status as string,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
     });
 
   code

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,9 @@ import type { WorkflowRun } from "../openclawcode/index.js";
 import {
   DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS,
   DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS,
+  openclawCodeBlueprintInitCommand,
+  openclawCodeBlueprintSetStatusCommand,
+  openclawCodeBlueprintShowCommand,
   openclawCodeListValidationIssuesCommand,
   openclawCodeReconcileValidationIssuesCommand,
   openclawCodeRunCommand,
@@ -1292,6 +1295,90 @@ describe("openclawCodeRunCommand", () => {
       "Pull request opened: https://github.com/openclaw/openclaw/pull/42",
     );
     expect(payload.pullRequestPublished).toBe(true);
+  });
+
+  it("creates the fixed project blueprint scaffold and reports it in json", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-blueprint-"));
+
+    await openclawCodeBlueprintInitCommand(
+      {
+        repoRoot,
+        title: "OpenClawCode Blueprint",
+        goal: "Ship blueprint-first autonomous development.",
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      blueprintPath: path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      exists: true,
+      schemaVersion: 1,
+      status: "draft",
+      title: "OpenClawCode Blueprint",
+      requiredSectionsPresent: true,
+      hasAgreementCheckpoint: false,
+    });
+    const content = await readFile(path.join(repoRoot, "PROJECT-BLUEPRINT.md"), "utf8");
+    expect(content).toContain("# OpenClawCode Blueprint");
+    expect(content).toContain("Ship blueprint-first autonomous development.");
+    expect(content).toContain("## Human Gates");
+    expect(content).toContain("## Provider Strategy");
+  });
+
+  it("shows missing blueprint state in json when the fixed blueprint file does not exist", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-blueprint-missing-"));
+
+    await openclawCodeBlueprintShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      blueprintPath: path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      exists: false,
+      schemaVersion: null,
+      status: null,
+      title: null,
+      hasAgreementCheckpoint: false,
+    });
+  });
+
+  it("records the explicit blueprint agreement checkpoint", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-blueprint-agree-"));
+
+    await openclawCodeBlueprintInitCommand(
+      {
+        repoRoot,
+        title: "Agreement Blueprint",
+      },
+      runtime,
+    );
+    runtime.log.mockClear();
+
+    await openclawCodeBlueprintSetStatusCommand(
+      {
+        repoRoot,
+        status: "agreed",
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.status).toBe("agreed");
+    expect(payload.hasAgreementCheckpoint).toBe(true);
+    expect(payload.agreedAt).toMatch(/^202\d-/);
+    const content = await readFile(path.join(repoRoot, "PROJECT-BLUEPRINT.md"), "utf8");
+    expect(content).toContain("status: agreed");
+    expect(content).toContain("agreedAt:");
   });
 
   it("renders a dry-run validation issue template without creating a GitHub issue", async () => {

@@ -9,18 +9,20 @@ Recommended reading order:
 3. `mvp-spec-v1.md`
 4. `architecture.md`
 5. `blueprint-first-orchestration.md`
-6. `development-plan.md`
-7. `master-delivery-checklist.md`
-8. `full-program-roadmap.md`
-9. `workflows.md`
-10. `specs.md`
-11. `openclaw-strategy.md`
-12. `openclaw-implementation-plan.md`
-13. `run-json-contract.md`
-14. `upstream-sync-policy.md`
-15. `operator-setup.md`
-16. `mvp-runbook.md`
-17. `webhook-operations.md`
+6. `blueprint-first-delivery-plan.md`
+7. `project-blueprint-schema.md`
+8. `development-plan.md`
+9. `master-delivery-checklist.md`
+10. `full-program-roadmap.md`
+11. `workflows.md`
+12. `specs.md`
+13. `openclaw-strategy.md`
+14. `openclaw-implementation-plan.md`
+15. `run-json-contract.md`
+16. `upstream-sync-policy.md`
+17. `operator-setup.md`
+18. `mvp-runbook.md`
+19. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
@@ -48,6 +50,11 @@ loop with:
 - an `openclaw code run ...` CLI path for issue-driven execution
 - a versioned top-level JSON contract for `openclaw code run --json`, anchored
   by `contractVersion: 1` and documented in `run-json-contract.md`
+- a fixed repo-local blueprint foundation at `PROJECT-BLUEPRINT.md`, with:
+  - `openclaw code blueprint-init`
+  - `openclaw code blueprint-show`
+  - `openclaw code blueprint-set-status`
+  - machine-readable lifecycle inspection through `--json`
 - stable workflow identity metadata now also includes top-level mirrors for:
   - `issueTitle`
   - `issueRepo`

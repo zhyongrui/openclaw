@@ -9,6 +9,9 @@ The system goal is to move from a GitHub issue to a verified pull request while 
 For the newer blueprint-first target that goes beyond issue-driven execution,
 see `blueprint-first-orchestration.md`.
 
+For the phased delivery order of that blueprint-first track, see
+`blueprint-first-delivery-plan.md`.
+
 For the implementation path that maps this architecture onto the current
 OpenClaw codebase, see `docs/openclaw-implementation-plan.md`.
 

@@ -15,6 +15,9 @@ For the explicit gap between the current issue-driven implementation and the
 intended blueprint-first multi-agent product, see
 `blueprint-first-orchestration.md`.
 
+For the phased implementation sequence that starts turning that gap into
+shippable slices, see `blueprint-first-delivery-plan.md`.
+
 ## North Star
 
 `openclawcode` should become a repo-bound coding operator that can:

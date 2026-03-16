@@ -1,5 +1,13 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  createProjectBlueprint,
+  parseProjectBlueprintStatus,
+  projectBlueprintStatusIds,
+  readProjectBlueprint,
+  updateProjectBlueprintStatus,
+  type ProjectBlueprintStatus,
+} from "../openclawcode/blueprint.js";
 import type { WorkflowRerunContext, WorkflowRun } from "../openclawcode/index.js";
 import {
   assessValidationIssueImplementation,
@@ -76,6 +84,25 @@ export interface OpenClawCodeReconcileValidationIssuesOpts {
   json?: boolean;
 }
 
+export interface OpenClawCodeBlueprintInitOpts {
+  repoRoot?: string;
+  title?: string;
+  goal?: string;
+  force?: boolean;
+  json?: boolean;
+}
+
+export interface OpenClawCodeBlueprintShowOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeBlueprintSetStatusOpts {
+  repoRoot?: string;
+  status: string;
+  json?: boolean;
+}
+
 export const OPENCLAWCODE_RUN_JSON_CONTRACT_VERSION = 1;
 export const DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS = 300;
 export const DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS = 180;
@@ -134,6 +161,37 @@ async function resolveRepoRef(params: {
     return { owner: params.owner, repo: params.repo };
   }
   return await resolveGitHubRepoFromGit(params.repoRoot);
+}
+
+function logProjectBlueprintSummary(params: {
+  summary: Awaited<ReturnType<typeof readProjectBlueprint>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { summary, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(summary, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${summary.repoRoot}`);
+  runtime.log(`Blueprint path: ${summary.blueprintPath}`);
+  runtime.log(`Exists: ${summary.exists ? "yes" : "no"}`);
+  if (!summary.exists) {
+    return;
+  }
+
+  runtime.log(`Schema version: ${summary.schemaVersion ?? "unknown"}`);
+  runtime.log(`Status: ${summary.status ?? "unknown"}`);
+  runtime.log(`Title: ${summary.title ?? "untitled"}`);
+  runtime.log(`Created at: ${summary.createdAt ?? "unknown"}`);
+  runtime.log(`Updated at: ${summary.updatedAt ?? "unknown"}`);
+  runtime.log(`Agreed at: ${summary.agreedAt ?? "not yet agreed"}`);
+  runtime.log(`Goal summary: ${summary.goalSummary ?? "none"}`);
+  runtime.log(`Required sections present: ${summary.requiredSectionsPresent ? "yes" : "no"}`);
+  if (summary.missingRequiredSections.length > 0) {
+    runtime.log(`Missing sections: ${summary.missingRequiredSections.join(", ")}`);
+  }
 }
 
 function resolveAutoMergePolicy(run: WorkflowRun): {
@@ -739,6 +797,53 @@ export async function openclawCodeRunCommand(
   }
 }
 
+export async function openclawCodeBlueprintInitCommand(
+  opts: OpenClawCodeBlueprintInitOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const summary = await createProjectBlueprint({
+    repoRoot,
+    title: opts.title,
+    goal: opts.goal,
+    force: Boolean(opts.force),
+  });
+  logProjectBlueprintSummary({
+    summary,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeBlueprintShowCommand(
+  opts: OpenClawCodeBlueprintShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const summary = await readProjectBlueprint(repoRoot);
+  logProjectBlueprintSummary({
+    summary,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeBlueprintSetStatusCommand(
+  opts: OpenClawCodeBlueprintSetStatusOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const summary = await updateProjectBlueprintStatus({
+    repoRoot,
+    status: parseProjectBlueprintStatus(String(opts.status)),
+  });
+  logProjectBlueprintSummary({
+    summary,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
 export async function openclawCodeSeedValidationIssueCommand(
   opts: OpenClawCodeSeedValidationIssueOpts,
   runtime: RuntimeEnv,
@@ -1042,4 +1147,8 @@ export async function openclawCodeReconcileValidationIssuesCommand(
 
 export function openclawCodeSeedValidationIssueTemplateIds(): ValidationIssueTemplateId[] {
   return listValidationIssueTemplates().map((entry) => entry.id);
+}
+
+export function openclawCodeBlueprintStatusIds(): ProjectBlueprintStatus[] {
+  return projectBlueprintStatusIds();
 }

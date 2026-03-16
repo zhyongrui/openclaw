@@ -28,6 +28,9 @@ For the current gap between today's issue-driven loop and the intended
 blueprint-driven multi-agent product, see
 `blueprint-first-orchestration.md`.
 
+For the execution order of that new control-plane track, see
+`blueprint-first-delivery-plan.md`.
+
 ## Final Delivery Plan
 
 The work should now converge on a public-usable operator, not an endless
@@ -47,6 +50,24 @@ control plane for:
 Those gaps are now documented in `blueprint-first-orchestration.md` and should
 be treated as the next major architecture track rather than as scattered
 one-off improvements.
+
+The first concrete landing in that track is now defined and partially shipped:
+
+- fixed blueprint path: `PROJECT-BLUEPRINT.md`
+- first blueprint schema document: `project-blueprint-schema.md`
+- repo-local CLI primitives:
+  - `openclaw code blueprint-init`
+  - `openclaw code blueprint-show`
+  - `openclaw code blueprint-set-status`
+
+The active blueprint-first sequence is now:
+
+1. ship the fixed blueprint file and explicit agreement checkpoint
+2. add a goal-discussion loop before issue creation
+3. add blueprint-to-work-item decomposition
+4. add provider-neutral role routing for Codex and Claude Code
+5. add the first general discovery source beyond validation-pool upkeep
+6. add stage-level human handoff and resume controls
 
 The remaining program is:
 

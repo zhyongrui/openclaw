@@ -5,6 +5,9 @@ This is the canonical long-running execution checklist for `openclawcode`.
 For a much longer list of seed-ready low-risk command-layer issue candidates,
 see `command-layer-backlog.md`.
 
+For the long-form blueprint-first phase plan, see
+`blueprint-first-delivery-plan.md`.
+
 Use it when the goal is not just "finish the next slice", but "keep shipping
 until the product is genuinely usable by other people".
 
@@ -44,11 +47,11 @@ The program is only "done enough to hand to other people" when all of these are 
 
 ## Phase -1: Blueprint-First Control Plane
 
-- [ ] define a fixed project blueprint document path and schema
+- [x] define a fixed project blueprint document path and schema
 - [ ] support a goal-discussion loop before issue creation
 - [ ] support clarification questions when the goal is underspecified
 - [ ] support proactive system suggestions while refining the goal
-- [ ] support an explicit "blueprint agreed" checkpoint
+- [x] support an explicit "blueprint agreed" checkpoint
 - [ ] derive execution work items from the blueprint instead of assuming GitHub issues already exist
 - [ ] add a first general discovery pipeline beyond validation-pool seeding
 - [ ] define a provider-neutral role model for planner, coder, reviewer, verifier, and doc-writer

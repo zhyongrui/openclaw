@@ -15,6 +15,14 @@ implementation and the intended product direction:
 This is the bridge between today's issue-driven coding operator and the
 intended blueprint-driven autonomous development system.
 
+Status note:
+
+- the first follow-up slice since this gap capture has already landed a fixed
+  `PROJECT-BLUEPRINT.md` scaffold plus CLI commands to create, inspect, and
+  update blueprint lifecycle state
+- the remaining gaps below describe what is still missing beyond that
+  foundation
+
 ## New Product Target
 
 The intended product is no longer just:
@@ -353,7 +361,8 @@ missing upstream control plane.
 
 ## Recommended Next Concrete Slices
 
-1. define the fixed blueprint document path and schema
+1. finish and harden the fixed blueprint document path and schema now landed at
+   `PROJECT-BLUEPRINT.md`
 2. add a chat-native blueprint confirmation loop before issue creation
 3. add a first internal `work item` abstraction separate from GitHub issues
 4. add a provider-role config surface for planner/coder/reviewer
