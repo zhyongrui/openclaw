@@ -286,9 +286,9 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] support explicit Node binary selection for setup-check
 - [ ] add a documented install path for a completely fresh external host
 - [ ] add an upgrade path from one release tag to the next
-- [ ] add a rollback path from a broken promotion to the previous good baseline
-- [ ] add a promotion checklist tied to exact commands and expected outputs
-- [ ] add an explicit disaster-recovery checklist for a broken long-lived operator
+- [x] add a rollback path from a broken promotion to the previous good baseline
+- [x] add a promotion checklist tied to exact commands and expected outputs
+- [x] add an explicit disaster-recovery checklist for a broken long-lived operator
 - [x] add a machine-readable promotion receipt saved on successful promotion
 - [x] add a machine-readable rollback receipt saved on rollback
 - [ ] document required secrets, environment variables, and least-privilege scopes
@@ -322,10 +322,10 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] validate sync branches with the `vitest.openclawcode` suite
 - [x] promote validated sync branches back to `main`
 - [x] record sync conflict hotspots in docs and dev logs
-- [ ] define the preferred sync cadence
-- [ ] define a hard threshold for "behind upstream" that forces a sync slice
-- [ ] document the promotion checklist after each successful sync
-- [ ] document the rollback checklist if a promoted sync regresses the live operator
+- [x] define the preferred sync cadence
+- [x] define a hard threshold for "behind upstream" that forces a sync slice
+- [x] document the promotion checklist after each successful sync
+- [x] document the rollback checklist if a promoted sync regresses the live operator
 - [ ] keep a short conflict-history appendix for recurring hotspots
 
 ## Phase 11: Low-Risk Live-Proof Ladder

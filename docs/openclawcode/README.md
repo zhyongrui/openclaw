@@ -25,8 +25,9 @@ Recommended reading order:
 19. `release-artifacts-contract.md`
 20. `upstream-sync-policy.md`
 21. `operator-setup.md`
-22. `mvp-runbook.md`
-23. `webhook-operations.md`
+22. `sync-promotion-runbook.md`
+23. `mvp-runbook.md`
+24. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 

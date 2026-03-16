@@ -853,7 +853,8 @@ The current repository state already supports:
   - published PR and merged PR status
   - verification decision, summary, boolean findings flag, and counts
   - auto-merge policy eligibility and disposition
-- operator runbooks for local setup, repo binding, and temporary webhook ingress
+- operator runbooks for local setup, repo binding, temporary webhook ingress,
+  and sync/promotion/rollback recovery
 - a repo-local setup verification script for gateway, webhook, binding, tunnel
   health, and required GitHub webhook event subscriptions
 - operator setup scripts that now derive env, config, and plugin state from a

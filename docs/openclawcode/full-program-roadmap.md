@@ -640,8 +640,6 @@ Goal:
 Remaining work:
 
 - Node floor checks in setup verification
-- branch-promotion checklist
-- rollback checklist for failed live promotions
 - machine-readable setup and promotion outputs for CI or external rollout
 
 ### Track 7: Upstream Sync Discipline
