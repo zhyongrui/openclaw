@@ -2082,3 +2082,20 @@ in local artifacts.
 
 This closes the first chat-visible explainability gap for suitability policy.
 The remaining adjacent gap is auto-merge policy explainability.
+
+## Auto-Merge Policy Explainability In Status
+
+`/occode-status` now explains auto-merge ineligibility directly from the tracked
+snapshot when the workflow has reached `ready-for-human-review`.
+
+- status now appends:
+  - `Auto-merge policy: blocked | <reason>`
+- the explanation is sourced from the same derived auto-merge policy used by
+  `openclaw code run --json`
+- plugin snapshots now persist:
+  - `autoMergePolicyEligible`
+  - `autoMergePolicyReason`
+  - `autoMergeDisposition`
+  - `autoMergeDispositionReason`
+
+This closes the first chat-visible explainability gap for auto-merge policy.

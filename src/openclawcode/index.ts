@@ -11,4 +11,5 @@ export * from "./stage-gates.js";
 export * from "./validation-issues.js";
 export * from "./work-items.js";
 export * from "./worktree/index.js";
+export * from "./workflow-derived.js";
 export * from "./workflow/index.js";

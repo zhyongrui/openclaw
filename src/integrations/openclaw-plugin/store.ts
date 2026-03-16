@@ -6,6 +6,7 @@ import type {
   WorkflowRun,
   WorkflowStage,
 } from "../../openclawcode/contracts/index.js";
+import { resolveAutoMergeDisposition, resolveAutoMergePolicy } from "../../openclawcode/index.js";
 import type { OpenClawCodeChatopsRunRequest } from "./chatops.js";
 
 export interface OpenClawCodeQueuedRun {
@@ -50,6 +51,10 @@ export interface OpenClawCodeIssueStatusSnapshot {
   rerunRequestedVerifierAgentId?: string;
   suitabilityDecision?: SuitabilityDecision;
   suitabilitySummary?: string;
+  autoMergePolicyEligible?: boolean;
+  autoMergePolicyReason?: string;
+  autoMergeDisposition?: "merged" | "skipped" | "failed";
+  autoMergeDispositionReason?: string;
   failureDiagnostics?: WorkflowFailureDiagnostics;
   providerFailureCount?: number;
   lastProviderFailureAt?: string;
@@ -197,6 +202,24 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
         : undefined,
     suitabilitySummary:
       typeof candidate.suitabilitySummary === "string" ? candidate.suitabilitySummary : undefined,
+    autoMergePolicyEligible:
+      typeof candidate.autoMergePolicyEligible === "boolean"
+        ? candidate.autoMergePolicyEligible
+        : undefined,
+    autoMergePolicyReason:
+      typeof candidate.autoMergePolicyReason === "string"
+        ? candidate.autoMergePolicyReason
+        : undefined,
+    autoMergeDisposition:
+      candidate.autoMergeDisposition === "merged" ||
+      candidate.autoMergeDisposition === "skipped" ||
+      candidate.autoMergeDisposition === "failed"
+        ? candidate.autoMergeDisposition
+        : undefined,
+    autoMergeDispositionReason:
+      typeof candidate.autoMergeDispositionReason === "string"
+        ? candidate.autoMergeDispositionReason
+        : undefined,
     failureDiagnostics: normalizeWorkflowFailureDiagnostics(candidate.failureDiagnostics),
     providerFailureCount:
       typeof candidate.providerFailureCount === "number"
@@ -389,6 +412,8 @@ function buildStatusSnapshot(params: {
   notifyTarget?: string;
   notifiedAt?: string;
 }): OpenClawCodeIssueStatusSnapshot {
+  const autoMergePolicy = resolveAutoMergePolicy(params.run);
+  const autoMergeDisposition = resolveAutoMergeDisposition(params.run);
   return {
     issueKey: `${params.run.issue.owner}/${params.run.issue.repo}#${params.run.issue.number}`,
     status: params.status,
@@ -415,6 +440,10 @@ function buildStatusSnapshot(params: {
     rerunRequestedVerifierAgentId: params.run.rerunContext?.requestedVerifierAgentId,
     suitabilityDecision: params.run.suitability?.decision,
     suitabilitySummary: params.run.suitability?.summary,
+    autoMergePolicyEligible: autoMergePolicy.autoMergePolicyEligible,
+    autoMergePolicyReason: autoMergePolicy.autoMergePolicyReason,
+    autoMergeDisposition: autoMergeDisposition.autoMergeDisposition ?? undefined,
+    autoMergeDispositionReason: autoMergeDisposition.autoMergeDispositionReason ?? undefined,
     failureDiagnostics: params.run.failureDiagnostics,
     lastNotificationChannel: params.notifyChannel,
     lastNotificationTarget: params.notifyTarget,

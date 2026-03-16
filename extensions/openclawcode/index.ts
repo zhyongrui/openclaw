@@ -579,6 +579,17 @@ function buildTopLevelSuitabilityPolicyLines(snapshot: OpenClawCodeIssueStatusSn
   ];
 }
 
+function buildTopLevelAutoMergePolicyLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
+  if (
+    snapshot.autoMergePolicyEligible !== false ||
+    !snapshot.autoMergePolicyReason ||
+    snapshot.stage !== "ready-for-human-review"
+  ) {
+    return [];
+  }
+  return [`Auto-merge policy: blocked | ${trimToSingleLine(snapshot.autoMergePolicyReason)}`];
+}
+
 function buildPrecheckedEscalationStatus(params: {
   issue: { owner: string; repo: string; number: number };
   summary: string;
@@ -2895,6 +2906,7 @@ export default {
         const resolvedWithOperatorContext = [
           resolvedWithProvider,
           ...(currentSnapshot ? buildTopLevelSuitabilityPolicyLines(currentSnapshot) : []),
+          ...(currentSnapshot ? buildTopLevelAutoMergePolicyLines(currentSnapshot) : []),
           ...buildOperatorContextLines(repoConfig),
         ].join("\n");
         return {

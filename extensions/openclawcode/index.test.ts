@@ -2950,6 +2950,51 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("shows auto-merge policy explanation through /occode-status when auto-merge is disallowed", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#6625",
+        status: [
+          "openclawcode status for zhyongrui/openclawcode#6625",
+          "Stage: Ready For Human Review",
+          "Summary: Verification approved the run for human review.",
+        ].join("\n"),
+        stage: "ready-for-human-review",
+        runId: "run-6625",
+        updatedAt: "2026-03-12T12:08:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 6625,
+        autoMergePolicyEligible: false,
+        autoMergePolicyReason:
+          "Not eligible for auto-merge: the run is not classified as command-layer.",
+      });
+
+      const result = await fixture.commands.get("occode-status")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-status #6625",
+        args: "#6625",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "openclawcode status for zhyongrui/openclawcode#6625",
+          "Stage: Ready For Human Review",
+          "Summary: Verification approved the run for human review.",
+          "Auto-merge policy: blocked | Not eligible for auto-merge: the run is not classified as command-layer.",
+          `Operator repo root: ${fixture.repoRoot}`,
+          "Operator baseline: main",
+        ].join("\n"),
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("heals /occode-status from GitHub when a tracked pull request was merged externally", async () => {
     const fixture = await registerPluginFixture();
     try {

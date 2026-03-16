@@ -544,6 +544,9 @@ describe("OpenClawCodeChatopsStore", () => {
         latestReviewSubmittedAt: "2026-03-10T08:20:00.000Z",
         latestReviewSummary: "Please add a regression test for the rerun path.",
         latestReviewUrl: "https://github.com/zhyongrui/openclawcode/pull/209#pullrequestreview-2",
+        autoMergePolicyEligible: false,
+        autoMergePolicyReason:
+          "Not eligible for auto-merge: suitability did not accept autonomous execution.",
         lastNotificationChannel: "telegram",
         lastNotificationTarget: "chat:primary",
         lastNotificationStatus: "sent",
