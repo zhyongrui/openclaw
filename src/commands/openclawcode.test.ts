@@ -1881,6 +1881,7 @@ describe("openclawCodeRunCommand", () => {
       pendingApprovalCount: 0,
       pendingIntakeDraftCount: 0,
       manualTakeoverCount: 0,
+      deferredRuntimeRerouteCount: 0,
       queuedRunCount: 0,
       currentRunPresent: false,
       trackedIssueCount: 0,
@@ -1889,6 +1890,7 @@ describe("openclawCodeRunCommand", () => {
       providerPauseActive: false,
       currentRun: null,
       providerPause: null,
+      deferredRuntimeReroutes: [],
       repos: [],
       issueSnapshots: [],
     });
@@ -1942,6 +1944,14 @@ describe("openclawCodeRunCommand", () => {
       notifyTarget: "chat:primary",
       actor: "tester",
       requestedAt: "2026-03-16T00:05:00.000Z",
+    });
+    await store.upsertDeferredRuntimeReroute({
+      issueKey: "openclaw/openclawcode#103",
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+      requestedAt: "2026-03-16T00:06:00.000Z",
+      actor: "tester",
+      requestedCoderAgentId: "codex-rerun",
     });
     await store.enqueue(
       {
@@ -2004,6 +2014,7 @@ describe("openclawCodeRunCommand", () => {
       executionStartGatedApprovalCount: 1,
       pendingIntakeDraftCount: 1,
       manualTakeoverCount: 1,
+      deferredRuntimeRerouteCount: 1,
       queuedRunCount: 0,
       currentRunPresent: true,
       trackedIssueCount: 1,
@@ -2015,6 +2026,12 @@ describe("openclawCodeRunCommand", () => {
       },
     });
     expect(payload.pendingApprovals).toHaveLength(2);
+    expect(payload.deferredRuntimeReroutes).toEqual([
+      expect.objectContaining({
+        issueKey: "openclaw/openclawcode#103",
+        requestedCoderAgentId: "codex-rerun",
+      }),
+    ]);
     expect(payload.issueSnapshots[0]).toMatchObject({
       issueKey: "openclaw/openclawcode#105",
       stage: "ready-for-human-review",
@@ -2028,6 +2045,7 @@ describe("openclawCodeRunCommand", () => {
         pendingApprovalCount: 2,
         pendingIntakeDraftCount: 1,
         manualTakeoverCount: 1,
+        deferredRuntimeRerouteCount: 1,
         queuedRunCount: 0,
         currentRunCount: 1,
         readyForHumanReviewCount: 1,

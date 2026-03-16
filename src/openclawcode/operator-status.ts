@@ -6,6 +6,7 @@ import type {
 } from "../integrations/openclaw-plugin/chatops.js";
 import {
   OpenClawCodeChatopsStore,
+  type OpenClawCodeDeferredRuntimeReroute,
   type OpenClawCodeIssueStatusSnapshot,
   type OpenClawCodePendingApproval,
   type OpenClawCodePendingIntakeDraft,
@@ -24,6 +25,7 @@ export interface OpenClawCodeOperatorRepoSummary {
   pendingApprovalCount: number;
   pendingIntakeDraftCount: number;
   manualTakeoverCount: number;
+  deferredRuntimeRerouteCount: number;
   queuedRunCount: number;
   currentRunCount: number;
   readyForHumanReviewCount: number;
@@ -42,6 +44,7 @@ export interface OpenClawCodeOperatorStatusSnapshot {
   executionStartGatedApprovalCount: number;
   pendingIntakeDraftCount: number;
   manualTakeoverCount: number;
+  deferredRuntimeRerouteCount: number;
   queuedRunCount: number;
   currentRunPresent: boolean;
   trackedIssueCount: number;
@@ -53,6 +56,7 @@ export interface OpenClawCodeOperatorStatusSnapshot {
   pendingApprovals: OpenClawCodePendingApproval[];
   pendingIntakeDrafts: OpenClawCodePendingIntakeDraft[];
   manualTakeovers: OpenClawCodeManualTakeover[];
+  deferredRuntimeReroutes: OpenClawCodeDeferredRuntimeReroute[];
   repoBindings: OpenClawCodeRepoNotificationBinding[];
   issueSnapshots: OpenClawCodeIssueStatusSnapshot[];
   repos: OpenClawCodeOperatorRepoSummary[];
@@ -101,6 +105,12 @@ function collectRepoKeySet(state: OpenClawCodeQueueState): Set<string> {
       repoKeys.add(formatRepoKey(repo));
     }
   }
+  for (const deferred of state.deferredRuntimeReroutes) {
+    const repo = parseIssueKey(deferred.issueKey);
+    if (repo) {
+      repoKeys.add(formatRepoKey(repo));
+    }
+  }
   for (const draft of state.pendingIntakeDrafts) {
     repoKeys.add(draft.repoKey);
   }
@@ -137,6 +147,10 @@ function buildRepoSummary(params: {
     const repo = parseIssueKey(entry.issueKey);
     return repo ? formatRepoKey(repo) === repoKey : false;
   });
+  const deferredRuntimeReroutes = state.deferredRuntimeReroutes.filter((entry) => {
+    const repo = parseIssueKey(entry.issueKey);
+    return repo ? formatRepoKey(repo) === repoKey : false;
+  });
   const queuedRuns = state.queue.filter(
     (entry) => formatRepoKey({ owner: entry.request.owner, repo: entry.request.repo }) === repoKey,
   );
@@ -155,6 +169,7 @@ function buildRepoSummary(params: {
     pendingApprovalCount: pendingApprovals.length,
     pendingIntakeDraftCount: pendingIntakeDrafts.length,
     manualTakeoverCount: manualTakeovers.length,
+    deferredRuntimeRerouteCount: deferredRuntimeReroutes.length,
     queuedRunCount: queuedRuns.length,
     currentRunCount,
     readyForHumanReviewCount: snapshotEntries.filter(
@@ -182,6 +197,9 @@ export function buildOpenClawCodeOperatorStatusSnapshot(params: {
   const manualTakeovers = [...params.state.manualTakeovers].toSorted((left, right) =>
     compareByString(left.issueKey, right.issueKey),
   );
+  const deferredRuntimeReroutes = [...params.state.deferredRuntimeReroutes].toSorted(
+    (left, right) => compareByString(left.issueKey, right.issueKey),
+  );
   const repoBindings = Object.values(params.state.repoBindingsByRepo).toSorted((left, right) =>
     compareByString(left.repoKey, right.repoKey),
   );
@@ -207,6 +225,7 @@ export function buildOpenClawCodeOperatorStatusSnapshot(params: {
     ).length,
     pendingIntakeDraftCount: pendingIntakeDrafts.length,
     manualTakeoverCount: manualTakeovers.length,
+    deferredRuntimeRerouteCount: deferredRuntimeReroutes.length,
     queuedRunCount: params.state.queue.length,
     currentRunPresent: Boolean(params.state.currentRun),
     trackedIssueCount: issueSnapshots.length,
@@ -218,6 +237,7 @@ export function buildOpenClawCodeOperatorStatusSnapshot(params: {
     pendingApprovals,
     pendingIntakeDrafts,
     manualTakeovers,
+    deferredRuntimeReroutes,
     repoBindings,
     issueSnapshots,
     repos: repoKeys.map((repoKey) =>

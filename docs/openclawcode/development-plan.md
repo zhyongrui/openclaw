@@ -2220,6 +2220,7 @@ The next machine-readable operator surface is now also wired:
   - execution-start-gated counts
   - intake draft counts
   - manual takeover counts
+  - deferred runtime reroute counts
   - current-run and queue state
   - repo bindings and tracked issue snapshots
 - its schema is now documented in

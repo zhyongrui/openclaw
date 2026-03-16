@@ -20,6 +20,7 @@ Current top-level fields:
 - `executionStartGatedApprovalCount`
 - `pendingIntakeDraftCount`
 - `manualTakeoverCount`
+- `deferredRuntimeRerouteCount`
 - `queuedRunCount`
 - `currentRunPresent`
 - `trackedIssueCount`
@@ -31,6 +32,7 @@ Current top-level fields:
 - `pendingApprovals`
 - `pendingIntakeDrafts`
 - `manualTakeovers`
+- `deferredRuntimeReroutes`
 - `repoBindings`
 - `issueSnapshots`
 - `repos`
@@ -42,12 +44,14 @@ Semantics:
 - `issueSnapshots` is the stable sorted list form of the tracked
   `statusSnapshotsByIssue` map and is ordered by newest `updatedAt` first.
 - `repos` summarizes the per-repo operator state visible in chat:
-  tracked issues, pending approvals, intake drafts, takeovers, queued/current
-  work, and final issue stages.
+  tracked issues, pending approvals, intake drafts, takeovers, deferred runtime
+  reroutes, queued/current work, and final issue stages.
 - `currentRun` mirrors the queued run request currently being executed, when
   one exists.
 - `providerPause` mirrors the active provider-pause record when the queue is
   paused after repeated transient provider failures.
+- `deferredRuntimeReroutes` mirrors pending coder/verifier reroute requests
+  that were captured while an issue was already running.
 
 Stability boundary:
 
