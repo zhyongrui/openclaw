@@ -159,6 +159,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] make `/occode-intake` respect execution-start gate decisions
 - [x] auto-resume execution-start-held work after chat gate approval
 - [x] allow pre-run provider-role reroute updates from chat
+- [x] allow active runs to capture deferred coder or verifier reroutes for automatic post-failure replay
 - [x] show policy explanation when auto-merge is disallowed
 - [x] show policy explanation when suitability blocks autonomous execution
 - [x] show promotion-readiness and rollback-readiness in chat-facing operator views

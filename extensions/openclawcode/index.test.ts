@@ -4482,6 +4482,258 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("updates queued runtime overrides through /occode-reroute-run before execution starts", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.enqueue(
+        {
+          issueKey: "zhyongrui/openclawcode#243",
+          notifyChannel: "telegram",
+          notifyTarget: "user:reroute-chat",
+          request: {
+            owner: "zhyongrui",
+            repo: "openclawcode",
+            issueNumber: 243,
+            repoRoot: fixture.repoRoot,
+            baseBranch: "main",
+            branchName: "openclawcode/issue-243",
+            builderAgent: "main",
+            verifierAgent: "main",
+            testCommands: [
+              "pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads",
+            ],
+            openPullRequest: true,
+            mergeOnApprove: false,
+          },
+        },
+        "Queued from test.",
+      );
+
+      const result = await fixture.commands.get("occode-reroute-run")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-reroute-run #243 coder codex-alt",
+        args: "#243 coder codex-alt",
+        to: "user:reroute-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain(
+        "Updated the queued runtime override for zhyongrui/openclawcode#243.",
+      );
+      expect(result?.text).toContain(
+        "Execution has not started yet, so the next run will start with coder -> codex-alt.",
+      );
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.queue[0]?.request.builderAgent).toBe("codex-alt");
+      expect(snapshot.queue[0]?.request.verifierAgent).toBe("main");
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("records deferred runtime reroutes for active runs and exposes them through /occode-status", async () => {
+    const fixture = await registerPluginFixture({ pollIntervalMs: 10 });
+    let resolveRun: ((value: { code: number; stdout: string; stderr: string }) => void) | undefined;
+    try {
+      await fixture.store.enqueue(
+        {
+          issueKey: "zhyongrui/openclawcode#244",
+          notifyChannel: "telegram",
+          notifyTarget: "user:reroute-chat",
+          request: {
+            owner: "zhyongrui",
+            repo: "openclawcode",
+            issueNumber: 244,
+            repoRoot: fixture.repoRoot,
+            baseBranch: "main",
+            branchName: "openclawcode/issue-244",
+            builderAgent: "main",
+            verifierAgent: "main",
+            testCommands: [
+              "pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads",
+            ],
+            openPullRequest: true,
+            mergeOnApprove: false,
+          },
+        },
+        "Queued from test.",
+      );
+      fixture.runCommandWithTimeout.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveRun = resolve;
+          }),
+      );
+
+      await fixture.service?.start({
+        config: {},
+        stateDir: fixture.stateDir,
+        logger: { info() {}, warn() {}, error() {} },
+      });
+
+      await waitForAssertion(async () => {
+        const snapshot = await fixture.store.snapshot();
+        expect(snapshot.currentRun?.issueKey).toBe("zhyongrui/openclawcode#244");
+      });
+
+      const reroute = await fixture.commands.get("occode-reroute-run")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-reroute-run #244 verifier claude-alt",
+        args: "#244 verifier claude-alt",
+        to: "user:reroute-chat",
+        senderId: "user:operator",
+        config: {},
+      });
+
+      expect(reroute?.text).toContain(
+        "Recorded a deferred runtime reroute for zhyongrui/openclawcode#244.",
+      );
+      expect(reroute?.text).toContain(
+        "if it finishes Failed, openclawcode will queue a rerun automatically",
+      );
+
+      const deferred = await fixture.store.getDeferredRuntimeReroute("zhyongrui/openclawcode#244");
+      expect(deferred).toMatchObject({
+        requestedVerifierAgentId: "claude-alt",
+        actor: "user:reroute-chat",
+      });
+
+      const status = await fixture.commands.get("occode-status")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-status #244",
+        args: "#244",
+        to: "user:reroute-chat",
+        config: {},
+      });
+
+      expect(status?.text).toContain("Pending runtime reroute: verifier=claude-alt");
+      expect(status?.text).toContain(
+        "Pending reroute note: Runtime reroute requested while the current run is active.",
+      );
+    } finally {
+      resolveRun?.({
+        code: 0,
+        stdout: JSON.stringify(createWorkflowRun({ issueNumber: 244 })),
+        stderr: "",
+      });
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("automatically queues a rerun with deferred runtime overrides after a failed run", async () => {
+    const fixture = await registerPluginFixture({ pollIntervalMs: 10 });
+    let resolveFirstRun:
+      | ((value: { code: number; stdout: string; stderr: string }) => void)
+      | undefined;
+    let secondRunStarted = false;
+    try {
+      await fixture.store.enqueue(
+        {
+          issueKey: "zhyongrui/openclawcode#245",
+          notifyChannel: "telegram",
+          notifyTarget: "user:reroute-chat",
+          request: {
+            owner: "zhyongrui",
+            repo: "openclawcode",
+            issueNumber: 245,
+            repoRoot: fixture.repoRoot,
+            baseBranch: "main",
+            branchName: "openclawcode/issue-245",
+            builderAgent: "main",
+            verifierAgent: "main",
+            testCommands: [
+              "pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads",
+            ],
+            openPullRequest: true,
+            mergeOnApprove: false,
+          },
+        },
+        "Queued from test.",
+      );
+      fixture.runCommandWithTimeout.mockImplementation(() => {
+        if (!resolveFirstRun) {
+          return new Promise((resolve) => {
+            resolveFirstRun = resolve;
+          });
+        }
+        secondRunStarted = true;
+        return Promise.resolve({
+          code: 0,
+          stdout: JSON.stringify(
+            createWorkflowRun({
+              issueNumber: 245,
+              stage: "ready-for-human-review",
+              updatedAt: "2026-03-16T05:20:00.000Z",
+            }),
+          ),
+          stderr: "",
+        });
+      });
+
+      await fixture.service?.start({
+        config: {},
+        stateDir: fixture.stateDir,
+        logger: { info() {}, warn() {}, error() {} },
+      });
+
+      await waitForAssertion(async () => {
+        const snapshot = await fixture.store.snapshot();
+        expect(snapshot.currentRun?.issueKey).toBe("zhyongrui/openclawcode#245");
+      });
+
+      const reroute = await fixture.commands.get("occode-reroute-run")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-reroute-run #245 coder codex-rerun",
+        args: "#245 coder codex-rerun",
+        to: "user:reroute-chat",
+        senderId: "user:operator",
+        config: {},
+      });
+
+      expect(reroute?.text).toContain(
+        "Recorded a deferred runtime reroute for zhyongrui/openclawcode#245.",
+      );
+
+      resolveFirstRun?.({
+        code: 0,
+        stdout: JSON.stringify(
+          createWorkflowRun({
+            issueNumber: 245,
+            stage: "failed",
+            updatedAt: "2026-03-16T05:10:00.000Z",
+          }),
+        ),
+        stderr: "",
+      });
+
+      await waitForAssertion(async () => {
+        expect(fixture.runCommandWithTimeout).toHaveBeenCalledTimes(2);
+        expect(secondRunStarted).toBe(true);
+        expect(
+          await fixture.store.getDeferredRuntimeReroute("zhyongrui/openclawcode#245"),
+        ).toBeUndefined();
+      });
+
+      const secondInvocation = fixture.runCommandWithTimeout.mock.calls[1]?.[0];
+      const serializedSecondInvocation = JSON.stringify(secondInvocation);
+      expect(serializedSecondInvocation).toContain("--rerun-coder-agent");
+      expect(serializedSecondInvocation).toContain("codex-rerun");
+      expect(serializedSecondInvocation).not.toContain("--rerun-verifier-agent");
+    } finally {
+      resolveFirstRun?.({
+        code: 0,
+        stdout: JSON.stringify(createWorkflowRun({ issueNumber: 245 })),
+        stderr: "",
+      });
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
   it("shows blueprint stage gates through /occode-gates", async () => {
     const fixture = await registerPluginFixture();
     try {

@@ -31,6 +31,7 @@ import {
   type OpenClawCodeChatopsRepoConfig,
   type OpenClawCodeGitHubDeliveryRecord,
   type OpenClawCodeIssueStatusSnapshot,
+  type OpenClawCodeDeferredRuntimeReroute,
 } from "../../src/integrations/openclaw-plugin/index.js";
 import {
   inspectProjectBlueprintClarifications,
@@ -411,6 +412,32 @@ function buildProviderRerunLines(params: {
   }
   details.push("- note: this rerun is probing recovery after the cleared pause window.");
   return details;
+}
+
+function buildDeferredRuntimeRerouteLines(params: {
+  record: OpenClawCodeDeferredRuntimeReroute | undefined;
+  topLevel?: boolean;
+}): string[] {
+  const record = params.record;
+  if (!record) {
+    return [];
+  }
+  const label = params.topLevel ? "Pending runtime reroute" : "  pending-reroute";
+  const reroute = [
+    record.requestedCoderAgentId ? `coder=${record.requestedCoderAgentId}` : undefined,
+    record.requestedVerifierAgentId ? `verifier=${record.requestedVerifierAgentId}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  if (!reroute) {
+    return [];
+  }
+  const lines = [`${label}: ${[reroute, record.requestedAt].filter(Boolean).join(" | ")}`];
+  const note = trimToSingleLine(record.note);
+  if (note) {
+    lines.push(`${params.topLevel ? "Pending reroute note" : "  pending-reroute-note"}: ${note}`);
+  }
+  return lines;
 }
 
 async function appendValidationIssueStatusContext(params: {
@@ -2267,6 +2294,95 @@ function resolveRerunReason(snapshot: OpenClawCodeIssueStatusSnapshot): string {
   );
 }
 
+async function maybeQueueDeferredRuntimeReroute(params: {
+  api: OpenClawPluginApi;
+  store: OpenClawCodeChatopsStore;
+  issueKey: string;
+}): Promise<void> {
+  const deferred = await params.store.getDeferredRuntimeReroute(params.issueKey);
+  if (!deferred) {
+    return;
+  }
+
+  const snapshot = await params.store.getStatusSnapshot(params.issueKey);
+  const parsedIssue = parseIssueKey(params.issueKey);
+  if (!snapshot || !parsedIssue) {
+    return;
+  }
+
+  if (snapshot.stage !== "failed") {
+    await params.store.removeDeferredRuntimeReroute(params.issueKey);
+    await sendText({
+      api: params.api,
+      channel: deferred.notifyChannel,
+      target: deferred.notifyTarget,
+      text: [
+        `Cleared the pending runtime reroute for ${params.issueKey}.`,
+        `The current run finished at ${formatStageLabel(snapshot.stage)} instead of Failed, so no automatic rerun was queued.`,
+      ].join("\n"),
+    }).catch(() => undefined);
+    return;
+  }
+
+  const pluginConfig = resolveOpenClawCodePluginConfig(params.api.pluginConfig);
+  const repoConfig = resolveRepoConfig(pluginConfig.repos, parsedIssue);
+  if (!repoConfig) {
+    return;
+  }
+
+  const rerunContext = {
+    reason: `${resolveRerunReason(snapshot)} Runtime reroute requested while the prior run was active.`,
+    requestedAt: deferred.requestedAt,
+    priorRunId: snapshot.runId,
+    priorStage: snapshot.stage,
+    reviewDecision: snapshot.latestReviewDecision,
+    reviewSubmittedAt: snapshot.latestReviewSubmittedAt,
+    reviewSummary: snapshot.latestReviewSummary,
+    reviewUrl: snapshot.latestReviewUrl,
+    requestedCoderAgentId: deferred.requestedCoderAgentId ?? snapshot.rerunRequestedCoderAgentId,
+    requestedVerifierAgentId:
+      deferred.requestedVerifierAgentId ?? snapshot.rerunRequestedVerifierAgentId,
+  } as const;
+  const request = buildRunRequestFromCommand({
+    command: {
+      action: "rerun",
+      issue: parsedIssue,
+    },
+    config: repoConfig,
+    rerunContext,
+    runtimeAgentOverrides: {
+      coderAgentId: rerunContext.requestedCoderAgentId,
+      verifierAgentId: rerunContext.requestedVerifierAgentId,
+    },
+  });
+  const queued = await params.store.enqueue(
+    {
+      issueKey: params.issueKey,
+      notifyChannel: deferred.notifyChannel,
+      notifyTarget: deferred.notifyTarget,
+      request,
+    },
+    "Queued deferred runtime reroute after failed run.",
+  );
+  if (!queued) {
+    return;
+  }
+  await params.store.removeDeferredRuntimeReroute(params.issueKey);
+  kickQueueDrain(params.api, params.store);
+  await sendText({
+    api: params.api,
+    channel: deferred.notifyChannel,
+    target: deferred.notifyTarget,
+    text: [
+      `Queued deferred runtime reroute for ${params.issueKey} after Failed state.`,
+      ...buildDeferredRuntimeRerouteLines({
+        record: deferred,
+        topLevel: true,
+      }),
+    ].join("\n"),
+  }).catch(() => undefined);
+}
+
 function resolveGithubSecret(
   pluginConfig: Record<string, unknown> | undefined,
 ): string | undefined {
@@ -2897,6 +3013,11 @@ async function processNextQueuedRun(
           target: next.notifyTarget,
           text: recovered.status,
         }).catch(() => undefined);
+        await maybeQueueDeferredRuntimeReroute({
+          api,
+          store,
+          issueKey: next.issueKey,
+        });
       } else {
         await sendText({
           api,
@@ -2925,6 +3046,11 @@ async function processNextQueuedRun(
           target: next.notifyTarget,
           text: recovered.status,
         }).catch(() => undefined);
+        await maybeQueueDeferredRuntimeReroute({
+          api,
+          store,
+          issueKey: next.issueKey,
+        });
       } else {
         await sendText({
           api,
@@ -2950,6 +3076,11 @@ async function processNextQueuedRun(
       target: next.notifyTarget,
       text: statusMessage,
     }).catch(() => undefined);
+    await maybeQueueDeferredRuntimeReroute({
+      api,
+      store,
+      issueKey: next.issueKey,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const recovered = await recoverTrackedRunStatus({
@@ -3551,8 +3682,61 @@ export default {
 
         const issueKey = formatIssueKey(parsed.issue);
         const currentStatus = await store.getStatus(issueKey);
-        if (await store.isQueuedOrRunning(issueKey)) {
-          return { text: `${issueKey} is already in progress.\n${currentStatus ?? "Queued."}` };
+        const queueState = await store.snapshot();
+        const currentRun =
+          queueState.currentRun?.issueKey === issueKey ? queueState.currentRun : undefined;
+        const queuedRun = queueState.queue.find((entry) => entry.issueKey === issueKey);
+        if (currentRun) {
+          const currentSnapshot = await store.getStatusSnapshot(issueKey);
+          const existingDeferred = await store.getDeferredRuntimeReroute(issueKey);
+          const deferredRequestedAt = new Date().toISOString();
+          const deferred = await store.upsertDeferredRuntimeReroute({
+            issueKey,
+            notifyChannel: currentRun.notifyChannel,
+            notifyTarget: currentRun.notifyTarget,
+            requestedAt: deferredRequestedAt,
+            actor: resolveCommandNotifyTarget(ctx) ?? ctx.senderId ?? ctx.channel,
+            note: "Runtime reroute requested while the current run is active.",
+            sourceRunId: currentSnapshot?.runId,
+            sourceStage: currentSnapshot?.stage,
+            requestedCoderAgentId:
+              parsed.roleId === "coder"
+                ? parsed.agentId
+                : (existingDeferred?.requestedCoderAgentId ??
+                  currentSnapshot?.rerunRequestedCoderAgentId),
+            requestedVerifierAgentId:
+              parsed.roleId === "verifier"
+                ? parsed.agentId
+                : (existingDeferred?.requestedVerifierAgentId ??
+                  currentSnapshot?.rerunRequestedVerifierAgentId),
+          });
+          return {
+            text: [
+              `${deferred === "added" ? "Recorded" : "Updated"} a deferred runtime reroute for ${issueKey}.`,
+              `The current run is still active; if it finishes Failed, openclawcode will queue a rerun automatically with the requested override.`,
+              currentStatus ?? "Currently running.",
+              ...buildDeferredRuntimeRerouteLines({
+                record: await store.getDeferredRuntimeReroute(issueKey),
+                topLevel: true,
+              }),
+            ].join("\n"),
+          };
+        }
+        if (queuedRun) {
+          await store.updateQueuedRuntimeReroute({
+            issueKey,
+            requestedCoderAgentId: parsed.roleId === "coder" ? parsed.agentId : undefined,
+            requestedVerifierAgentId: parsed.roleId === "verifier" ? parsed.agentId : undefined,
+            requestedAt: new Date().toISOString(),
+            reason: `Runtime reroute requested for ${parsed.roleId} before execution started.`,
+          });
+          return {
+            text: [
+              `Updated the queued runtime override for ${issueKey}.`,
+              `Execution has not started yet, so the next run will start with ${parsed.roleId} -> ${parsed.agentId}.`,
+              currentStatus ?? "Queued.",
+            ].join("\n"),
+          };
         }
         if (await store.isPendingApproval(issueKey)) {
           return {
@@ -3989,6 +4173,7 @@ export default {
         const resolvedStatusText =
           statusText ?? `No openclawcode status recorded yet for ${issueKey}.`;
         const manualTakeover = await store.getManualTakeover(issueKey);
+        const deferredRuntimeReroute = await store.getDeferredRuntimeReroute(issueKey);
         const providerPause = await store.getActiveProviderPause();
         const providerLines = providerPause
           ? buildProviderPauseLines({ pause: providerPause })
@@ -4012,6 +4197,10 @@ export default {
         const resolvedWithOperatorContext = [
           resolvedWithProvider,
           ...buildManualTakeoverLines(manualTakeover),
+          ...buildDeferredRuntimeRerouteLines({
+            record: deferredRuntimeReroute,
+            topLevel: true,
+          }),
           ...(currentSnapshot ? buildTopLevelSuitabilityPolicyLines(currentSnapshot) : []),
           ...(currentSnapshot ? buildTopLevelAutoMergePolicyLines(currentSnapshot) : []),
           ...buildOperatorContextLines(repoConfig),

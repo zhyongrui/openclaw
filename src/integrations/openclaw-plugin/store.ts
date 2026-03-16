@@ -52,6 +52,19 @@ export interface OpenClawCodeManualTakeover {
   requestedAt: string;
 }
 
+export interface OpenClawCodeDeferredRuntimeReroute {
+  issueKey: string;
+  notifyChannel: string;
+  notifyTarget: string;
+  requestedAt: string;
+  actor?: string;
+  note?: string;
+  sourceRunId?: string;
+  sourceStage?: WorkflowStage;
+  requestedCoderAgentId?: string;
+  requestedVerifierAgentId?: string;
+}
+
 export interface OpenClawCodeIssueStatusSnapshot {
   issueKey: string;
   status: string;
@@ -133,6 +146,7 @@ export interface OpenClawCodeQueueState {
   pendingApprovals: OpenClawCodePendingApproval[];
   pendingIntakeDrafts: OpenClawCodePendingIntakeDraft[];
   manualTakeovers: OpenClawCodeManualTakeover[];
+  deferredRuntimeReroutes: OpenClawCodeDeferredRuntimeReroute[];
   queue: OpenClawCodeQueuedRun[];
   currentRun?: OpenClawCodeQueuedRun;
   statusByIssue: Record<string, string>;
@@ -155,6 +169,7 @@ function cloneDefaultState(): OpenClawCodeQueueState {
     pendingApprovals: [],
     pendingIntakeDrafts: [],
     manualTakeovers: [],
+    deferredRuntimeReroutes: [],
     queue: [],
     statusByIssue: {},
     statusSnapshotsByIssue: {},
@@ -232,6 +247,41 @@ function normalizeManualTakeover(raw: unknown): OpenClawCodeManualTakeover | und
     actor: typeof candidate.actor === "string" ? candidate.actor : undefined,
     note: typeof candidate.note === "string" ? candidate.note : undefined,
     requestedAt: candidate.requestedAt,
+  };
+}
+
+function normalizeDeferredRuntimeReroute(
+  raw: unknown,
+): OpenClawCodeDeferredRuntimeReroute | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const candidate = raw as Partial<OpenClawCodeDeferredRuntimeReroute>;
+  if (
+    typeof candidate.issueKey !== "string" ||
+    typeof candidate.notifyChannel !== "string" ||
+    typeof candidate.notifyTarget !== "string" ||
+    typeof candidate.requestedAt !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    issueKey: candidate.issueKey,
+    notifyChannel: candidate.notifyChannel,
+    notifyTarget: candidate.notifyTarget,
+    requestedAt: candidate.requestedAt,
+    actor: typeof candidate.actor === "string" ? candidate.actor : undefined,
+    note: typeof candidate.note === "string" ? candidate.note : undefined,
+    sourceRunId: typeof candidate.sourceRunId === "string" ? candidate.sourceRunId : undefined,
+    sourceStage: typeof candidate.sourceStage === "string" ? candidate.sourceStage : undefined,
+    requestedCoderAgentId:
+      typeof candidate.requestedCoderAgentId === "string"
+        ? candidate.requestedCoderAgentId
+        : undefined,
+    requestedVerifierAgentId:
+      typeof candidate.requestedVerifierAgentId === "string"
+        ? candidate.requestedVerifierAgentId
+        : undefined,
   };
 }
 
@@ -692,6 +742,12 @@ function normalizeState(raw: unknown): OpenClawCodeQueueState {
           return takeover ? [takeover] : [];
         })
       : [],
+    deferredRuntimeReroutes: Array.isArray(candidate.deferredRuntimeReroutes)
+      ? candidate.deferredRuntimeReroutes.flatMap((value) => {
+          const record = normalizeDeferredRuntimeReroute(value);
+          return record ? [record] : [];
+        })
+      : [],
     queue: Array.isArray(candidate.queue) ? candidate.queue : [],
     currentRun:
       candidate.currentRun && typeof candidate.currentRun === "object"
@@ -795,6 +851,14 @@ export class OpenClawCodeChatopsStore {
     await this.flushMutations();
     const state = await this.loadState();
     return state.manualTakeovers.find((entry) => entry.issueKey === issueKey);
+  }
+
+  async getDeferredRuntimeReroute(
+    issueKey: string,
+  ): Promise<OpenClawCodeDeferredRuntimeReroute | undefined> {
+    await this.flushMutations();
+    const state = await this.loadState();
+    return state.deferredRuntimeReroutes.find((entry) => entry.issueKey === issueKey);
   }
 
   async getStatusSnapshot(issueKey: string): Promise<OpenClawCodeIssueStatusSnapshot | undefined> {
@@ -1131,6 +1195,40 @@ export class OpenClawCodeChatopsStore {
     });
   }
 
+  async upsertDeferredRuntimeReroute(
+    record: OpenClawCodeDeferredRuntimeReroute,
+  ): Promise<"added" | "updated"> {
+    return await this.mutateState((state) => {
+      const existingIndex = state.deferredRuntimeReroutes.findIndex(
+        (entry) => entry.issueKey === record.issueKey,
+      );
+      if (existingIndex >= 0) {
+        const existing = state.deferredRuntimeReroutes[existingIndex];
+        state.deferredRuntimeReroutes[existingIndex] = {
+          ...existing,
+          ...record,
+          requestedCoderAgentId: record.requestedCoderAgentId ?? existing.requestedCoderAgentId,
+          requestedVerifierAgentId:
+            record.requestedVerifierAgentId ?? existing.requestedVerifierAgentId,
+        };
+        return "updated";
+      }
+      state.deferredRuntimeReroutes.push(record);
+      return "added";
+    });
+  }
+
+  async removeDeferredRuntimeReroute(issueKey: string): Promise<boolean> {
+    return await this.mutateState((state) => {
+      const index = state.deferredRuntimeReroutes.findIndex((entry) => entry.issueKey === issueKey);
+      if (index < 0) {
+        return false;
+      }
+      state.deferredRuntimeReroutes.splice(index, 1);
+      return true;
+    });
+  }
+
   async consumePendingApproval(issueKey: string): Promise<OpenClawCodePendingApproval | undefined> {
     return await this.mutateState((state) => {
       const index = state.pendingApprovals.findIndex((entry) => entry.issueKey === issueKey);
@@ -1184,6 +1282,49 @@ export class OpenClawCodeChatopsStore {
       state.queue.push(run);
       state.statusByIssue[run.issueKey] = status;
       return true;
+    });
+  }
+
+  async updateQueuedRuntimeReroute(params: {
+    issueKey: string;
+    requestedCoderAgentId?: string;
+    requestedVerifierAgentId?: string;
+    requestedAt: string;
+    reason: string;
+  }): Promise<OpenClawCodeQueuedRun | undefined> {
+    return await this.mutateState((state) => {
+      const index = state.queue.findIndex((entry) => entry.issueKey === params.issueKey);
+      if (index < 0) {
+        return undefined;
+      }
+      const queued = state.queue[index];
+      if (!queued) {
+        return undefined;
+      }
+      const next: OpenClawCodeQueuedRun = {
+        ...queued,
+        request: {
+          ...queued.request,
+          builderAgent: params.requestedCoderAgentId?.trim() || queued.request.builderAgent,
+          verifierAgent: params.requestedVerifierAgentId?.trim() || queued.request.verifierAgent,
+          rerunContext: queued.request.rerunContext
+            ? {
+                ...queued.request.rerunContext,
+                requestedAt: params.requestedAt,
+                reason: params.reason,
+                requestedCoderAgentId:
+                  params.requestedCoderAgentId?.trim() ||
+                  queued.request.rerunContext.requestedCoderAgentId,
+                requestedVerifierAgentId:
+                  params.requestedVerifierAgentId?.trim() ||
+                  queued.request.rerunContext.requestedVerifierAgentId,
+              }
+            : queued.request.rerunContext,
+        },
+      };
+      state.queue[index] = next;
+      state.statusByIssue[params.issueKey] = `Queued with runtime reroute overrides.`;
+      return next;
     });
   }
 

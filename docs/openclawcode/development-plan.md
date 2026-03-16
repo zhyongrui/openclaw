@@ -2049,8 +2049,14 @@ only pre-run blueprint edits.
 
 This still does not complete the full provider-switch story:
 
-- the override only applies when queueing a new rerun
-- it does not hot-swap an already running builder or verifier
+- active runs now support deferred reroute capture:
+  - `/occode-reroute-run` records a pending coder/verifier override instead of
+    rejecting the request while the run is still active
+  - `/occode-status` surfaces that pending reroute immediately
+  - if the active run finishes `Failed`, openclawcode auto-queues a rerun with
+    the deferred override
+- it still does not hot-swap an already running builder or verifier inside the
+  same execution attempt
 - manual worktree takeover and post-edit resume are still future slices
 
 ## Operator Context In Chat Status

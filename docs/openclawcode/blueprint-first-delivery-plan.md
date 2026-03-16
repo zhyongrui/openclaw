@@ -227,6 +227,13 @@ Current foothold:
   - CLI callers can pass `--rerun-coder-agent` and `--rerun-verifier-agent`
   - rerun context preserves requested coder/verifier agent ids
   - executable runtime routing records those selections as `rerun-request`
+- active-run reroute now has a first deferred replay path:
+  - if the issue is already running, `/occode-reroute-run` records a deferred
+    coder/verifier reroute instead of rejecting the request
+  - `/occode-status` shows that pending reroute while the current run is still
+    active
+  - if the active run finishes in `Failed`, openclawcode automatically queues a
+    rerun with the deferred override
 - manual human handoff now has a first structured worktree path:
   - `/occode-takeover owner/repo#123 [note]` records the active human takeover
   - `/occode-status` shows the active takeover with worktree path and actor
@@ -239,7 +246,9 @@ Current foothold:
   - `openclaw code rollback-suggestion-refresh --json` persists the current
     rollback target recommendation
 - the remaining gap is deeper runtime integration:
-  - provider switching mid-run is still missing
+  - true live mid-run provider switching is still missing
+  - current support is deferred replay after a failed active run, not an
+    in-flight handoff inside the same execution attempt
   - promotion override still needs fuller lifecycle wiring beyond receipts
 - the operator-side contract surface is now one step stronger too:
   - `openclaw code operator-status-snapshot-show --json` exposes a stable

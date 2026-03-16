@@ -175,6 +175,67 @@ describe("OpenClawCodeChatopsStore", () => {
     }
   });
 
+  it("persists deferred runtime reroutes across store instances", async () => {
+    const fixture = await createStore();
+
+    try {
+      await fixture.store.upsertDeferredRuntimeReroute({
+        issueKey: "zhyongrui/openclawcode#103",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:123",
+        requestedAt: "2026-03-16T03:00:00.000Z",
+        actor: "user:operator",
+        note: "Wait for the current run to fail before switching agents.",
+        sourceRunId: "run-103",
+        sourceStage: "building",
+        requestedVerifierAgentId: "claude-alt",
+      });
+
+      const secondStore = OpenClawCodeChatopsStore.fromStateDir(fixture.rootDir);
+      expect(await secondStore.getDeferredRuntimeReroute("zhyongrui/openclawcode#103")).toEqual({
+        issueKey: "zhyongrui/openclawcode#103",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:123",
+        requestedAt: "2026-03-16T03:00:00.000Z",
+        actor: "user:operator",
+        note: "Wait for the current run to fail before switching agents.",
+        sourceRunId: "run-103",
+        sourceStage: "building",
+        requestedVerifierAgentId: "claude-alt",
+      });
+    } finally {
+      await fs.rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("updates queued runtime reroute overrides in place", async () => {
+    const fixture = await createStore();
+
+    try {
+      const queuedRun = createQueuedRun(104);
+      expect(await fixture.store.enqueue(queuedRun)).toBe(true);
+
+      const updated = await fixture.store.updateQueuedRuntimeReroute({
+        issueKey: queuedRun.issueKey,
+        requestedCoderAgentId: "codex-alt",
+        requestedAt: "2026-03-16T03:05:00.000Z",
+        reason: "Runtime reroute requested before execution started.",
+      });
+
+      expect(updated?.request.builderAgent).toBe("codex-alt");
+      expect(updated?.request.verifierAgent).toBe("main");
+
+      const secondStore = OpenClawCodeChatopsStore.fromStateDir(fixture.rootDir);
+      const snapshot = await secondStore.snapshot();
+      expect(snapshot.queue[0]?.request.builderAgent).toBe("codex-alt");
+      expect(snapshot.statusByIssue[queuedRun.issueKey]).toBe(
+        "Queued with runtime reroute overrides.",
+      );
+    } finally {
+      await fs.rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
   it("tracks repeated transient provider failures and clears the pause after a later success", async () => {
     const fixture = await createStore();
 
