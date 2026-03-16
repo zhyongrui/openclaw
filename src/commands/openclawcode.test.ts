@@ -2744,6 +2744,7 @@ describe("openclawCodeRunCommand", () => {
     });
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload).toMatchObject({
+      contractVersion: 1,
       owner: "openclaw",
       repo: "openclaw",
       state: "open",
@@ -2833,6 +2834,7 @@ describe("openclawCodeRunCommand", () => {
     expect(mocks.closeIssue).not.toHaveBeenCalled();
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload).toMatchObject({
+      contractVersion: 1,
       owner: "openclaw",
       repo: "openclaw",
       closeImplemented: false,
@@ -2876,6 +2878,7 @@ describe("openclawCodeRunCommand", () => {
     });
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload).toMatchObject({
+      contractVersion: 1,
       closeImplemented: true,
       closableImplementedIssues: 1,
       closedIssues: 1,

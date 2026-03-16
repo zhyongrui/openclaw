@@ -21,10 +21,12 @@ Recommended reading order:
 15. `openclaw-implementation-plan.md`
 16. `run-json-contract.md`
 17. `operator-status-snapshot-contract.md`
-18. `upstream-sync-policy.md`
-19. `operator-setup.md`
-20. `mvp-runbook.md`
-21. `webhook-operations.md`
+18. `validation-pool-contract.md`
+19. `release-artifacts-contract.md`
+20. `upstream-sync-policy.md`
+21. `operator-setup.md`
+22. `mvp-runbook.md`
+23. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
@@ -254,6 +256,8 @@ loop with:
     baseline into `.openclawcode/promotion-gate.json`
   - `openclaw code rollback-suggestion-refresh --json` persists the current
     rollback candidate into `.openclawcode/rollback-suggestion.json`
+  - their stable `schemaVersion: 1` contract is documented in
+    `release-artifacts-contract.md`
 - a stable machine-readable operator-state contract now exists for chat-visible
   status surfaces:
   - `openclaw code operator-status-snapshot-show --json` reads the live
@@ -374,6 +378,9 @@ loop with:
   - `openclaw code seed-validation-issue`
   - `openclaw code list-validation-issues`
   - `openclaw code reconcile-validation-issues`
+  - `list-validation-issues --json` and `reconcile-validation-issues --json`
+    now expose `contractVersion: 1`, documented in
+    `docs/openclawcode/validation-pool-contract.md`
   - `openclaw code list-validation-issues` now reports template-level counts in
     both text and JSON output
   - `openclaw code reconcile-validation-issues` now classifies validation

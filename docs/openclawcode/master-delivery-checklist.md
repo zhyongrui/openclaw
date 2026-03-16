@@ -245,8 +245,8 @@ The program is only "done enough to hand to other people" when all of these are 
   - promotion readiness
 - [x] expose a machine-readable rollback suggestion artifact
 - [x] define a stable contract for chat-visible operator status snapshots
-- [ ] define a stable contract for validation-pool reconciliation output
-- [ ] define a stable contract for promotion and rollback docs metadata
+- [x] define a stable contract for validation-pool reconciliation output
+- [x] define a stable contract for promotion and rollback docs metadata
 
 ## Phase 7: Validation-Pool Governance
 

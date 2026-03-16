@@ -226,6 +226,7 @@ export interface OpenClawCodeOperatorStatusSnapshotShowOpts {
 }
 
 export const OPENCLAWCODE_RUN_JSON_CONTRACT_VERSION = 1;
+export const OPENCLAWCODE_VALIDATION_POOL_CONTRACT_VERSION = 1;
 export const DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS = 300;
 export const DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS = 180;
 
@@ -1641,6 +1642,7 @@ export async function openclawCodeListValidationIssuesCommand(
     runtime.log(
       JSON.stringify(
         {
+          contractVersion: OPENCLAWCODE_VALIDATION_POOL_CONTRACT_VERSION,
           owner: repoRef.owner,
           repo: repoRef.repo,
           state: opts.state ?? "open",
@@ -1759,6 +1761,7 @@ export async function openclawCodeReconcileValidationIssuesCommand(
     runtime.log(
       JSON.stringify(
         {
+          contractVersion: OPENCLAWCODE_VALIDATION_POOL_CONTRACT_VERSION,
           owner: repoRef.owner,
           repo: repoRef.repo,
           closeImplemented: Boolean(opts.closeImplemented),

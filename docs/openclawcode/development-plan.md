@@ -324,6 +324,9 @@ turning the working loop into a cleanly operable product:
     repo-local CLI
   - it emits a next-step hint so later sessions know whether to close stale
     issues or seed a fresh command-layer proof
+  - `list-validation-issues --json` and `reconcile-validation-issues --json`
+    now both expose `contractVersion: 1`, documented in
+    `docs/openclawcode/validation-pool-contract.md`
 - current live inventory is now:
   - docs/operator issue `#60`
   - docs/operator issue `#86`
@@ -2201,6 +2204,13 @@ The next machine-readable operator surface is now also wired:
   `docs/openclawcode/operator-status-snapshot-contract.md`
 - this closes the first stable contract gap for chat-visible operator status
   snapshots
+
+The release artifacts now also have an explicit schema contract document:
+
+- `docs/openclawcode/release-artifacts-contract.md` defines the stable
+  `schemaVersion: 1` fields for:
+  - `.openclawcode/promotion-gate.json`
+  - `.openclawcode/rollback-suggestion.json`
 
 ## Manual Takeover And Post-Edit Resume
 
