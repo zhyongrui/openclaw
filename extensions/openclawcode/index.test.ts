@@ -3365,6 +3365,115 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("shows promotion and rollback readiness through /occode-inbox when setup-check succeeds", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      fixture.runCommandWithTimeout.mockResolvedValue({
+        code: 0,
+        stdout: JSON.stringify({
+          ok: true,
+          strict: true,
+          repoRoot: fixture.repoRoot,
+          operatorRoot: fixture.repoRoot,
+          readiness: {
+            basic: true,
+            strict: true,
+            lowRiskProofReady: true,
+            fallbackProofReady: false,
+            promotionReady: true,
+            gatewayReachable: true,
+            routeProbeReady: true,
+            routeProbeSkipped: false,
+            builtStartupProofRequested: false,
+            builtStartupProofReady: true,
+            nextAction: "ready-for-low-risk-proof",
+          },
+          summary: {
+            pass: 19,
+            warn: 0,
+            fail: 0,
+          },
+        }),
+        stderr: "",
+      });
+
+      const result = await fixture.commands.get("occode-inbox")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-inbox",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Promotion readiness: ready | next=ready-for-low-risk-proof");
+      expect(result?.text).toContain("Proof readiness: low-risk=ready | fallback=blocked");
+      expect(result?.text).toContain("Rollback readiness: ready | target=main");
+      expect(result?.text).toContain("Setup-check summary: pass=19 | warn=0 | fail=0");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows a compact promotion checklist command", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      fixture.runCommandWithTimeout.mockResolvedValue({
+        code: 0,
+        stdout: JSON.stringify({
+          ok: true,
+          strict: true,
+          repoRoot: fixture.repoRoot,
+          operatorRoot: fixture.repoRoot,
+          readiness: {
+            basic: true,
+            strict: true,
+            lowRiskProofReady: false,
+            fallbackProofReady: false,
+            promotionReady: false,
+            gatewayReachable: true,
+            routeProbeReady: true,
+            routeProbeSkipped: false,
+            builtStartupProofRequested: true,
+            builtStartupProofReady: true,
+            nextAction: "ready-for-low-risk-proof",
+          },
+          summary: {
+            pass: 18,
+            warn: 1,
+            fail: 0,
+          },
+        }),
+        stderr: "",
+      });
+
+      const result = await fixture.commands.get("occode-promotion-checklist")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-promotion-checklist",
+        args: "",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "openclawcode promotion checklist for zhyongrui/openclawcode",
+          `Operator repo root: ${fixture.repoRoot}`,
+          "Operator baseline: main",
+          `Operator root: ${fixture.repoRoot}`,
+          "Promotion readiness: blocked | next=ready-for-low-risk-proof",
+          "Proof readiness: low-risk=blocked | fallback=blocked",
+          "Rollback readiness: ready | target=main",
+          "Setup-check summary: pass=18 | warn=1 | fail=0",
+          "Checklist: strict=yes | gateway=yes | route-probe=yes | built-startup=yes",
+        ].join("\n"),
+      });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("shows validation pool inventory through /occode-inbox", async () => {
     const fixture = await registerPluginFixture();
     try {

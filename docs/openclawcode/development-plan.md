@@ -2099,3 +2099,26 @@ snapshot when the workflow has reached `ready-for-human-review`.
   - `autoMergeDispositionReason`
 
 This closes the first chat-visible explainability gap for auto-merge policy.
+
+## Promotion And Rollback Readiness In Chat
+
+Operator-facing chat surfaces now consume the real strict setup-check JSON
+probe instead of making operators infer promotion state from scattered logs.
+
+- `/occode-inbox` now appends:
+  - promotion readiness
+  - low-risk/fallback proof readiness
+  - rollback readiness target
+  - setup-check summary counts
+- new command:
+  - `/occode-promotion-checklist`
+- the checklist command runs the existing
+  `scripts/openclawcode-setup-check.sh --strict --json` probe and formats:
+  - operator root
+  - promotion readiness
+  - proof readiness
+  - rollback target
+  - strict/gateway/route-probe/built-startup checklist signals
+
+This closes the first operator-chat visibility gap for promotion and rollback
+readiness.

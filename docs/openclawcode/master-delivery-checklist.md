@@ -152,10 +152,10 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] allow pre-run provider-role reroute updates from chat
 - [x] show policy explanation when auto-merge is disallowed
 - [x] show policy explanation when suitability blocks autonomous execution
-- [ ] show promotion-readiness and rollback-readiness in chat-facing operator views
+- [x] show promotion-readiness and rollback-readiness in chat-facing operator views
 - [x] show current branch or release baseline in chat-facing operator views
 - [x] show the current operator config profile or root in status output
-- [ ] add a compact promotion checklist command for operators
+- [x] add a compact promotion checklist command for operators
 
 ## Phase 3: Suitability And Policy
 

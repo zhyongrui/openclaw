@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { readRequestBodyWithLimit } from "../../src/infra/http-body.js";
 import {
@@ -67,6 +68,35 @@ type ActiveProviderPause = {
   lastFailureAt: string;
   failureCount: number;
   reason: string;
+};
+
+type SetupCheckReadinessPayload = {
+  basic: boolean;
+  strict: boolean;
+  lowRiskProofReady: boolean;
+  fallbackProofReady: boolean;
+  promotionReady: boolean;
+  gatewayReachable: boolean;
+  routeProbeReady: boolean;
+  routeProbeSkipped: boolean;
+  builtStartupProofRequested: boolean;
+  builtStartupProofReady: boolean;
+  nextAction: string;
+};
+
+type SetupCheckSummaryPayload = {
+  pass: number;
+  warn: number;
+  fail: number;
+};
+
+type SetupCheckProbePayload = {
+  ok: boolean;
+  strict: boolean;
+  repoRoot: string;
+  operatorRoot: string;
+  readiness: SetupCheckReadinessPayload;
+  summary: SetupCheckSummaryPayload;
 };
 
 let workerActive = false;
@@ -546,6 +576,153 @@ function buildOperatorContextLines(repoConfig: OpenClawCodeChatopsRepoConfig): s
     lines.push(`OpenClaw config: ${configPath}`);
   }
   return lines;
+}
+
+function isSetupCheckReadinessPayload(value: unknown): value is SetupCheckReadinessPayload {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.basic === "boolean" &&
+    typeof candidate.strict === "boolean" &&
+    typeof candidate.lowRiskProofReady === "boolean" &&
+    typeof candidate.fallbackProofReady === "boolean" &&
+    typeof candidate.promotionReady === "boolean" &&
+    typeof candidate.gatewayReachable === "boolean" &&
+    typeof candidate.routeProbeReady === "boolean" &&
+    typeof candidate.routeProbeSkipped === "boolean" &&
+    typeof candidate.builtStartupProofRequested === "boolean" &&
+    typeof candidate.builtStartupProofReady === "boolean" &&
+    typeof candidate.nextAction === "string"
+  );
+}
+
+function isSetupCheckSummaryPayload(value: unknown): value is SetupCheckSummaryPayload {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.pass === "number" &&
+    typeof candidate.warn === "number" &&
+    typeof candidate.fail === "number"
+  );
+}
+
+function parseSetupCheckProbePayload(stdout: string): SetupCheckProbePayload | undefined {
+  const trimmed = stdout.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== "object") {
+    return undefined;
+  }
+  const candidate = parsed as Record<string, unknown>;
+  if (
+    typeof candidate.ok !== "boolean" ||
+    typeof candidate.strict !== "boolean" ||
+    typeof candidate.repoRoot !== "string" ||
+    typeof candidate.operatorRoot !== "string" ||
+    !isSetupCheckReadinessPayload(candidate.readiness) ||
+    !isSetupCheckSummaryPayload(candidate.summary)
+  ) {
+    return undefined;
+  }
+  return {
+    ok: candidate.ok,
+    strict: candidate.strict,
+    repoRoot: candidate.repoRoot,
+    operatorRoot: candidate.operatorRoot,
+    readiness: candidate.readiness,
+    summary: candidate.summary,
+  };
+}
+
+async function probeSetupCheckReadiness(params: {
+  api: OpenClawPluginApi;
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+}): Promise<SetupCheckProbePayload | undefined> {
+  const scriptPath = path.join(
+    params.repoConfig.repoRoot,
+    "scripts",
+    "openclawcode-setup-check.sh",
+  );
+  const operatorRoot =
+    process.env.OPENCLAWCODE_SETUP_OPERATOR_ROOT?.trim() ||
+    process.env.OPENCLAWCODE_OPERATOR_ROOT?.trim() ||
+    params.repoConfig.repoRoot;
+  let result:
+    | {
+        code: number;
+        stdout: string;
+        stderr: string;
+      }
+    | undefined;
+  try {
+    result = await params.api.runtime.system.runCommandWithTimeout(
+      ["bash", scriptPath, "--strict", "--json"],
+      {
+        cwd: params.repoConfig.repoRoot,
+        timeoutMs: 90_000,
+        noOutputTimeoutMs: 90_000,
+        env: {
+          OPENCLAWCODE_SETUP_OPERATOR_ROOT: operatorRoot,
+        },
+      },
+    );
+  } catch {
+    result = undefined;
+  }
+  if (!result || typeof result.stdout !== "string") {
+    return undefined;
+  }
+  return parseSetupCheckProbePayload(result.stdout);
+}
+
+function buildPromotionReadinessLines(params: {
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  probe?: SetupCheckProbePayload;
+}): string[] {
+  if (!params.probe) {
+    return [];
+  }
+  return [
+    `Promotion readiness: ${params.probe.readiness.promotionReady ? "ready" : "blocked"} | next=${params.probe.readiness.nextAction}`,
+    `Proof readiness: low-risk=${params.probe.readiness.lowRiskProofReady ? "ready" : "blocked"} | fallback=${params.probe.readiness.fallbackProofReady ? "ready" : "blocked"}`,
+    `Rollback readiness: ${params.repoConfig.baseBranch ? "ready" : "blocked"} | target=${params.repoConfig.baseBranch || "unknown"}`,
+    `Setup-check summary: pass=${params.probe.summary.pass} | warn=${params.probe.summary.warn} | fail=${params.probe.summary.fail}`,
+  ];
+}
+
+function buildPromotionChecklistMessage(params: {
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  probe?: SetupCheckProbePayload;
+}): string {
+  const lines = [
+    `openclawcode promotion checklist for ${formatRepoKey(params.repoConfig)}`,
+    `Operator repo root: ${params.repoConfig.repoRoot}`,
+    `Operator baseline: ${params.repoConfig.baseBranch}`,
+  ];
+  if (!params.probe) {
+    lines.push("Setup-check probe: unavailable");
+    lines.push(
+      "Retry after the operator host can run scripts/openclawcode-setup-check.sh --strict --json.",
+    );
+    return lines.join("\n");
+  }
+  lines.push(`Operator root: ${params.probe.operatorRoot}`);
+  lines.push(...buildPromotionReadinessLines(params));
+  lines.push(
+    `Checklist: strict=${params.probe.readiness.strict ? "yes" : "no"} | gateway=${params.probe.readiness.gatewayReachable ? "yes" : "no"} | route-probe=${params.probe.readiness.routeProbeReady ? "yes" : params.probe.readiness.routeProbeSkipped ? "skipped" : "no"} | built-startup=${params.probe.readiness.builtStartupProofReady ? "yes" : "no"}`,
+  );
+  return lines.join("\n");
 }
 
 function buildSuitabilityLedgerLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
@@ -1209,6 +1386,8 @@ function buildInboxMessage(params: {
   state: Awaited<ReturnType<OpenClawCodeChatopsStore["snapshot"]>>;
   validationPool?: ValidationPoolSummary;
   workItems?: Awaited<ReturnType<typeof readProjectWorkItemInventory>>;
+  repoConfig?: OpenClawCodeChatopsRepoConfig;
+  setupCheck?: SetupCheckProbePayload;
 }): string {
   const repoKey = formatRepoKey(params.repo);
   const pending = params.state.pendingApprovals.filter((entry) =>
@@ -1345,6 +1524,11 @@ function buildInboxMessage(params: {
 
   lines.push(...buildWorkItemBacklogLines(params.workItems));
   lines.push(...buildValidationPoolLines(params.validationPool));
+  if (params.repoConfig) {
+    lines.push(
+      ...buildPromotionReadinessLines({ repoConfig: params.repoConfig, probe: params.setupCheck }),
+    );
+  }
 
   return lines.join("\n");
 }
@@ -2956,6 +3140,10 @@ export default {
         const workItems = await readProjectWorkItemInventory(repoConfig.repoRoot).catch(
           () => undefined,
         );
+        const setupCheck = await probeSetupCheckReadiness({
+          api,
+          repoConfig,
+        });
         return {
           text: buildInboxMessage({
             repo: {
@@ -2965,6 +3153,48 @@ export default {
             state,
             validationPool,
             workItems,
+            repoConfig,
+            setupCheck,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-promotion-checklist",
+      description:
+        "Show a compact promotion and rollback readiness checklist for an openclawcode repo.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const repo = parseChatopsRepoReference(ctx.args ?? "", {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!repo) {
+          return {
+            text:
+              "Usage: /occode-promotion-checklist owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-promotion-checklist",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+
+        const setupCheck = await probeSetupCheckReadiness({
+          api,
+          repoConfig,
+        });
+        return {
+          text: buildPromotionChecklistMessage({
+            repoConfig,
+            probe: setupCheck,
           }),
         };
       },
