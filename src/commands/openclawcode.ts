@@ -36,7 +36,9 @@ import {
   readProjectDiscoveryInventory,
   readProjectRoleRoutingPlan,
   readProjectPromotionGateArtifact,
+  readProjectPromotionReceiptArtifact,
   readOpenClawCodeOperatorStatusSnapshot,
+  readProjectRollbackReceiptArtifact,
   readProjectRollbackSuggestionArtifact,
   readProjectStageGateArtifact,
   readProjectWorkItemInventory,
@@ -51,6 +53,8 @@ import {
   writeProjectStageGateArtifact,
   writeProjectDiscoveryInventory,
   writeProjectPromotionGateArtifact,
+  writeProjectPromotionReceiptArtifact,
+  writeProjectRollbackReceiptArtifact,
   writeProjectRollbackSuggestionArtifact,
   writeProjectRoleRoutingPlan,
   writeProjectWorkItemInventory,
@@ -216,6 +220,34 @@ export interface OpenClawCodeRollbackSuggestionRefreshOpts {
 }
 
 export interface OpenClawCodeRollbackSuggestionShowOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodePromotionReceiptRecordOpts {
+  repoRoot?: string;
+  actor?: string;
+  note?: string;
+  promotedBranch?: string;
+  promotedCommitSha?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodePromotionReceiptShowOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeRollbackReceiptRecordOpts {
+  repoRoot?: string;
+  actor?: string;
+  note?: string;
+  restoredBranch?: string;
+  restoredCommitSha?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeRollbackReceiptShowOpts {
   repoRoot?: string;
   json?: boolean;
 }
@@ -530,6 +562,75 @@ function logProjectRollbackSuggestionArtifact(params: {
   runtime.log(`Target ref: ${artifact.targetRef ?? "unknown"}`);
   runtime.log(`Recommended: ${artifact.recommended ? "yes" : "no"}`);
   runtime.log(`Reason: ${artifact.reason}`);
+  if (artifact.blockers.length > 0) {
+    runtime.log("Blockers:");
+    for (const blocker of artifact.blockers) {
+      runtime.log(`- ${blocker}`);
+    }
+  }
+  if (artifact.suggestions.length > 0) {
+    runtime.log("Suggestions:");
+    for (const suggestion of artifact.suggestions) {
+      runtime.log(`- ${suggestion}`);
+    }
+  }
+}
+
+function logProjectPromotionReceiptArtifact(params: {
+  artifact: Awaited<ReturnType<typeof readProjectPromotionReceiptArtifact>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { artifact, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(artifact, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${artifact.repoRoot}`);
+  runtime.log(`Promotion receipt path: ${artifact.artifactPath}`);
+  runtime.log(`Exists: ${artifact.exists ? "yes" : "no"}`);
+  runtime.log(`Recorded at: ${artifact.recordedAt ?? "not yet recorded"}`);
+  runtime.log(
+    `Source ref: ${artifact.sourceBranch ?? "unknown"}@${artifact.sourceCommitSha ?? "unknown"}`,
+  );
+  runtime.log(`Promoted ref: ${artifact.promotedRef ?? "unknown"}`);
+  runtime.log(
+    `Promotion ready at record time: ${artifact.promotionReady == null ? "unknown" : artifact.promotionReady ? "yes" : "no"}`,
+  );
+  if (artifact.blockers.length > 0) {
+    runtime.log("Blockers:");
+    for (const blocker of artifact.blockers) {
+      runtime.log(`- ${blocker}`);
+    }
+  }
+  if (artifact.suggestions.length > 0) {
+    runtime.log("Suggestions:");
+    for (const suggestion of artifact.suggestions) {
+      runtime.log(`- ${suggestion}`);
+    }
+  }
+}
+
+function logProjectRollbackReceiptArtifact(params: {
+  artifact: Awaited<ReturnType<typeof readProjectRollbackReceiptArtifact>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { artifact, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(artifact, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${artifact.repoRoot}`);
+  runtime.log(`Rollback receipt path: ${artifact.artifactPath}`);
+  runtime.log(`Exists: ${artifact.exists ? "yes" : "no"}`);
+  runtime.log(`Recorded at: ${artifact.recordedAt ?? "not yet recorded"}`);
+  runtime.log(
+    `Source ref: ${artifact.sourceBranch ?? "unknown"}@${artifact.sourceCommitSha ?? "unknown"}`,
+  );
+  runtime.log(`Restored ref: ${artifact.restoredRef ?? "unknown"}`);
   if (artifact.blockers.length > 0) {
     runtime.log("Blockers:");
     for (const blocker of artifact.blockers) {
@@ -1467,6 +1568,70 @@ export async function openclawCodeRollbackSuggestionShowCommand(
   const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
   const artifact = await readProjectRollbackSuggestionArtifact(repoRoot);
   logProjectRollbackSuggestionArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodePromotionReceiptRecordCommand(
+  opts: OpenClawCodePromotionReceiptRecordOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await writeProjectPromotionReceiptArtifact({
+    repoRootInput: repoRoot,
+    actor: opts.actor,
+    note: opts.note,
+    promotedBranch: opts.promotedBranch,
+    promotedCommitSha: opts.promotedCommitSha,
+  });
+  logProjectPromotionReceiptArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodePromotionReceiptShowCommand(
+  opts: OpenClawCodePromotionReceiptShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await readProjectPromotionReceiptArtifact(repoRoot);
+  logProjectPromotionReceiptArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeRollbackReceiptRecordCommand(
+  opts: OpenClawCodeRollbackReceiptRecordOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await writeProjectRollbackReceiptArtifact({
+    repoRootInput: repoRoot,
+    actor: opts.actor,
+    note: opts.note,
+    restoredBranch: opts.restoredBranch,
+    restoredCommitSha: opts.restoredCommitSha,
+  });
+  logProjectRollbackReceiptArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeRollbackReceiptShowCommand(
+  opts: OpenClawCodeRollbackReceiptShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await readProjectRollbackReceiptArtifact(repoRoot);
+  logProjectRollbackReceiptArtifact({
     artifact,
     runtime,
     json: Boolean(opts.json),

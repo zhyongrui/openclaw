@@ -2188,7 +2188,23 @@ This closes the first contract gap for release-readiness artifacts, but not the
 entire release-control story:
 
 - promotion override still needs explicit lifecycle wiring
-- promotion and rollback receipts still need explicit lifecycle hooks
+
+The release-control artifact surface now also includes explicit receipts:
+
+- `openclaw code promotion-receipt-record`
+- `openclaw code promotion-receipt-show`
+- `openclaw code rollback-receipt-record`
+- `openclaw code rollback-receipt-show`
+- `.openclawcode/promotion-receipt.json` now persists:
+  - the source sync branch and commit
+  - the promoted branch and commit
+  - the linked promotion and rollback artifacts
+  - promotion readiness and proof signals captured at record time
+- `.openclawcode/rollback-receipt.json` now persists:
+  - the regressed source branch and commit
+  - the restored branch and commit
+  - the linked rollback suggestion and promotion artifacts
+  - the operator-facing reason and recommendation captured at record time
 
 The next machine-readable operator surface is now also wired:
 

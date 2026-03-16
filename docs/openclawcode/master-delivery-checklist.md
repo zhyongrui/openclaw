@@ -288,8 +288,8 @@ The program is only "done enough to hand to other people" when all of these are 
 - [ ] add a rollback path from a broken promotion to the previous good baseline
 - [ ] add a promotion checklist tied to exact commands and expected outputs
 - [ ] add an explicit disaster-recovery checklist for a broken long-lived operator
-- [ ] add a machine-readable promotion receipt saved on successful promotion
-- [ ] add a machine-readable rollback receipt saved on rollback
+- [x] add a machine-readable promotion receipt saved on successful promotion
+- [x] add a machine-readable rollback receipt saved on rollback
 - [ ] document required secrets, environment variables, and least-privilege scopes
 - [ ] document how to rotate webhook secrets and operator tokens safely
 - [ ] document how to rotate Feishu bindings safely

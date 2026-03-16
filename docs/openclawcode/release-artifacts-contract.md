@@ -7,11 +7,15 @@ Artifacts covered:
 
 - `.openclawcode/promotion-gate.json`
 - `.openclawcode/rollback-suggestion.json`
+- `.openclawcode/promotion-receipt.json`
+- `.openclawcode/rollback-receipt.json`
 
 Schema versions:
 
 - `promotion-gate.json` uses `schemaVersion: 1`
 - `rollback-suggestion.json` uses `schemaVersion: 1`
+- `promotion-receipt.json` uses `schemaVersion: 1`
+- `rollback-receipt.json` uses `schemaVersion: 1`
 
 Primary commands:
 
@@ -19,6 +23,10 @@ Primary commands:
 - `openclaw code promotion-gate-show --json`
 - `openclaw code rollback-suggestion-refresh --json`
 - `openclaw code rollback-suggestion-show --json`
+- `openclaw code promotion-receipt-record --json`
+- `openclaw code promotion-receipt-show --json`
+- `openclaw code rollback-receipt-record --json`
+- `openclaw code rollback-receipt-show --json`
 
 Stable top-level fields for `promotion-gate.json`:
 
@@ -71,6 +79,64 @@ Stable top-level fields for `rollback-suggestion.json`:
 - `targetBranch`
 - `targetCommitSha`
 - `targetRef`
+- `recommended`
+- `reason`
+- `promotionArtifactPath`
+- `promotionArtifactExists`
+- `promotionReady`
+- `mergePromotionGateReadiness`
+- `blockerCount`
+- `blockers`
+- `suggestionCount`
+- `suggestions`
+
+Stable top-level fields for `promotion-receipt.json`:
+
+- `repoRoot`
+- `artifactPath`
+- `exists`
+- `schemaVersion`
+- `recordedAt`
+- `actor`
+- `note`
+- `sourceBranch`
+- `sourceCommitSha`
+- `promotedBranch`
+- `promotedCommitSha`
+- `promotedRef`
+- `promotionArtifactPath`
+- `promotionArtifactExists`
+- `promotionReady`
+- `mergePromotionGateReadiness`
+- `setupCheckOk`
+- `lowRiskProofReady`
+- `fallbackProofReady`
+- `rollbackSuggestionArtifactPath`
+- `rollbackSuggestionArtifactExists`
+- `rollbackTargetBranch`
+- `rollbackTargetCommitSha`
+- `rollbackTargetRef`
+- `blockerCount`
+- `blockers`
+- `suggestionCount`
+- `suggestions`
+
+Stable top-level fields for `rollback-receipt.json`:
+
+- `repoRoot`
+- `artifactPath`
+- `exists`
+- `schemaVersion`
+- `recordedAt`
+- `actor`
+- `note`
+- `sourceBranch`
+- `sourceCommitSha`
+- `restoredBranch`
+- `restoredCommitSha`
+- `restoredRef`
+- `rollbackSuggestionArtifactPath`
+- `rollbackSuggestionArtifactExists`
 - `recommended`
 - `reason`
 - `promotionArtifactPath`

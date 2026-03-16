@@ -86,6 +86,10 @@ loop with:
   - `openclaw code promotion-gate-show`
   - `openclaw code rollback-suggestion-refresh`
   - `openclaw code rollback-suggestion-show`
+  - `openclaw code promotion-receipt-record`
+  - `openclaw code promotion-receipt-show`
+  - `openclaw code rollback-receipt-record`
+  - `openclaw code rollback-receipt-show`
   - machine-readable lifecycle inspection, revision metadata, and work-item
     inventory output through `--json`
   - repo-local discovery and provider-role routing artifacts under
@@ -94,6 +98,8 @@ loop with:
   - repo-local promotion and rollback artifacts persisted under:
     - `.openclawcode/promotion-gate.json`
     - `.openclawcode/rollback-suggestion.json`
+    - `.openclawcode/promotion-receipt.json`
+    - `.openclawcode/rollback-receipt.json`
 - stable workflow identity metadata now also includes top-level mirrors for:
   - `issueTitle`
   - `issueRepo`

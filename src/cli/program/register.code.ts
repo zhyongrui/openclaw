@@ -15,9 +15,13 @@ import {
   openclawCodeOperatorStatusSnapshotShowCommand,
   openclawCodePromotionGateRefreshCommand,
   openclawCodePromotionGateShowCommand,
+  openclawCodePromotionReceiptRecordCommand,
+  openclawCodePromotionReceiptShowCommand,
   openclawCodeRoleRoutingRefreshCommand,
   openclawCodeRoleRoutingShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
+  openclawCodeRollbackReceiptRecordCommand,
+  openclawCodeRollbackReceiptShowCommand,
   openclawCodeRollbackSuggestionRefreshCommand,
   openclawCodeRollbackSuggestionShowCommand,
   openclawCodeRunCommand,
@@ -99,6 +103,14 @@ ${formatHelpExamples([
   [
     "openclaw code rollback-suggestion-refresh --json",
     "Persist the current rollback-target artifact for release and sync decisions.",
+  ],
+  [
+    'openclaw code promotion-receipt-record --actor operator --note "Promoted refreshed sync branch onto main" --json',
+    "Persist a machine-readable promotion receipt after a successful promotion.",
+  ],
+  [
+    'openclaw code rollback-receipt-record --actor operator --note "Rolled the operator back to the last known-good baseline" --json',
+    "Persist a machine-readable rollback receipt after a rollback.",
   ],
   [
     "openclaw code operator-status-snapshot-show --json",
@@ -479,6 +491,90 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .action(async (opts) => {
       await runCommandWithRuntime(defaultRuntime, async () => {
         await openclawCodeRollbackSuggestionShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("promotion-receipt-record")
+    .description("Persist a machine-readable receipt after a successful promotion")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--actor <text>", "Actor recording the receipt")
+    .option("--note <text>", "Promotion note")
+    .option("--promoted-branch <branch>", "Explicit promoted branch")
+    .option("--promoted-commit <sha>", "Explicit promoted commit SHA")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodePromotionReceiptRecordCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            actor: opts.actor as string | undefined,
+            note: opts.note as string | undefined,
+            promotedBranch: opts.promotedBranch as string | undefined,
+            promotedCommitSha: opts.promotedCommit as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("promotion-receipt-show")
+    .description("Show the latest persisted promotion receipt")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodePromotionReceiptShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("rollback-receipt-record")
+    .description("Persist a machine-readable receipt after a rollback")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--actor <text>", "Actor recording the receipt")
+    .option("--note <text>", "Rollback note")
+    .option("--restored-branch <branch>", "Explicit restored branch")
+    .option("--restored-commit <sha>", "Explicit restored commit SHA")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeRollbackReceiptRecordCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            actor: opts.actor as string | undefined,
+            note: opts.note as string | undefined,
+            restoredBranch: opts.restoredBranch as string | undefined,
+            restoredCommitSha: opts.restoredCommit as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("rollback-receipt-show")
+    .description("Show the latest persisted rollback receipt")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeRollbackReceiptShowCommand(
           {
             repoRoot: opts.repoRoot as string | undefined,
             json: Boolean(opts.json),

@@ -9,6 +9,8 @@ import {
 
 export const PROJECT_PROMOTION_GATE_SCHEMA_VERSION = 1;
 export const PROJECT_ROLLBACK_SUGGESTION_SCHEMA_VERSION = 1;
+export const PROJECT_PROMOTION_RECEIPT_SCHEMA_VERSION = 1;
+export const PROJECT_ROLLBACK_RECEIPT_SCHEMA_VERSION = 1;
 
 interface SetupCheckReadinessPayload {
   basic: boolean;
@@ -101,12 +103,78 @@ export interface ProjectRollbackSuggestionArtifact {
   suggestions: string[];
 }
 
+export interface ProjectPromotionReceiptArtifact {
+  repoRoot: string;
+  artifactPath: string;
+  exists: boolean;
+  schemaVersion: number | null;
+  recordedAt: string | null;
+  actor: string | null;
+  note: string | null;
+  sourceBranch: string | null;
+  sourceCommitSha: string | null;
+  promotedBranch: string | null;
+  promotedCommitSha: string | null;
+  promotedRef: string | null;
+  promotionArtifactPath: string;
+  promotionArtifactExists: boolean;
+  promotionReady: boolean | null;
+  mergePromotionGateReadiness: ProjectStageGateReadinessId | null;
+  setupCheckOk: boolean | null;
+  lowRiskProofReady: boolean | null;
+  fallbackProofReady: boolean | null;
+  rollbackSuggestionArtifactPath: string;
+  rollbackSuggestionArtifactExists: boolean;
+  rollbackTargetBranch: string | null;
+  rollbackTargetCommitSha: string | null;
+  rollbackTargetRef: string | null;
+  blockerCount: number;
+  blockers: string[];
+  suggestionCount: number;
+  suggestions: string[];
+}
+
+export interface ProjectRollbackReceiptArtifact {
+  repoRoot: string;
+  artifactPath: string;
+  exists: boolean;
+  schemaVersion: number | null;
+  recordedAt: string | null;
+  actor: string | null;
+  note: string | null;
+  sourceBranch: string | null;
+  sourceCommitSha: string | null;
+  restoredBranch: string | null;
+  restoredCommitSha: string | null;
+  restoredRef: string | null;
+  rollbackSuggestionArtifactPath: string;
+  rollbackSuggestionArtifactExists: boolean;
+  recommended: boolean | null;
+  reason: string | null;
+  promotionArtifactPath: string;
+  promotionArtifactExists: boolean;
+  promotionReady: boolean | null;
+  mergePromotionGateReadiness: ProjectStageGateReadinessId | null;
+  blockerCount: number;
+  blockers: string[];
+  suggestionCount: number;
+  suggestions: string[];
+}
+
 function resolveProjectPromotionGateArtifactPath(repoRootInput: string): string {
   return path.join(path.resolve(repoRootInput), ".openclawcode", "promotion-gate.json");
 }
 
 function resolveProjectRollbackSuggestionArtifactPath(repoRootInput: string): string {
   return path.join(path.resolve(repoRootInput), ".openclawcode", "rollback-suggestion.json");
+}
+
+function resolveProjectPromotionReceiptArtifactPath(repoRootInput: string): string {
+  return path.join(path.resolve(repoRootInput), ".openclawcode", "promotion-receipt.json");
+}
+
+function resolveProjectRollbackReceiptArtifactPath(repoRootInput: string): string {
+  return path.join(path.resolve(repoRootInput), ".openclawcode", "rollback-receipt.json");
 }
 
 function resolveSetupCheckScriptPath(repoRootInput: string): string {
@@ -552,6 +620,308 @@ export async function readProjectRollbackSuggestionArtifact(
   try {
     const raw = await readFile(artifactPath, "utf8");
     const parsed = JSON.parse(raw) as Partial<ProjectRollbackSuggestionArtifact>;
+    return {
+      ...current,
+      ...parsed,
+      repoRoot,
+      artifactPath,
+      exists: true,
+    };
+  } catch {
+    return current;
+  }
+}
+
+function emptyPromotionReceiptArtifact(params: {
+  repoRoot: string;
+  artifactPath: string;
+  sourceBranch: string | null;
+  sourceCommitSha: string | null;
+  promotedBranch: string | null;
+  promotedCommitSha: string | null;
+  promotionArtifactPath: string;
+  promotionArtifactExists: boolean;
+  promotionReady: boolean | null;
+  mergePromotionGateReadiness: ProjectStageGateReadinessId | null;
+  setupCheckOk: boolean | null;
+  lowRiskProofReady: boolean | null;
+  fallbackProofReady: boolean | null;
+  rollbackSuggestionArtifactPath: string;
+  rollbackSuggestionArtifactExists: boolean;
+  rollbackTargetBranch: string | null;
+  rollbackTargetCommitSha: string | null;
+}): ProjectPromotionReceiptArtifact {
+  return {
+    repoRoot: params.repoRoot,
+    artifactPath: params.artifactPath,
+    exists: false,
+    schemaVersion: null,
+    recordedAt: null,
+    actor: null,
+    note: null,
+    sourceBranch: params.sourceBranch,
+    sourceCommitSha: params.sourceCommitSha,
+    promotedBranch: params.promotedBranch,
+    promotedCommitSha: params.promotedCommitSha,
+    promotedRef:
+      params.promotedBranch && params.promotedCommitSha
+        ? `${params.promotedBranch}@${params.promotedCommitSha}`
+        : null,
+    promotionArtifactPath: params.promotionArtifactPath,
+    promotionArtifactExists: params.promotionArtifactExists,
+    promotionReady: params.promotionReady,
+    mergePromotionGateReadiness: params.mergePromotionGateReadiness,
+    setupCheckOk: params.setupCheckOk,
+    lowRiskProofReady: params.lowRiskProofReady,
+    fallbackProofReady: params.fallbackProofReady,
+    rollbackSuggestionArtifactPath: params.rollbackSuggestionArtifactPath,
+    rollbackSuggestionArtifactExists: params.rollbackSuggestionArtifactExists,
+    rollbackTargetBranch: params.rollbackTargetBranch,
+    rollbackTargetCommitSha: params.rollbackTargetCommitSha,
+    rollbackTargetRef:
+      params.rollbackTargetBranch && params.rollbackTargetCommitSha
+        ? `${params.rollbackTargetBranch}@${params.rollbackTargetCommitSha}`
+        : null,
+    blockerCount: 0,
+    blockers: [],
+    suggestionCount: 0,
+    suggestions: [],
+  };
+}
+
+export async function deriveProjectPromotionReceiptArtifact(params: {
+  repoRootInput: string;
+  actor?: string;
+  note?: string;
+  promotedBranch?: string;
+  promotedCommitSha?: string;
+  recordedAt?: string;
+}): Promise<ProjectPromotionReceiptArtifact> {
+  const repoRoot = path.resolve(params.repoRootInput);
+  const promotion = await readProjectPromotionGateArtifact(repoRoot);
+  const rollback = await readProjectRollbackSuggestionArtifact(repoRoot);
+  const artifactPath = resolveProjectPromotionReceiptArtifactPath(repoRoot);
+  const promotedBranch = params.promotedBranch ?? promotion.baseBranch;
+  const promotedCommitSha =
+    params.promotedCommitSha ?? resolveBranchCommitSha(repoRoot, promotedBranch);
+  const artifact = emptyPromotionReceiptArtifact({
+    repoRoot,
+    artifactPath,
+    sourceBranch: promotion.branchName,
+    sourceCommitSha: promotion.commitSha,
+    promotedBranch,
+    promotedCommitSha,
+    promotionArtifactPath: promotion.artifactPath,
+    promotionArtifactExists: promotion.exists,
+    promotionReady: promotion.ready,
+    mergePromotionGateReadiness: promotion.mergePromotionGateReadiness,
+    setupCheckOk: promotion.setupCheckOk,
+    lowRiskProofReady: promotion.lowRiskProofReady,
+    fallbackProofReady: promotion.fallbackProofReady,
+    rollbackSuggestionArtifactPath: rollback.artifactPath,
+    rollbackSuggestionArtifactExists: rollback.exists,
+    rollbackTargetBranch: rollback.targetBranch,
+    rollbackTargetCommitSha: rollback.targetCommitSha,
+  });
+  artifact.recordedAt = params.recordedAt ?? new Date().toISOString();
+  artifact.actor = params.actor ?? null;
+  artifact.note = params.note ?? null;
+
+  if (!promotion.exists) {
+    artifact.blockers.push("Promotion gate artifact has not been generated yet.");
+  }
+  if (!promotion.ready) {
+    artifact.blockers.push("Promotion gate is not ready yet.");
+  }
+  if (!artifact.promotedBranch || !artifact.promotedCommitSha) {
+    artifact.blockers.push("The promoted branch or commit could not be resolved.");
+  }
+  if (
+    artifact.promotedBranch &&
+    artifact.sourceBranch &&
+    artifact.promotedBranch === artifact.sourceBranch
+  ) {
+    artifact.suggestions.push(
+      "The promoted branch still matches the source branch; verify that the long-lived baseline was actually updated.",
+    );
+  }
+  if (artifact.rollbackTargetRef) {
+    artifact.suggestions.push(
+      `Rollback can return the operator to ${artifact.rollbackTargetRef} if this promotion regresses.`,
+    );
+  }
+  artifact.blockerCount = artifact.blockers.length;
+  artifact.suggestionCount = artifact.suggestions.length;
+  return artifact;
+}
+
+export async function writeProjectPromotionReceiptArtifact(params: {
+  repoRootInput: string;
+  actor?: string;
+  note?: string;
+  promotedBranch?: string;
+  promotedCommitSha?: string;
+  recordedAt?: string;
+}): Promise<ProjectPromotionReceiptArtifact> {
+  const artifact = await deriveProjectPromotionReceiptArtifact(params);
+  artifact.exists = true;
+  artifact.schemaVersion = PROJECT_PROMOTION_RECEIPT_SCHEMA_VERSION;
+  await mkdir(path.dirname(artifact.artifactPath), { recursive: true });
+  await writeFile(artifact.artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+  return artifact;
+}
+
+export async function readProjectPromotionReceiptArtifact(
+  repoRootInput: string,
+): Promise<ProjectPromotionReceiptArtifact> {
+  const repoRoot = path.resolve(repoRootInput);
+  const artifactPath = resolveProjectPromotionReceiptArtifactPath(repoRoot);
+  const current = await deriveProjectPromotionReceiptArtifact({ repoRootInput: repoRoot });
+  try {
+    const raw = await readFile(artifactPath, "utf8");
+    const parsed = JSON.parse(raw) as Partial<ProjectPromotionReceiptArtifact>;
+    return {
+      ...current,
+      ...parsed,
+      repoRoot,
+      artifactPath,
+      exists: true,
+    };
+  } catch {
+    return current;
+  }
+}
+
+function emptyRollbackReceiptArtifact(params: {
+  repoRoot: string;
+  artifactPath: string;
+  sourceBranch: string | null;
+  sourceCommitSha: string | null;
+  restoredBranch: string | null;
+  restoredCommitSha: string | null;
+  rollbackSuggestionArtifactPath: string;
+  rollbackSuggestionArtifactExists: boolean;
+  recommended: boolean | null;
+  reason: string | null;
+  promotionArtifactPath: string;
+  promotionArtifactExists: boolean;
+  promotionReady: boolean | null;
+  mergePromotionGateReadiness: ProjectStageGateReadinessId | null;
+}): ProjectRollbackReceiptArtifact {
+  return {
+    repoRoot: params.repoRoot,
+    artifactPath: params.artifactPath,
+    exists: false,
+    schemaVersion: null,
+    recordedAt: null,
+    actor: null,
+    note: null,
+    sourceBranch: params.sourceBranch,
+    sourceCommitSha: params.sourceCommitSha,
+    restoredBranch: params.restoredBranch,
+    restoredCommitSha: params.restoredCommitSha,
+    restoredRef:
+      params.restoredBranch && params.restoredCommitSha
+        ? `${params.restoredBranch}@${params.restoredCommitSha}`
+        : null,
+    rollbackSuggestionArtifactPath: params.rollbackSuggestionArtifactPath,
+    rollbackSuggestionArtifactExists: params.rollbackSuggestionArtifactExists,
+    recommended: params.recommended,
+    reason: params.reason,
+    promotionArtifactPath: params.promotionArtifactPath,
+    promotionArtifactExists: params.promotionArtifactExists,
+    promotionReady: params.promotionReady,
+    mergePromotionGateReadiness: params.mergePromotionGateReadiness,
+    blockerCount: 0,
+    blockers: [],
+    suggestionCount: 0,
+    suggestions: [],
+  };
+}
+
+export async function deriveProjectRollbackReceiptArtifact(params: {
+  repoRootInput: string;
+  actor?: string;
+  note?: string;
+  restoredBranch?: string;
+  restoredCommitSha?: string;
+  recordedAt?: string;
+}): Promise<ProjectRollbackReceiptArtifact> {
+  const repoRoot = path.resolve(params.repoRootInput);
+  const rollback = await readProjectRollbackSuggestionArtifact(repoRoot);
+  const promotion = await readProjectPromotionGateArtifact(repoRoot);
+  const artifactPath = resolveProjectRollbackReceiptArtifactPath(repoRoot);
+  const restoredBranch = params.restoredBranch ?? rollback.targetBranch;
+  const restoredCommitSha =
+    params.restoredCommitSha ?? resolveBranchCommitSha(repoRoot, restoredBranch);
+  const artifact = emptyRollbackReceiptArtifact({
+    repoRoot,
+    artifactPath,
+    sourceBranch: promotion.branchName,
+    sourceCommitSha: promotion.commitSha,
+    restoredBranch,
+    restoredCommitSha,
+    rollbackSuggestionArtifactPath: rollback.artifactPath,
+    rollbackSuggestionArtifactExists: rollback.exists,
+    recommended: rollback.recommended,
+    reason: rollback.reason,
+    promotionArtifactPath: promotion.artifactPath,
+    promotionArtifactExists: promotion.exists,
+    promotionReady: promotion.ready,
+    mergePromotionGateReadiness: promotion.mergePromotionGateReadiness,
+  });
+  artifact.recordedAt = params.recordedAt ?? new Date().toISOString();
+  artifact.actor = params.actor ?? null;
+  artifact.note = params.note ?? null;
+
+  if (!rollback.exists) {
+    artifact.blockers.push("Rollback suggestion artifact has not been generated yet.");
+  }
+  if (!artifact.restoredBranch || !artifact.restoredCommitSha) {
+    artifact.blockers.push("The restored branch or commit could not be resolved.");
+  }
+  if (artifact.reason) {
+    artifact.suggestions.push(artifact.reason);
+  }
+  if (
+    artifact.restoredBranch &&
+    artifact.sourceBranch &&
+    artifact.restoredBranch === artifact.sourceBranch
+  ) {
+    artifact.suggestions.push(
+      "The restored branch still matches the source branch; verify that rollback moved the operator back to a safe baseline.",
+    );
+  }
+  artifact.blockerCount = artifact.blockers.length;
+  artifact.suggestionCount = artifact.suggestions.length;
+  return artifact;
+}
+
+export async function writeProjectRollbackReceiptArtifact(params: {
+  repoRootInput: string;
+  actor?: string;
+  note?: string;
+  restoredBranch?: string;
+  restoredCommitSha?: string;
+  recordedAt?: string;
+}): Promise<ProjectRollbackReceiptArtifact> {
+  const artifact = await deriveProjectRollbackReceiptArtifact(params);
+  artifact.exists = true;
+  artifact.schemaVersion = PROJECT_ROLLBACK_RECEIPT_SCHEMA_VERSION;
+  await mkdir(path.dirname(artifact.artifactPath), { recursive: true });
+  await writeFile(artifact.artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+  return artifact;
+}
+
+export async function readProjectRollbackReceiptArtifact(
+  repoRootInput: string,
+): Promise<ProjectRollbackReceiptArtifact> {
+  const repoRoot = path.resolve(repoRootInput);
+  const artifactPath = resolveProjectRollbackReceiptArtifactPath(repoRoot);
+  const current = await deriveProjectRollbackReceiptArtifact({ repoRootInput: repoRoot });
+  try {
+    const raw = await readFile(artifactPath, "utf8");
+    const parsed = JSON.parse(raw) as Partial<ProjectRollbackReceiptArtifact>;
     return {
       ...current,
       ...parsed,

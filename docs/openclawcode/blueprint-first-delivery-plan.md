@@ -240,7 +240,7 @@ Current foothold:
     rollback target recommendation
 - the remaining gap is deeper runtime integration:
   - provider switching mid-run is still missing
-  - promotion override and release-control receipts are still missing
+  - promotion override still needs fuller lifecycle wiring beyond receipts
 - the operator-side contract surface is now one step stronger too:
   - `openclaw code operator-status-snapshot-show --json` exposes a stable
     contract for the queue, bindings, tracked issue snapshots, and repo-level

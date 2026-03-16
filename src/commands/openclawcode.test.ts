@@ -25,7 +25,11 @@ import {
   openclawCodeListValidationIssuesCommand,
   openclawCodePromotionGateRefreshCommand,
   openclawCodePromotionGateShowCommand,
+  openclawCodePromotionReceiptRecordCommand,
+  openclawCodePromotionReceiptShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
+  openclawCodeRollbackReceiptRecordCommand,
+  openclawCodeRollbackReceiptShowCommand,
   openclawCodeRollbackSuggestionRefreshCommand,
   openclawCodeRollbackSuggestionShowCommand,
   openclawCodeRunCommand,
@@ -2599,6 +2603,151 @@ describe("openclawCodeRunCommand", () => {
     payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.exists).toBe(true);
     expect(payload.reason).toContain("baseline branch");
+  });
+
+  it("persists a machine-readable promotion receipt artifact", async () => {
+    const repoRoot = await createPromotionArtifactRepoRoot();
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeRoleRoutingRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeStageGatesRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeStageGatesDecideCommand(
+      {
+        repoRoot,
+        gate: "merge-promotion",
+        decision: "approved",
+        actor: "operator",
+        note: "Promotion approved after proofs.",
+        json: true,
+      },
+      runtime,
+    );
+    runtime.log.mockClear();
+    await openclawCodePromotionGateRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeRollbackSuggestionRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+
+    const promotedCommitSha =
+      spawnSync("git", ["rev-parse", "main"], { cwd: repoRoot, encoding: "utf8" }).stdout.trim() ||
+      null;
+    expect(promotedCommitSha).toMatch(/[0-9a-f]{40}/);
+
+    await openclawCodePromotionReceiptRecordCommand(
+      {
+        repoRoot,
+        actor: "operator",
+        note: "Promoted refreshed sync branch onto main.",
+        promotedBranch: "main",
+        promotedCommitSha: promotedCommitSha ?? undefined,
+        json: true,
+      },
+      runtime,
+    );
+
+    let payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      exists: true,
+      schemaVersion: 1,
+      actor: "operator",
+      sourceBranch: "sync/upstream-2026-03-16",
+      promotedBranch: "main",
+      promotionReady: true,
+      rollbackTargetBranch: "main",
+      rollbackSuggestionArtifactExists: true,
+      blockerCount: 0,
+    });
+    expect(payload.promotedRef).toMatch(/^main@[0-9a-f]{40}$/);
+
+    const persisted = JSON.parse(
+      await readFile(path.join(repoRoot, ".openclawcode", "promotion-receipt.json"), "utf8"),
+    );
+    expect(persisted.promotedBranch).toBe("main");
+
+    runtime.log.mockClear();
+    await openclawCodePromotionReceiptShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.exists).toBe(true);
+    expect(payload.artifactPath).toBe(
+      path.join(repoRoot, ".openclawcode", "promotion-receipt.json"),
+    );
+  });
+
+  it("persists a machine-readable rollback receipt artifact", async () => {
+    const repoRoot = await createPromotionArtifactRepoRoot();
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeRoleRoutingRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeStageGatesRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodePromotionGateRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeRollbackSuggestionRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+
+    const restoredCommitSha =
+      spawnSync("git", ["rev-parse", "main"], { cwd: repoRoot, encoding: "utf8" }).stdout.trim() ||
+      null;
+    expect(restoredCommitSha).toMatch(/[0-9a-f]{40}/);
+
+    await openclawCodeRollbackReceiptRecordCommand(
+      {
+        repoRoot,
+        actor: "operator",
+        note: "Rolled the operator back to the baseline branch.",
+        restoredBranch: "main",
+        restoredCommitSha: restoredCommitSha ?? undefined,
+        json: true,
+      },
+      runtime,
+    );
+
+    let payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      exists: true,
+      schemaVersion: 1,
+      actor: "operator",
+      sourceBranch: "sync/upstream-2026-03-16",
+      restoredBranch: "main",
+      recommended: true,
+      rollbackSuggestionArtifactExists: true,
+      blockerCount: 0,
+    });
+    expect(payload.restoredRef).toMatch(/^main@[0-9a-f]{40}$/);
+
+    const persisted = JSON.parse(
+      await readFile(path.join(repoRoot, ".openclawcode", "rollback-receipt.json"), "utf8"),
+    );
+    expect(persisted.restoredBranch).toBe("main");
+
+    runtime.log.mockClear();
+    await openclawCodeRollbackReceiptShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.exists).toBe(true);
+    expect(payload.artifactPath).toBe(
+      path.join(repoRoot, ".openclawcode", "rollback-receipt.json"),
+    );
   });
 
   it("renders a dry-run validation issue template without creating a GitHub issue", async () => {
