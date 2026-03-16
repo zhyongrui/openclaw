@@ -69,6 +69,12 @@ The active blueprint-first sequence is now:
 5. add the first general discovery source beyond validation-pool upkeep
 6. add stage-level human handoff and resume controls
 
+That second step now has a first foothold in code too:
+
+- `openclaw code blueprint-clarify` can already inspect the current
+  `PROJECT-BLUEPRINT.md` and emit deterministic clarification questions plus
+  proactive suggestions before issue creation starts
+
 The remaining program is:
 
 1. keep `main` green after the `sync/upstream-2026-03-14` promotion and keep

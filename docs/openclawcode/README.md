@@ -53,6 +53,7 @@ loop with:
 - a fixed repo-local blueprint foundation at `PROJECT-BLUEPRINT.md`, with:
   - `openclaw code blueprint-init`
   - `openclaw code blueprint-show`
+  - `openclaw code blueprint-clarify`
   - `openclaw code blueprint-set-status`
   - machine-readable lifecycle inspection through `--json`
 - stable workflow identity metadata now also includes top-level mirrors for:

@@ -50,7 +50,7 @@ Acceptance:
 
 ### Phase B2: Goal Discussion Loop
 
-Status: open
+Status: partially started through repo-local clarification reporting
 
 Deliverables:
 
@@ -64,6 +64,11 @@ Acceptance:
 - the system does not need a pre-written GitHub issue to start shaping work
 - an ambiguous request can be clarified into a blueprint without manual docs
   editing
+
+Current foothold:
+
+- `openclaw code blueprint-clarify` now produces deterministic clarification
+  questions and proactive suggestions from the current blueprint scaffold
 
 ### Phase B3: Work Item Decomposition
 

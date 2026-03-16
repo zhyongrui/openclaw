@@ -46,6 +46,13 @@ export interface ProjectBlueprintSummary {
   hasAgreementCheckpoint: boolean;
 }
 
+export interface ProjectBlueprintClarificationReport extends ProjectBlueprintSummary {
+  questions: string[];
+  suggestions: string[];
+  questionCount: number;
+  suggestionCount: number;
+}
+
 interface ProjectBlueprintFrontmatter {
   schemaVersion: number;
   title: string;
@@ -54,6 +61,25 @@ interface ProjectBlueprintFrontmatter {
   updatedAt: string;
   agreedAt?: string;
 }
+
+const PROJECT_BLUEPRINT_PLACEHOLDER_SNIPPETS: Partial<
+  Record<(typeof PROJECT_BLUEPRINT_REQUIRED_SECTIONS)[number], string[]>
+> = {
+  Goal: ["Describe the agreed project goal here before autonomous work begins."],
+  "Success Criteria": [
+    "Define the first externally visible success criterion for this project.",
+    "Define the first proof that another operator can repeat.",
+  ],
+  Scope: ["- In scope:", "- Out of scope:"],
+  "Non-Goals": ["Record what this project should not attempt in the current delivery window."],
+  Constraints: ["- Technical:", "- Product:", "- Operational:"],
+  Risks: ["Record the main delivery, safety, or provider risks."],
+  Assumptions: ["Record any assumption that still needs confirmation."],
+  "Human Gates": ["Goal agreement: required", "operator may intervene"],
+  "Provider Strategy": ["- Planner:", "- Coder:", "- Reviewer:", "- Verifier:", "- Doc-writer:"],
+  Workstreams: ["Break the blueprint into execution work items after agreement."],
+  "Open Questions": ["Record anything that still needs clarification."],
+};
 
 export interface CreateProjectBlueprintOptions {
   repoRoot: string;
@@ -92,15 +118,35 @@ function extractSectionNames(content: string): string[] {
 }
 
 function extractGoalSummary(content: string): string | null {
-  const match = content.match(/^##\s+Goal\s*\n+([\s\S]*?)(?:\n##\s+|\s*$)/m);
-  if (!match?.[1]) {
+  const sections = extractSectionBodies(content);
+  const goalBody = sections.Goal;
+  if (!goalBody) {
     return null;
   }
-  const firstLine = match[1]
+  const firstLine = goalBody
     .split("\n")
     .map((line) => line.trim())
     .find((line) => line.length > 0);
   return firstLine ?? null;
+}
+
+function extractSectionBodies(content: string): Partial<Record<string, string>> {
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const headings = [...normalized.matchAll(/^##\s+(.+)$/gm)];
+  const sections: Partial<Record<string, string>> = {};
+
+  for (let index = 0; index < headings.length; index += 1) {
+    const heading = headings[index];
+    const sectionName = heading[1]?.trim();
+    const sectionStart = heading.index == null ? -1 : heading.index + heading[0].length;
+    const nextHeadingIndex = headings[index + 1]?.index ?? normalized.length;
+    if (!sectionName || sectionStart < 0) {
+      continue;
+    }
+    sections[sectionName] = normalized.slice(sectionStart, nextHeadingIndex).trim();
+  }
+
+  return sections;
 }
 
 function splitFrontmatter(content: string): { frontmatter: string | null; body: string } {
@@ -322,4 +368,94 @@ export async function updateProjectBlueprintStatus(
 
   await writeFile(blueprintPath, `${renderFrontmatter(frontmatter)}\n${body.trimStart()}`, "utf8");
   return await readProjectBlueprint(repoRoot);
+}
+
+export async function inspectProjectBlueprintClarifications(
+  repoRootInput: string,
+): Promise<ProjectBlueprintClarificationReport> {
+  const repoRoot = path.resolve(repoRootInput);
+  const summary = await readProjectBlueprint(repoRoot);
+  const questions = new Set<string>();
+  const suggestions = new Set<string>();
+
+  if (!summary.exists) {
+    questions.add(
+      "No project blueprint exists yet. Run `openclaw code blueprint-init` before trying to decompose work.",
+    );
+    return {
+      ...summary,
+      questions: [...questions],
+      suggestions: [...suggestions],
+      questionCount: questions.size,
+      suggestionCount: suggestions.size,
+    };
+  }
+
+  const content = await readFile(summary.blueprintPath, "utf8");
+  const sectionBodies = extractSectionBodies(content);
+
+  for (const section of summary.missingRequiredSections) {
+    questions.add(
+      `Fill the \`${section}\` section in PROJECT-BLUEPRINT.md before deriving work items.`,
+    );
+  }
+
+  for (const section of PROJECT_BLUEPRINT_REQUIRED_SECTIONS) {
+    const body = sectionBodies[section];
+    if (!body) {
+      continue;
+    }
+    const placeholders = PROJECT_BLUEPRINT_PLACEHOLDER_SNIPPETS[section] ?? [];
+    if (!placeholders.every((placeholder) => body.includes(placeholder))) {
+      continue;
+    }
+    switch (section) {
+      case "Goal":
+        questions.add("Replace the default Goal placeholder with the actual project objective.");
+        break;
+      case "Success Criteria":
+        questions.add("Replace the default Success Criteria bullets with concrete proof targets.");
+        break;
+      case "Scope":
+        questions.add("List what is explicitly in scope and out of scope for this blueprint.");
+        break;
+      case "Workstreams":
+        questions.add(
+          "Break the blueprint into initial workstreams before autonomous issue creation.",
+        );
+        break;
+      case "Provider Strategy":
+        suggestions.add(
+          "Choose preferred providers or defaults for planner, coder, reviewer, verifier, and doc-writer roles.",
+        );
+        break;
+      case "Human Gates":
+        suggestions.add(
+          "Decide which stages must pause for human approval versus continuing autonomously.",
+        );
+        break;
+      default:
+        suggestions.add(`Replace the default placeholder text in the \`${section}\` section.`);
+        break;
+    }
+  }
+
+  if (summary.status === "draft") {
+    suggestions.add(
+      "Once the blueprint is clarified, record that checkpoint with `openclaw code blueprint-set-status --status clarified`.",
+    );
+  }
+  if (!summary.hasAgreementCheckpoint) {
+    suggestions.add(
+      "When the team agrees on the target, record it with `openclaw code blueprint-set-status --status agreed`.",
+    );
+  }
+
+  return {
+    ...summary,
+    questions: [...questions],
+    suggestions: [...suggestions],
+    questionCount: questions.size,
+    suggestionCount: suggestions.size,
+  };
 }

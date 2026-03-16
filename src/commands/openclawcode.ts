@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   createProjectBlueprint,
+  inspectProjectBlueprintClarifications,
   parseProjectBlueprintStatus,
   projectBlueprintStatusIds,
   readProjectBlueprint,
@@ -103,6 +104,11 @@ export interface OpenClawCodeBlueprintSetStatusOpts {
   json?: boolean;
 }
 
+export interface OpenClawCodeBlueprintClarifyOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
 export const OPENCLAWCODE_RUN_JSON_CONTRACT_VERSION = 1;
 export const DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS = 300;
 export const DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS = 180;
@@ -191,6 +197,28 @@ function logProjectBlueprintSummary(params: {
   runtime.log(`Required sections present: ${summary.requiredSectionsPresent ? "yes" : "no"}`);
   if (summary.missingRequiredSections.length > 0) {
     runtime.log(`Missing sections: ${summary.missingRequiredSections.join(", ")}`);
+  }
+}
+
+function logProjectBlueprintClarificationReport(params: {
+  report: Awaited<ReturnType<typeof inspectProjectBlueprintClarifications>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { report, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  logProjectBlueprintSummary({ summary: report, runtime, json: false });
+  runtime.log(`Questions: ${report.questionCount}`);
+  for (const question of report.questions) {
+    runtime.log(`- question: ${question}`);
+  }
+  runtime.log(`Suggestions: ${report.suggestionCount}`);
+  for (const suggestion of report.suggestions) {
+    runtime.log(`- suggestion: ${suggestion}`);
   }
 }
 
@@ -823,6 +851,19 @@ export async function openclawCodeBlueprintShowCommand(
   const summary = await readProjectBlueprint(repoRoot);
   logProjectBlueprintSummary({
     summary,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeBlueprintClarifyCommand(
+  opts: OpenClawCodeBlueprintClarifyOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const report = await inspectProjectBlueprintClarifications(repoRoot);
+  logProjectBlueprintClarificationReport({
+    report,
     runtime,
     json: Boolean(opts.json),
   });

@@ -4,6 +4,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowRun } from "../openclawcode/index.js";
 import {
+  openclawCodeBlueprintClarifyCommand,
   DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS,
   DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS,
   openclawCodeBlueprintInitCommand,
@@ -1379,6 +1380,59 @@ describe("openclawCodeRunCommand", () => {
     const content = await readFile(path.join(repoRoot, "PROJECT-BLUEPRINT.md"), "utf8");
     expect(content).toContain("status: agreed");
     expect(content).toContain("agreedAt:");
+  });
+
+  it("reports clarification questions and suggestions for the default blueprint scaffold", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-blueprint-clarify-"));
+
+    await openclawCodeBlueprintInitCommand(
+      {
+        repoRoot,
+      },
+      runtime,
+    );
+    runtime.log.mockClear();
+
+    await openclawCodeBlueprintClarifyCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.exists).toBe(true);
+    expect(payload.questionCount).toBeGreaterThan(0);
+    expect(payload.suggestionCount).toBeGreaterThan(0);
+    expect(payload.questions).toContain(
+      "Replace the default Goal placeholder with the actual project objective.",
+    );
+    expect(payload.questions).toContain(
+      "Break the blueprint into initial workstreams before autonomous issue creation.",
+    );
+    expect(payload.suggestions).toContain(
+      "When the team agrees on the target, record it with `openclaw code blueprint-set-status --status agreed`.",
+    );
+  });
+
+  it("reports a missing-blueprint clarification question before the scaffold exists", async () => {
+    const repoRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-blueprint-clarify-missing-"),
+    );
+
+    await openclawCodeBlueprintClarifyCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.exists).toBe(false);
+    expect(payload.questionCount).toBe(1);
+    expect(payload.questions[0]).toContain("No project blueprint exists yet.");
   });
 
   it("renders a dry-run validation issue template without creating a GitHub issue", async () => {

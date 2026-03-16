@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import {
+  openclawCodeBlueprintClarifyCommand,
   openclawCodeBlueprintInitCommand,
   openclawCodeBlueprintSetStatusCommand,
   openclawCodeBlueprintShowCommand,
@@ -34,6 +35,10 @@ ${formatHelpExamples([
   [
     "openclaw code blueprint-show --json",
     "Inspect the current project blueprint state in machine-readable form.",
+  ],
+  [
+    "openclaw code blueprint-clarify --json",
+    "Ask the repo-local blueprint what still needs clarification before work decomposition.",
   ],
   [
     "openclaw code blueprint-set-status --status agreed",
@@ -102,6 +107,23 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .action(async (opts) => {
       await runCommandWithRuntime(defaultRuntime, async () => {
         await openclawCodeBlueprintShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("blueprint-clarify")
+    .description("Report clarification questions and suggestions for the current blueprint")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeBlueprintClarifyCommand(
           {
             repoRoot: opts.repoRoot as string | undefined,
             json: Boolean(opts.json),
