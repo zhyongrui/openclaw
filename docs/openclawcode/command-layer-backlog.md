@@ -72,9 +72,9 @@ Rules:
 - [x] `issueOwner`
 - [x] `issueLabelCount`
 - [x] `issueHasLabels`
-- [ ] `issueHasBody`
-- [ ] `issueBodyLength`
-- [ ] `issueTitleLength`
+- [x] `issueHasBody`
+- [x] `issueBodyLength`
+- [x] `issueTitleLength`
 - [ ] `issueRepoOwnerPair`
 - [ ] `issueLabelListPresent`
 - [ ] `issueFirstLabel`

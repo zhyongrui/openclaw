@@ -51,9 +51,12 @@ those nested objects.
 - `issueNumber`
 - `issueLabelCount`
 - `issueHasLabels`
+- `issueHasBody`
+- `issueBodyLength`
 - `issueUrl`
 - `issue`
 - `issueTitle`
+- `issueTitleLength`
 - `issueRepo`
 - `issueOwner`
 - `stage`

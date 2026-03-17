@@ -165,6 +165,9 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.issueNumber).toBe(2);
     expect(payload.issueLabelCount).toBe(2);
     expect(payload.issueHasLabels).toBe(true);
+    expect(payload.issueHasBody).toBe(true);
+    expect(payload.issueBodyLength).toBe(73);
+    expect(payload.issueTitleLength).toBe(40);
     expect(payload.issueUrl).toBe("https://github.com/openclaw/openclaw/issues/2");
     expect(payload.issueTitle).toBe("Include changed file list in JSON output");
     expect(payload.issueRepo).toBe("openclaw");
@@ -515,6 +518,7 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.issueTitle).toBeNull();
+    expect(payload.issueTitleLength).toBeNull();
   });
 
   it("prints issueRepo as null when the workflow repo metadata is unavailable", async () => {
@@ -637,6 +641,40 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.issueHasLabels).toBe(false);
+  });
+
+  it("prints issueHasBody as false and issueBodyLength as null when the workflow issue body is unavailable", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        issue: {
+          ...createRun().issue,
+          body: undefined as unknown as WorkflowRun["issue"]["body"],
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.issueHasBody).toBe(false);
+    expect(payload.issueBodyLength).toBeNull();
+  });
+
+  it("treats blank issue bodies as absent in convenience signals", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        issue: {
+          ...createRun().issue,
+          body: "   ",
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.issueHasBody).toBe(false);
+    expect(payload.issueBodyLength).toBe(3);
   });
 
   it("prints workspaceBaseBranch as null when workspace metadata is unavailable", async () => {
@@ -3242,6 +3280,7 @@ function createRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
       repo: "openclaw",
       number: 2,
       title: "Include changed file list in JSON output",
+      body: "Add one more stable command JSON field and update targeted command tests.",
       url: "https://github.com/openclaw/openclaw/issues/2",
       labels: ["json", "cli"],
     },

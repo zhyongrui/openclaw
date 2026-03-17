@@ -443,6 +443,9 @@ These are the next narrow slices that should be consumed from the current state.
 - [x] implement the draft-PR convenience mirrors for `draftPullRequestHasOpenedAt`
 - [x] implement the draft-PR convenience mirrors for `draftPullRequestHasTitle`
 - [x] implement the draft-PR convenience mirrors for `draftPullRequestHasBody`
+- [x] implement the issue convenience mirrors for `issueHasBody`
+- [x] implement the issue convenience mirrors for `issueBodyLength`
+- [x] implement the issue convenience mirrors for `issueTitleLength`
 - [ ] keep `run-json-contract.md` aligned with each new top-level field
 - [ ] keep `development-plan.md` and `full-program-roadmap.md` aligned with the latest pool state
 - [ ] decide whether the next productization slice after the current command-layer queue should be:

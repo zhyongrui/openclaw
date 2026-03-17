@@ -431,6 +431,11 @@ turning the working loop into a cleanly operable product:
   - `draftPullRequestHasOpenedAt`
   - `draftPullRequestHasTitle`
   - `draftPullRequestHasBody`
+- the issue-metadata convenience signals now also land on the refreshed sync
+  branch:
+  - `issueHasBody`
+  - `issueBodyLength`
+  - `issueTitleLength`
 - the `failureDiagnostics` family is now effectively mirrored at the top level
   for:
   - summary
