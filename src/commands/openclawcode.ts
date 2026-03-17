@@ -847,6 +847,29 @@ function resolveValidationIssueAgeDays(
   return Math.round(((now - parsed) / 86_400_000) * 10) / 10;
 }
 
+function hasNonEmptyText(value: string | null | undefined): boolean {
+  return (value?.trim().length ?? 0) > 0;
+}
+
+function resolveElapsedSeconds(
+  startedAt: string | null | undefined,
+  endedAt: string | null | undefined,
+): number | null {
+  if (!startedAt || !endedAt) {
+    return null;
+  }
+  const started = Date.parse(startedAt);
+  const ended = Date.parse(endedAt);
+  if (!Number.isFinite(started) || !Number.isFinite(ended)) {
+    return null;
+  }
+  return Math.max(0, Math.floor((ended - started) / 1_000));
+}
+
+function resolveRunLastStageEnteredAt(run: WorkflowRun): string | null {
+  return run.stageRecords?.at(-1)?.enteredAt ?? null;
+}
+
 async function readOptionalTextFile(filePath: string): Promise<string | undefined> {
   try {
     return await readFile(filePath, "utf8");
@@ -1021,9 +1044,14 @@ function toWorkflowRunJson(run: WorkflowRun) {
     contractVersion: OPENCLAWCODE_RUN_JSON_CONTRACT_VERSION,
     runCreatedAt: run.createdAt ?? null,
     runUpdatedAt: run.updatedAt ?? null,
+    runHasUpdatedAt: run.updatedAt != null,
+    runAgeSeconds: resolveElapsedSeconds(run.createdAt, run.updatedAt),
     issueNumber: run.issue.number ?? null,
     issueLabelCount: run.issue.labels?.length ?? null,
     issueHasLabels: (run.issue.labels?.length ?? 0) > 0,
+    issueLabelListPresent: run.issue.labels != null,
+    issueFirstLabel: run.issue.labels?.at(0) ?? null,
+    issueLastLabel: run.issue.labels?.at(-1) ?? null,
     issueHasBody: (run.issue.body?.trim().length ?? 0) > 0,
     issueBodyLength: run.issue.body?.length ?? null,
     issueTitleLength: run.issue.title?.length ?? null,
@@ -1031,6 +1059,10 @@ function toWorkflowRunJson(run: WorkflowRun) {
     issueTitle: run.issue.title ?? null,
     issueRepo: run.issue.repo ?? null,
     issueOwner: run.issue.owner ?? null,
+    issueRepoOwnerPair:
+      run.issue.owner != null && run.issue.repo != null
+        ? `${run.issue.owner}/${run.issue.repo}`
+        : null,
     stageLabel: formatWorkflowStageLabel(run.stage),
     totalAttemptCount: run.attempts?.total ?? null,
     planningAttemptCount: run.attempts?.planning ?? null,
@@ -1065,9 +1097,13 @@ function toWorkflowRunJson(run: WorkflowRun) {
     notesPresent: (run.buildResult?.notes.length ?? 0) > 0,
     noteCount: run.buildResult?.notes.length ?? null,
     failureDiagnostics: run.failureDiagnostics ?? null,
+    failureDiagnosticsPresent: run.failureDiagnostics != null,
     failureDiagnosticsSummary: run.failureDiagnostics?.summary ?? null,
+    failureDiagnosticSummaryPresent: hasNonEmptyText(run.failureDiagnostics?.summary),
     failureDiagnosticProvider: run.failureDiagnostics?.provider ?? null,
+    failureDiagnosticProviderPresent: hasNonEmptyText(run.failureDiagnostics?.provider),
     failureDiagnosticModel: run.failureDiagnostics?.model ?? null,
+    failureDiagnosticModelPresent: hasNonEmptyText(run.failureDiagnostics?.model),
     failureDiagnosticSystemPromptChars: run.failureDiagnostics?.systemPromptChars ?? null,
     failureDiagnosticSkillsPromptChars: run.failureDiagnostics?.skillsPromptChars ?? null,
     failureDiagnosticToolSchemaChars: run.failureDiagnostics?.toolSchemaChars ?? null,
@@ -1124,12 +1160,19 @@ function toWorkflowRunJson(run: WorkflowRun) {
     suitabilityClassification: run.suitability?.classification ?? null,
     suitabilityRiskLevel: run.suitability?.riskLevel ?? null,
     suitabilityEvaluatedAt: run.suitability?.evaluatedAt ?? null,
+    acceptanceCriteriaPresent: (run.executionSpec?.acceptanceCriteria.length ?? 0) > 0,
     acceptanceCriteriaCount: run.executionSpec?.acceptanceCriteria.length ?? null,
+    openQuestionsPresent: (run.executionSpec?.openQuestions.length ?? 0) > 0,
     openQuestionCount: run.executionSpec?.openQuestions.length ?? null,
+    risksPresent: (run.executionSpec?.risks.length ?? 0) > 0,
     riskCount: run.executionSpec?.risks.length ?? null,
+    assumptionsPresent: (run.executionSpec?.assumptions.length ?? 0) > 0,
     assumptionCount: run.executionSpec?.assumptions.length ?? null,
+    testPlanPresent: (run.executionSpec?.testPlan.length ?? 0) > 0,
     testPlanCount: run.executionSpec?.testPlan.length ?? null,
+    scopeItemsPresent: (run.executionSpec?.scope.length ?? 0) > 0,
     scopeItemCount: run.executionSpec?.scope.length ?? null,
+    outOfScopePresent: (run.executionSpec?.outOfScope.length ?? 0) > 0,
     outOfScopeCount: run.executionSpec?.outOfScope.length ?? null,
     workspaceBaseBranch: run.workspace.baseBranch ?? null,
     workspaceBranchName: run.workspace.branchName ?? null,
@@ -1201,18 +1244,26 @@ function toWorkflowRunJson(run: WorkflowRun) {
     verificationFindingCount: run.verificationReport?.findings.length ?? null,
     verificationMissingCoverageCount: run.verificationReport?.missingCoverage.length ?? null,
     verificationFollowUpCount: run.verificationReport?.followUps.length ?? null,
+    runLastStageEnteredAt: resolveRunLastStageEnteredAt(run),
+    runHasHistory: (run.history?.length ?? 0) > 0,
+    runHasStageRecords: (run.stageRecords?.length ?? 0) > 0,
+    runHistoryTextPresent: run.history?.some((entry) => hasNonEmptyText(entry)) ?? false,
     stageRecordCount: run.stageRecords?.length ?? null,
     historyEntryCount: run.history?.length ?? null,
     rerunRequested: Boolean(run.rerunContext),
     rerunHasReviewContext,
     rerunReason: run.rerunContext?.reason ?? null,
+    rerunReasonPresent: hasNonEmptyText(run.rerunContext?.reason),
     rerunRequestedAt: run.rerunContext?.requestedAt ?? null,
     rerunPriorRunId: run.rerunContext?.priorRunId ?? null,
     rerunPriorStage: run.rerunContext?.priorStage ?? null,
     rerunReviewDecision: run.rerunContext?.reviewDecision ?? null,
+    rerunReviewDecisionPresent: run.rerunContext?.reviewDecision != null,
     rerunReviewSubmittedAt: run.rerunContext?.reviewSubmittedAt ?? null,
     rerunReviewSummary: run.rerunContext?.reviewSummary ?? null,
+    rerunReviewSummaryPresent: hasNonEmptyText(run.rerunContext?.reviewSummary),
     rerunReviewUrl: run.rerunContext?.reviewUrl ?? null,
+    rerunReviewUrlPresent: hasNonEmptyText(run.rerunContext?.reviewUrl),
     rerunRequestedCoderAgentId: run.rerunContext?.requestedCoderAgentId ?? null,
     rerunRequestedVerifierAgentId: run.rerunContext?.requestedVerifierAgentId ?? null,
     rerunManualTakeoverRequestedAt: run.rerunContext?.manualTakeoverRequestedAt ?? null,

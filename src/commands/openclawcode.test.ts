@@ -162,9 +162,14 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.contractVersion).toBe(1);
     expect(payload.runCreatedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(payload.runUpdatedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(payload.runHasUpdatedAt).toBe(true);
+    expect(payload.runAgeSeconds).toBe(0);
     expect(payload.issueNumber).toBe(2);
     expect(payload.issueLabelCount).toBe(2);
     expect(payload.issueHasLabels).toBe(true);
+    expect(payload.issueLabelListPresent).toBe(true);
+    expect(payload.issueFirstLabel).toBe("json");
+    expect(payload.issueLastLabel).toBe("cli");
     expect(payload.issueHasBody).toBe(true);
     expect(payload.issueBodyLength).toBe(73);
     expect(payload.issueTitleLength).toBe(40);
@@ -172,6 +177,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.issueTitle).toBe("Include changed file list in JSON output");
     expect(payload.issueRepo).toBe("openclaw");
     expect(payload.issueOwner).toBe("openclaw");
+    expect(payload.issueRepoOwnerPair).toBe("openclaw/openclaw");
     expect(payload.stage).toBe("ready-for-human-review");
     expect(payload.stageLabel).toBe("Ready For Human Review");
     expect(payload.totalAttemptCount).toBe(1);
@@ -211,6 +217,10 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.testResultCount).toBe(1);
     expect(payload.notesPresent).toBe(true);
     expect(payload.noteCount).toBe(1);
+    expect(payload.failureDiagnosticsPresent).toBe(false);
+    expect(payload.failureDiagnosticSummaryPresent).toBe(false);
+    expect(payload.failureDiagnosticProviderPresent).toBe(false);
+    expect(payload.failureDiagnosticModelPresent).toBe(false);
     expect(payload.buildResult.issueClassification).toBe(payload.issueClassification);
     expect(payload.buildResult.scopeCheck).toEqual(payload.scopeCheck);
     expect(payload.blueprintStatus).toBe("agreed");
@@ -262,6 +272,13 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.suitabilityClassification).toBe("command-layer");
     expect(payload.suitabilityRiskLevel).toBe("medium");
     expect(payload.suitabilityEvaluatedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(payload.acceptanceCriteriaPresent).toBe(false);
+    expect(payload.openQuestionsPresent).toBe(false);
+    expect(payload.risksPresent).toBe(false);
+    expect(payload.assumptionsPresent).toBe(false);
+    expect(payload.testPlanPresent).toBe(false);
+    expect(payload.scopeItemsPresent).toBe(false);
+    expect(payload.outOfScopePresent).toBe(false);
     expect(payload.workspaceBranchMatchesIssue).toBe(true);
     expect(payload.workspaceRepoRootPresent).toBe(true);
     expect(payload.workspaceHasPreparedAt).toBe(true);
@@ -325,6 +342,14 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.verificationFindingCount).toBe(0);
     expect(payload.verificationMissingCoverageCount).toBe(0);
     expect(payload.verificationFollowUpCount).toBe(0);
+    expect(payload.runLastStageEnteredAt).toBeNull();
+    expect(payload.runHasHistory).toBe(true);
+    expect(payload.runHasStageRecords).toBe(false);
+    expect(payload.runHistoryTextPresent).toBe(true);
+    expect(payload.rerunReasonPresent).toBe(false);
+    expect(payload.rerunReviewDecisionPresent).toBe(false);
+    expect(payload.rerunReviewSummaryPresent).toBe(false);
+    expect(payload.rerunReviewUrlPresent).toBe(false);
     expect(payload.runSummary).toBe(payload.verificationSummary);
     expect(payload.autoMergeDisposition).toBeNull();
     expect(payload.autoMergeDispositionReason).toBeNull();
@@ -397,6 +422,8 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.contractVersion).toBe(1);
+    expect(payload.runHasUpdatedAt).toBe(true);
+    expect(payload.runAgeSeconds).toBe(0);
     expect(payload.totalAttemptCount).toBe(1);
     expect(payload.planningAttemptCount).toBe(1);
     expect(payload.buildAttemptCount).toBe(1);
@@ -426,6 +453,10 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.testResultCount).toBeNull();
     expect(payload.notesPresent).toBe(false);
     expect(payload.noteCount).toBeNull();
+    expect(payload.failureDiagnosticsPresent).toBe(false);
+    expect(payload.failureDiagnosticSummaryPresent).toBe(false);
+    expect(payload.failureDiagnosticProviderPresent).toBe(false);
+    expect(payload.failureDiagnosticModelPresent).toBe(false);
     expect(payload.blueprintContext).toBeNull();
     expect(payload.blueprintStatus).toBeNull();
     expect(payload.blueprintRevisionId).toBeNull();
@@ -466,6 +497,13 @@ describe("openclawCodeRunCommand", () => {
     );
     expect(payload.suitabilitySummaryPresent).toBe(true);
     expect(payload.suitabilityReasonCount).toBe(3);
+    expect(payload.acceptanceCriteriaPresent).toBe(false);
+    expect(payload.openQuestionsPresent).toBe(false);
+    expect(payload.risksPresent).toBe(false);
+    expect(payload.assumptionsPresent).toBe(false);
+    expect(payload.testPlanPresent).toBe(false);
+    expect(payload.scopeItemsPresent).toBe(false);
+    expect(payload.outOfScopePresent).toBe(false);
     expect(payload.draftPullRequestBranchName).toBeNull();
     expect(payload.draftPullRequestBaseBranch).toBeNull();
     expect(payload.draftPullRequestHasTitle).toBe(false);
@@ -512,6 +550,14 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.verificationFindingCount).toBeNull();
     expect(payload.verificationMissingCoverageCount).toBeNull();
     expect(payload.verificationFollowUpCount).toBeNull();
+    expect(payload.runLastStageEnteredAt).toBeNull();
+    expect(payload.runHasHistory).toBe(true);
+    expect(payload.runHasStageRecords).toBe(false);
+    expect(payload.runHistoryTextPresent).toBe(true);
+    expect(payload.rerunReasonPresent).toBe(false);
+    expect(payload.rerunReviewDecisionPresent).toBe(false);
+    expect(payload.rerunReviewSummaryPresent).toBe(false);
+    expect(payload.rerunReviewUrlPresent).toBe(false);
     expect(payload.runSummary).toBe("Run is at the draft-pr-opened stage.");
     expect(payload.autoMergeDisposition).toBeNull();
     expect(payload.autoMergeDispositionReason).toBeNull();
@@ -587,6 +633,7 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.issueRepo).toBeNull();
+    expect(payload.issueRepoOwnerPair).toBeNull();
   });
 
   it("prints issueOwner as null when the workflow owner metadata is unavailable", async () => {
@@ -603,6 +650,7 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.issueOwner).toBeNull();
+    expect(payload.issueRepoOwnerPair).toBeNull();
   });
 
   it("prints runCreatedAt as null when the workflow creation timestamp is unavailable", async () => {
@@ -616,6 +664,7 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.runCreatedAt).toBeNull();
+    expect(payload.runAgeSeconds).toBeNull();
   });
 
   it("prints runUpdatedAt as null when the workflow update timestamp is unavailable", async () => {
@@ -629,6 +678,8 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.runUpdatedAt).toBeNull();
+    expect(payload.runHasUpdatedAt).toBe(false);
+    expect(payload.runAgeSeconds).toBeNull();
   });
 
   it("prints issueNumber as null when the workflow issue number is unavailable", async () => {
@@ -677,6 +728,9 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.issueLabelCount).toBeNull();
+    expect(payload.issueLabelListPresent).toBe(false);
+    expect(payload.issueFirstLabel).toBeNull();
+    expect(payload.issueLastLabel).toBeNull();
   });
 
   it("prints issueHasLabels as false when the workflow issue labels are unavailable", async () => {
@@ -693,6 +747,26 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.issueHasLabels).toBe(false);
+  });
+
+  it("keeps issueLabelListPresent true when the workflow issue labels are empty", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        issue: {
+          ...createRun().issue,
+          labels: [],
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.issueLabelCount).toBe(0);
+    expect(payload.issueHasLabels).toBe(false);
+    expect(payload.issueLabelListPresent).toBe(true);
+    expect(payload.issueFirstLabel).toBeNull();
+    expect(payload.issueLastLabel).toBeNull();
   });
 
   it("prints issueHasBody as false and issueBodyLength as null when the workflow issue body is unavailable", async () => {
@@ -935,15 +1009,19 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.rerunRequested).toBe(true);
     expect(payload.rerunHasReviewContext).toBe(true);
     expect(payload.rerunReason).toBe("Address GitHub review feedback");
+    expect(payload.rerunReasonPresent).toBe(true);
     expect(payload.rerunRequestedAt).toBe("2026-01-02T00:00:00.000Z");
     expect(payload.rerunPriorRunId).toBe("run_122");
     expect(payload.rerunPriorStage).toBe("changes-requested");
     expect(payload.rerunReviewDecision).toBe("changes-requested");
+    expect(payload.rerunReviewDecisionPresent).toBe(true);
     expect(payload.rerunReviewSubmittedAt).toBe("2026-01-01T23:59:00.000Z");
     expect(payload.rerunReviewSummary).toBe("Please add a regression test for the rerun path.");
+    expect(payload.rerunReviewSummaryPresent).toBe(true);
     expect(payload.rerunReviewUrl).toBe(
       "https://github.com/openclaw/openclaw/pull/42#pullrequestreview-9",
     );
+    expect(payload.rerunReviewUrlPresent).toBe(true);
     expect(payload.rerunRequestedCoderAgentId).toBe("codex-rerun");
     expect(payload.rerunRequestedVerifierAgentId).toBe("claude-rerun");
     expect(payload.rerunManualTakeoverRequestedAt).toBe("2026-01-01T23:50:00.000Z");
@@ -969,7 +1047,9 @@ describe("openclawCodeRunCommand", () => {
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.rerunRequested).toBe(true);
     expect(payload.rerunHasReviewContext).toBe(false);
+    expect(payload.rerunReasonPresent).toBe(true);
     expect(payload.rerunReviewDecision).toBeNull();
+    expect(payload.rerunReviewDecisionPresent).toBe(false);
     expect(payload.rerunReviewSubmittedAt).toBeNull();
     expect(payload.rerunRequestedCoderAgentId).toBeNull();
     expect(payload.rerunRequestedVerifierAgentId).toBeNull();
@@ -978,7 +1058,9 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.rerunManualTakeoverWorktreePath).toBeNull();
     expect(payload.rerunManualResumeNote).toBeNull();
     expect(payload.rerunReviewSummary).toBeNull();
+    expect(payload.rerunReviewSummaryPresent).toBe(false);
     expect(payload.rerunReviewUrl).toBeNull();
+    expect(payload.rerunReviewUrlPresent).toBe(false);
   });
 
   it("reports false when rerun context is absent", async () => {
@@ -993,10 +1075,14 @@ describe("openclawCodeRunCommand", () => {
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.rerunRequested).toBe(false);
     expect(payload.rerunHasReviewContext).toBe(false);
+    expect(payload.rerunReasonPresent).toBe(false);
     expect(payload.rerunReviewDecision).toBeNull();
+    expect(payload.rerunReviewDecisionPresent).toBe(false);
     expect(payload.rerunReviewSubmittedAt).toBeNull();
     expect(payload.rerunReviewSummary).toBeNull();
+    expect(payload.rerunReviewSummaryPresent).toBe(false);
     expect(payload.rerunReviewUrl).toBeNull();
+    expect(payload.rerunReviewUrlPresent).toBe(false);
   });
 
   it("keeps unpublished local draft metadata separate from published pr fields", async () => {
@@ -1447,12 +1533,14 @@ describe("openclawCodeRunCommand", () => {
         },
         stageRecords: [
           {
-            stage: "planning",
-            recordedAt: "2026-01-01T00:00:00.000Z",
+            toStage: "planning",
+            note: "Planning started",
+            enteredAt: "2026-01-01T00:00:00.000Z",
           },
           {
-            stage: "building",
-            recordedAt: "2026-01-01T00:01:00.000Z",
+            toStage: "building",
+            note: "Building started",
+            enteredAt: "2026-01-01T00:01:00.000Z",
           },
         ],
         history: [
@@ -1466,12 +1554,19 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.acceptanceCriteriaCount).toBe(1);
+    expect(payload.acceptanceCriteriaPresent).toBe(true);
     expect(payload.openQuestionCount).toBe(2);
+    expect(payload.openQuestionsPresent).toBe(true);
     expect(payload.riskCount).toBe(2);
+    expect(payload.risksPresent).toBe(true);
     expect(payload.assumptionCount).toBe(2);
+    expect(payload.assumptionsPresent).toBe(true);
     expect(payload.testPlanCount).toBe(2);
+    expect(payload.testPlanPresent).toBe(true);
     expect(payload.scopeItemCount).toBe(2);
+    expect(payload.scopeItemsPresent).toBe(true);
     expect(payload.outOfScopeCount).toBe(2);
+    expect(payload.outOfScopePresent).toBe(true);
     expect(payload.workspaceBaseBranch).toBe("main");
     expect(payload.workspaceBranchName).toBe("openclawcode/issue-2");
     expect(payload.workspaceBranchMatchesIssue).toBe(true);
@@ -1483,6 +1578,10 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.workspaceWorktreePath).toBe("/repo/.openclawcode/worktrees/issue-2");
     expect(payload.stageRecordCount).toBe(2);
     expect(payload.historyEntryCount).toBe(2);
+    expect(payload.runLastStageEnteredAt).toBe("2026-01-01T00:01:00.000Z");
+    expect(payload.runHasHistory).toBe(true);
+    expect(payload.runHasStageRecords).toBe(true);
+    expect(payload.runHistoryTextPresent).toBe(true);
   });
 
   it("prints historyEntryCount, stageRecordCount, acceptanceCriteriaCount, openQuestionCount, riskCount, assumptionCount, testPlanCount, scopeItemCount, and outOfScopeCount as null when metadata is missing", async () => {
@@ -1498,18 +1597,33 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.acceptanceCriteriaCount).toBeNull();
+    expect(payload.acceptanceCriteriaPresent).toBe(false);
     expect(payload.openQuestionCount).toBeNull();
+    expect(payload.openQuestionsPresent).toBe(false);
     expect(payload.riskCount).toBeNull();
+    expect(payload.risksPresent).toBe(false);
     expect(payload.assumptionCount).toBeNull();
+    expect(payload.assumptionsPresent).toBe(false);
     expect(payload.testPlanCount).toBeNull();
+    expect(payload.testPlanPresent).toBe(false);
     expect(payload.scopeItemCount).toBeNull();
+    expect(payload.scopeItemsPresent).toBe(false);
     expect(payload.outOfScopeCount).toBeNull();
+    expect(payload.outOfScopePresent).toBe(false);
+    expect(payload.runLastStageEnteredAt).toBeNull();
+    expect(payload.runHasHistory).toBe(false);
+    expect(payload.runHasStageRecords).toBe(false);
+    expect(payload.runHistoryTextPresent).toBe(false);
     expect(payload.stageRecordCount).toBeNull();
     expect(payload.historyEntryCount).toBeNull();
     expect(payload.failureDiagnostics).toBeNull();
+    expect(payload.failureDiagnosticsPresent).toBe(false);
     expect(payload.failureDiagnosticsSummary).toBeNull();
+    expect(payload.failureDiagnosticSummaryPresent).toBe(false);
     expect(payload.failureDiagnosticProvider).toBeNull();
+    expect(payload.failureDiagnosticProviderPresent).toBe(false);
     expect(payload.failureDiagnosticModel).toBeNull();
+    expect(payload.failureDiagnosticModelPresent).toBe(false);
     expect(payload.failureDiagnosticSystemPromptChars).toBeNull();
     expect(payload.failureDiagnosticSkillsPromptChars).toBeNull();
     expect(payload.failureDiagnosticToolSchemaChars).toBeNull();
@@ -1547,9 +1661,13 @@ describe("openclawCodeRunCommand", () => {
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.failureDiagnosticsPresent).toBe(true);
     expect(payload.failureDiagnosticsSummary).toBe("HTTP 400: Internal server error");
+    expect(payload.failureDiagnosticSummaryPresent).toBe(true);
     expect(payload.failureDiagnosticProvider).toBe("crs");
+    expect(payload.failureDiagnosticProviderPresent).toBe(true);
     expect(payload.failureDiagnosticModel).toBe("gpt-5.4");
+    expect(payload.failureDiagnosticModelPresent).toBe(true);
     expect(payload.failureDiagnosticSystemPromptChars).toBe(8629);
     expect(payload.failureDiagnosticSkillsPromptChars).toBe(1245);
     expect(payload.failureDiagnosticToolSchemaChars).toBe(3030);

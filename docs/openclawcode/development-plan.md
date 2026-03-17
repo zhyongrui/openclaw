@@ -132,6 +132,12 @@ The remaining program is:
 7. package release-facing docs that explain prerequisites, supported scope,
    policy, known limits, and rollback
 
+The long-running low-risk command-layer backlog for `openclaw code run --json`
+has now been pushed through the remaining issue, run-lifecycle, failure
+diagnostic, execution-spec, and rerun presence mirrors, so the next slices
+should bias back toward live proof, operator policy, and fresh-host
+repeatability instead of more convenience-field drift.
+
 Every completed slice should either:
 
 - remove one blocker from that path

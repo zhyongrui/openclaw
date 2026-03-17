@@ -106,11 +106,11 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] expose auto-merge policy signals as stable top-level JSON
 - [x] expose draft PR publication signals as stable top-level JSON
 - [x] expose merged PR signals as stable top-level JSON
-- [ ] expose remaining useful issue identity mirrors without requiring nested object reads
-- [ ] expose remaining useful draft PR mirrors without requiring nested object reads
-- [ ] expose remaining useful verification mirrors without requiring nested object reads
-- [ ] expose remaining useful suitability mirrors without requiring nested object reads
-- [ ] expose remaining useful build-result mirrors without requiring nested object reads
+- [x] expose remaining useful issue identity mirrors without requiring nested object reads
+- [x] expose remaining useful draft PR mirrors without requiring nested object reads
+- [x] expose remaining useful verification mirrors without requiring nested object reads
+- [x] expose remaining useful suitability mirrors without requiring nested object reads
+- [x] expose remaining useful build-result mirrors without requiring nested object reads
 
 ## Phase 2: Chatops And Operator Surfaces
 

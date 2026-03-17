@@ -75,10 +75,10 @@ Rules:
 - [x] `issueHasBody`
 - [x] `issueBodyLength`
 - [x] `issueTitleLength`
-- [ ] `issueRepoOwnerPair`
-- [ ] `issueLabelListPresent`
-- [ ] `issueFirstLabel`
-- [ ] `issueLastLabel`
+- [x] `issueRepoOwnerPair`
+- [x] `issueLabelListPresent`
+- [x] `issueFirstLabel`
+- [x] `issueLastLabel`
 
 ## Workspace Metadata Mirrors
 
@@ -96,12 +96,12 @@ Rules:
 
 - [x] `runCreatedAt`
 - [x] `runUpdatedAt`
-- [ ] `runHasUpdatedAt`
-- [ ] `runAgeSeconds`
-- [ ] `runLastStageEnteredAt`
-- [ ] `runHasHistory`
-- [ ] `runHasStageRecords`
-- [ ] `runHistoryTextPresent`
+- [x] `runHasUpdatedAt`
+- [x] `runAgeSeconds`
+- [x] `runLastStageEnteredAt`
+- [x] `runHasHistory`
+- [x] `runHasStageRecords`
+- [x] `runHistoryTextPresent`
 
 ## Build Result Mirrors
 
@@ -177,10 +177,10 @@ Rules:
 - [x] `failureDiagnosticInjectedWorkspaceFileCount`
 - [x] `failureDiagnosticBootstrapWarningShown`
 - [x] `failureDiagnosticUsageTotal`
-- [ ] `failureDiagnosticsPresent`
-- [ ] `failureDiagnosticProviderPresent`
-- [ ] `failureDiagnosticModelPresent`
-- [ ] `failureDiagnosticSummaryPresent`
+- [x] `failureDiagnosticsPresent`
+- [x] `failureDiagnosticProviderPresent`
+- [x] `failureDiagnosticModelPresent`
+- [x] `failureDiagnosticSummaryPresent`
 
 ## Execution Spec Mirrors
 
@@ -191,13 +191,13 @@ Rules:
 - [x] `testPlanCount`
 - [x] `scopeItemCount`
 - [x] `outOfScopeCount`
-- [ ] `acceptanceCriteriaPresent`
-- [ ] `openQuestionsPresent`
-- [ ] `risksPresent`
-- [ ] `assumptionsPresent`
-- [ ] `testPlanPresent`
-- [ ] `scopeItemsPresent`
-- [ ] `outOfScopePresent`
+- [x] `acceptanceCriteriaPresent`
+- [x] `openQuestionsPresent`
+- [x] `risksPresent`
+- [x] `assumptionsPresent`
+- [x] `testPlanPresent`
+- [x] `scopeItemsPresent`
+- [x] `outOfScopePresent`
 
 ## History And Rerun Mirrors
 
@@ -213,10 +213,10 @@ Rules:
 - [x] `rerunReviewSubmittedAt`
 - [x] `rerunReviewSummary`
 - [x] `rerunReviewUrl`
-- [ ] `rerunReasonPresent`
-- [ ] `rerunReviewSummaryPresent`
-- [ ] `rerunReviewUrlPresent`
-- [ ] `rerunReviewDecisionPresent`
+- [x] `rerunReasonPresent`
+- [x] `rerunReviewSummaryPresent`
+- [x] `rerunReviewUrlPresent`
+- [x] `rerunReviewDecisionPresent`
 
 ## Queueing Notes
 

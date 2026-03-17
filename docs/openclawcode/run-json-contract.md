@@ -47,10 +47,15 @@ those nested objects.
 - `contractVersion`
 - `runCreatedAt`
 - `runUpdatedAt`
+- `runHasUpdatedAt`
+- `runAgeSeconds`
 - `id`
 - `issueNumber`
 - `issueLabelCount`
 - `issueHasLabels`
+- `issueLabelListPresent`
+- `issueFirstLabel`
+- `issueLastLabel`
 - `issueHasBody`
 - `issueBodyLength`
 - `issueUrl`
@@ -59,6 +64,7 @@ those nested objects.
 - `issueTitleLength`
 - `issueRepo`
 - `issueOwner`
+- `issueRepoOwnerPair`
 - `stage`
 - `stageLabel`
 - `runSummary`
@@ -104,9 +110,13 @@ those nested objects.
 ### Failure Diagnostics
 
 - `failureDiagnostics`
+- `failureDiagnosticsPresent`
 - `failureDiagnosticsSummary`
+- `failureDiagnosticSummaryPresent`
 - `failureDiagnosticProvider`
+- `failureDiagnosticProviderPresent`
 - `failureDiagnosticModel`
+- `failureDiagnosticModelPresent`
 - `failureDiagnosticSystemPromptChars`
 - `failureDiagnosticSkillsPromptChars`
 - `failureDiagnosticToolSchemaChars`
@@ -161,14 +171,21 @@ those nested objects.
 - `suitabilityRiskLevel`
 - `suitabilityEvaluatedAt`
 
-### Planning Metadata Counts
+### Planning Metadata
 
+- `acceptanceCriteriaPresent`
 - `acceptanceCriteriaCount`
+- `openQuestionsPresent`
 - `openQuestionCount`
+- `risksPresent`
 - `riskCount`
+- `assumptionsPresent`
 - `assumptionCount`
+- `testPlanPresent`
 - `testPlanCount`
+- `scopeItemsPresent`
 - `scopeItemCount`
+- `outOfScopePresent`
 - `outOfScopeCount`
 
 ### Workspace Metadata
@@ -241,6 +258,10 @@ those nested objects.
 
 ### Workflow History And Records
 
+- `runLastStageEnteredAt`
+- `runHasHistory`
+- `runHasStageRecords`
+- `runHistoryTextPresent`
 - `stageRecordCount`
 - `historyEntryCount`
 
@@ -249,13 +270,17 @@ those nested objects.
 - `rerunRequested`
 - `rerunHasReviewContext`
 - `rerunReason`
+- `rerunReasonPresent`
 - `rerunRequestedAt`
 - `rerunPriorRunId`
 - `rerunPriorStage`
 - `rerunReviewDecision`
+- `rerunReviewDecisionPresent`
 - `rerunReviewSubmittedAt`
 - `rerunReviewSummary`
+- `rerunReviewSummaryPresent`
 - `rerunReviewUrl`
+- `rerunReviewUrlPresent`
 - `rerunRequestedCoderAgentId`
 - `rerunRequestedVerifierAgentId`
 - `rerunManualTakeoverRequestedAt`
