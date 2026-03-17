@@ -115,7 +115,7 @@ Rules:
 - [x] `testCommandsPresent`
 - [x] `testResultsPresent`
 - [x] `notesPresent`
-- [ ] `changedFileListStable`
+- [x] `changedFileListStable`
 
 ## Scope Check Mirrors
 
@@ -125,9 +125,9 @@ Rules:
 - [x] `scopeCheckPassed`
 - [x] `scopeCheckHasBlockedFiles`
 - [x] `scopeBlockedFileCount`
-- [ ] `scopeBlockedFilesPresent`
-- [ ] `scopeBlockedFirstFile`
-- [ ] `scopeBlockedLastFile`
+- [x] `scopeBlockedFilesPresent`
+- [x] `scopeBlockedFirstFile`
+- [x] `scopeBlockedLastFile`
 
 ## Verification Mirrors
 
@@ -141,10 +141,10 @@ Rules:
 - [x] `verificationFindingCount`
 - [x] `verificationMissingCoverageCount`
 - [x] `verificationFollowUpCount`
-- [ ] `verificationSummaryPresent`
-- [ ] `verificationDecisionIsEscalate`
-- [ ] `verificationDecisionIsRequestChanges`
-- [ ] `verificationDecisionIsApprove`
+- [x] `verificationSummaryPresent`
+- [x] `verificationDecisionIsEscalate`
+- [x] `verificationDecisionIsRequestChanges`
+- [x] `verificationDecisionIsApprove`
 - [ ] `verificationFindingsPresent`
 - [ ] `verificationMissingCoveragePresent`
 - [ ] `verificationFollowUpsPresent`

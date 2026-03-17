@@ -185,6 +185,7 @@ describe("openclawCodeRunCommand", () => {
       "src/openclawcode/contracts/types.ts",
     ]);
     expect(payload.changedFilesPresent).toBe(true);
+    expect(payload.changedFileListStable).toBe(true);
     expect(payload.changedFileCount).toBe(2);
     expect(payload.changeDisposition).toBe("modified");
     expect(payload.changeDispositionReason).toBe("Run produced 2 changed file(s).");
@@ -199,8 +200,11 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.scopeCheckSummaryPresent).toBe(true);
     expect(payload.scopeCheckPassed).toBe(true);
     expect(payload.scopeCheckHasBlockedFiles).toBe(false);
+    expect(payload.scopeBlockedFilesPresent).toBe(false);
     expect(payload.scopeBlockedFiles).toEqual([]);
     expect(payload.scopeBlockedFileCount).toBe(0);
+    expect(payload.scopeBlockedFirstFile).toBeNull();
+    expect(payload.scopeBlockedLastFile).toBeNull();
     expect(payload.testCommandsPresent).toBe(true);
     expect(payload.testCommandCount).toBe(1);
     expect(payload.testResultsPresent).toBe(true);
@@ -298,10 +302,14 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.pullRequestMerged).toBe(false);
     expect(payload.mergedPullRequestMergedAt).toBeNull();
     expect(payload.verificationDecision).toBe("approve-for-human-review");
+    expect(payload.verificationDecisionIsApprove).toBe(true);
+    expect(payload.verificationDecisionIsRequestChanges).toBe(false);
+    expect(payload.verificationDecisionIsEscalate).toBe(false);
     expect(payload.verificationApprovedForHumanReview).toBe(true);
     expect(payload.verificationSummary).toBe(
       "Verification completed and the run is ready for human review.",
     );
+    expect(payload.verificationSummaryPresent).toBe(true);
     expect(payload.verificationHasFindings).toBe(false);
     expect(payload.verificationHasMissingCoverage).toBe(false);
     expect(payload.verificationHasSignals).toBe(false);
@@ -389,6 +397,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.buildSummaryPresent).toBe(false);
     expect(payload.changedFiles).toEqual([]);
     expect(payload.changedFilesPresent).toBe(false);
+    expect(payload.changedFileListStable).toBe(false);
     expect(payload.changeDisposition).toBeNull();
     expect(payload.changeDispositionReason).toBeNull();
     expect(payload.stageLabel).toBe("Draft PR Opened");
@@ -397,8 +406,11 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.scopeCheckSummary).toBeNull();
     expect(payload.scopeCheckPassed).toBeNull();
     expect(payload.scopeCheckHasBlockedFiles).toBe(false);
+    expect(payload.scopeBlockedFilesPresent).toBe(false);
     expect(payload.scopeBlockedFiles).toBeNull();
     expect(payload.scopeBlockedFileCount).toBeNull();
+    expect(payload.scopeBlockedFirstFile).toBeNull();
+    expect(payload.scopeBlockedLastFile).toBeNull();
     expect(payload.changedFileCount).toBeNull();
     expect(payload.testCommandsPresent).toBe(false);
     expect(payload.testCommandCount).toBeNull();
@@ -472,8 +484,12 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.pullRequestMerged).toBe(false);
     expect(payload.mergedPullRequestMergedAt).toBeNull();
     expect(payload.verificationDecision).toBeNull();
+    expect(payload.verificationDecisionIsApprove).toBe(false);
+    expect(payload.verificationDecisionIsRequestChanges).toBe(false);
+    expect(payload.verificationDecisionIsEscalate).toBe(false);
     expect(payload.verificationApprovedForHumanReview).toBeNull();
     expect(payload.verificationSummary).toBeNull();
+    expect(payload.verificationSummaryPresent).toBe(false);
     expect(payload.verificationHasFindings).toBe(false);
     expect(payload.verificationHasMissingCoverage).toBe(false);
     expect(payload.verificationHasSignals).toBe(false);
@@ -1213,8 +1229,11 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.scopeCheckSummaryPresent).toBe(true);
     expect(payload.scopeCheckPassed).toBe(false);
     expect(payload.scopeCheckHasBlockedFiles).toBe(true);
+    expect(payload.scopeBlockedFilesPresent).toBe(true);
     expect(payload.scopeBlockedFiles).toEqual(["src/openclawcode/orchestrator/run.ts"]);
     expect(payload.scopeBlockedFileCount).toBe(1);
+    expect(payload.scopeBlockedFirstFile).toBe("src/openclawcode/orchestrator/run.ts");
+    expect(payload.scopeBlockedLastFile).toBe("src/openclawcode/orchestrator/run.ts");
     expect(payload.autoMergePolicyEligible).toBe(false);
     expect(payload.autoMergePolicyReason).toBe(
       "Not eligible for auto-merge: the scope check did not pass.",
@@ -1243,6 +1262,23 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.scopeCheckPassed).toBe(true);
   });
 
+  it("reports changedFileListStable as false when changed files are unsorted or duplicated", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        buildResult: {
+          ...createRun().buildResult!,
+          changedFiles: ["src/z-last.ts", "src/a-first.ts", "src/a-first.ts"],
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.changedFilesPresent).toBe(true);
+    expect(payload.changedFileListStable).toBe(false);
+  });
+
   it("prints verification counts for ready-for-human-review runs", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
@@ -1260,6 +1296,10 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.verificationApprovedForHumanReview).toBe(false);
+    expect(payload.verificationDecisionIsApprove).toBe(false);
+    expect(payload.verificationDecisionIsRequestChanges).toBe(true);
+    expect(payload.verificationDecisionIsEscalate).toBe(false);
+    expect(payload.verificationSummaryPresent).toBe(true);
     expect(payload.verificationHasFindings).toBe(true);
     expect(payload.verificationHasMissingCoverage).toBe(true);
     expect(payload.verificationHasSignals).toBe(true);
@@ -1267,6 +1307,44 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.verificationFindingCount).toBe(2);
     expect(payload.verificationMissingCoverageCount).toBe(1);
     expect(payload.verificationFollowUpCount).toBe(2);
+  });
+
+  it("reports verificationDecisionIsEscalate when the verifier escalates", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        verificationReport: {
+          ...createRun().verificationReport!,
+          decision: "escalate",
+          summary: "Verification escalated to a human because the run crossed a policy boundary.",
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.verificationDecision).toBe("escalate");
+    expect(payload.verificationDecisionIsApprove).toBe(false);
+    expect(payload.verificationDecisionIsRequestChanges).toBe(false);
+    expect(payload.verificationDecisionIsEscalate).toBe(true);
+    expect(payload.verificationSummaryPresent).toBe(true);
+  });
+
+  it("reports verificationSummaryPresent as false when the verifier summary is empty", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        verificationReport: {
+          ...createRun().verificationReport!,
+          summary: "",
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.verificationSummary).toBe("");
+    expect(payload.verificationSummaryPresent).toBe(false);
   });
 
   it("prints historyEntryCount when history is present", async () => {

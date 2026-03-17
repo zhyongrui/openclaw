@@ -450,6 +450,15 @@ turning the working loop into a cleanly operable product:
   - `testCommandsPresent`
   - `testResultsPresent`
   - `notesPresent`
+- the next queue slice now also lands on the refreshed sync branch:
+  - `changedFileListStable`
+  - `scopeBlockedFilesPresent`
+  - `scopeBlockedFirstFile`
+  - `scopeBlockedLastFile`
+  - `verificationSummaryPresent`
+  - `verificationDecisionIsApprove`
+  - `verificationDecisionIsRequestChanges`
+  - `verificationDecisionIsEscalate`
 - the `failureDiagnostics` family is now effectively mirrored at the top level
   for:
   - summary

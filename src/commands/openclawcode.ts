@@ -760,6 +760,22 @@ function resolveDraftPullRequestDisposition(run: WorkflowRun): {
   };
 }
 
+function resolveChangedFileListStable(run: WorkflowRun): boolean {
+  const changedFiles = run.buildResult?.changedFiles;
+  if (changedFiles == null) {
+    return false;
+  }
+  const normalized = changedFiles.map((entry) => entry.trim());
+  if (normalized.some((entry) => entry.length === 0)) {
+    return false;
+  }
+  const stable = [...new Set(normalized)].toSorted((left, right) => left.localeCompare(right));
+  return (
+    stable.length === normalized.length &&
+    stable.every((entry, index) => entry === normalized[index])
+  );
+}
+
 function resolveMergedPullRequest(run: WorkflowRun): {
   pullRequestMerged: boolean;
   mergedPullRequestMergedAt: string | null;
@@ -1024,6 +1040,7 @@ function toWorkflowRunJson(run: WorkflowRun) {
     buildSummaryPresent: (run.buildResult?.summary?.length ?? 0) > 0,
     changedFiles: run.buildResult?.changedFiles ?? [],
     changedFilesPresent: (run.buildResult?.changedFiles.length ?? 0) > 0,
+    changedFileListStable: resolveChangedFileListStable(run),
     changedFileCount: run.buildResult?.changedFiles.length ?? null,
     changeDisposition: changeDisposition.changeDisposition,
     changeDispositionReason: changeDisposition.changeDispositionReason,
@@ -1036,8 +1053,11 @@ function toWorkflowRunJson(run: WorkflowRun) {
       run.buildResult?.scopeCheck == null
         ? false
         : run.buildResult.scopeCheck.blockedFiles.length > 0,
+    scopeBlockedFilesPresent: (run.buildResult?.scopeCheck?.blockedFiles.length ?? 0) > 0,
     scopeBlockedFiles: run.buildResult?.scopeCheck?.blockedFiles ?? null,
     scopeBlockedFileCount: run.buildResult?.scopeCheck?.blockedFiles.length ?? null,
+    scopeBlockedFirstFile: run.buildResult?.scopeCheck?.blockedFiles.at(0) ?? null,
+    scopeBlockedLastFile: run.buildResult?.scopeCheck?.blockedFiles.at(-1) ?? null,
     testCommandsPresent: (run.buildResult?.testCommands.length ?? 0) > 0,
     testCommandCount: run.buildResult?.testCommands.length ?? null,
     testResultsPresent: (run.buildResult?.testResults.length ?? 0) > 0,
@@ -1149,8 +1169,12 @@ function toWorkflowRunJson(run: WorkflowRun) {
     pullRequestMerged: mergedPullRequest.pullRequestMerged,
     mergedPullRequestMergedAt: mergedPullRequest.mergedPullRequestMergedAt,
     verificationDecision: run.verificationReport?.decision ?? null,
+    verificationDecisionIsApprove: run.verificationReport?.decision === "approve-for-human-review",
+    verificationDecisionIsRequestChanges: run.verificationReport?.decision === "request-changes",
+    verificationDecisionIsEscalate: run.verificationReport?.decision === "escalate",
     verificationApprovedForHumanReview: resolveVerificationApprovedForHumanReview(run),
     verificationSummary: run.verificationReport?.summary ?? null,
+    verificationSummaryPresent: (run.verificationReport?.summary?.length ?? 0) > 0,
     verificationHasFindings:
       run.verificationReport == null ? false : run.verificationReport.findings.length > 0,
     verificationHasMissingCoverage:

@@ -76,6 +76,7 @@ those nested objects.
 - `buildSummaryPresent`
 - `changedFiles`
 - `changedFilesPresent`
+- `changedFileListStable`
 - `changedFileCount`
 - `changeDisposition`
 - `changeDispositionReason`
@@ -85,8 +86,11 @@ those nested objects.
 - `scopeCheckSummaryPresent`
 - `scopeCheckPassed`
 - `scopeCheckHasBlockedFiles`
+- `scopeBlockedFilesPresent`
 - `scopeBlockedFiles`
 - `scopeBlockedFileCount`
+- `scopeBlockedFirstFile`
+- `scopeBlockedLastFile`
 
 ### Build/Test Summary
 
@@ -213,8 +217,12 @@ those nested objects.
 ### Verification Signals
 
 - `verificationDecision`
+- `verificationDecisionIsApprove`
+- `verificationDecisionIsRequestChanges`
+- `verificationDecisionIsEscalate`
 - `verificationApprovedForHumanReview`
 - `verificationSummary`
+- `verificationSummaryPresent`
 - `verificationHasFindings`
 - `verificationHasMissingCoverage`
 - `verificationHasSignals`

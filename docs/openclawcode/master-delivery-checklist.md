@@ -456,6 +456,14 @@ These are the next narrow slices that should be consumed from the current state.
 - [x] implement the build convenience mirrors for `testCommandsPresent`
 - [x] implement the build convenience mirrors for `testResultsPresent`
 - [x] implement the build convenience mirrors for `notesPresent`
+- [x] implement the build convenience mirror for `changedFileListStable`
+- [x] implement the scope convenience mirrors for `scopeBlockedFilesPresent`
+- [x] implement the scope convenience mirrors for `scopeBlockedFirstFile`
+- [x] implement the scope convenience mirrors for `scopeBlockedLastFile`
+- [x] implement the verification convenience mirror for `verificationSummaryPresent`
+- [x] implement the verification convenience mirror for `verificationDecisionIsApprove`
+- [x] implement the verification convenience mirror for `verificationDecisionIsRequestChanges`
+- [x] implement the verification convenience mirror for `verificationDecisionIsEscalate`
 - [ ] keep `run-json-contract.md` aligned with each new top-level field
 - [ ] keep `development-plan.md` and `full-program-roadmap.md` aligned with the latest pool state
 - [ ] decide whether the next productization slice after the current command-layer queue should be:
