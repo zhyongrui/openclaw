@@ -13,6 +13,20 @@ It assumes the target machine is a fresh operator host and that the installed
 repository will be this forked OpenClaw checkout that contains
 `openclawcode`.
 
+The canonical repository for this runbook is:
+
+- `https://github.com/zhyongrui/openclawcode.git`
+- shorthand: `zhyongrui/openclawcode`
+
+Do not search for a separate public `openclawcode` package repository. This
+workflow expects the forked OpenClaw checkout above, because that repository
+contains:
+
+- `scripts/openclawcode-setup-check.sh`
+- `docs/openclawcode/fresh-host-install.md`
+- `docs/openclawcode/operator-setup.md`
+- the bundled `openclawcode` execution and plugin code
+
 ## What Codex Can Do
 
 Codex can do all of the local machine preparation that does not require secret
@@ -22,7 +36,8 @@ entry or interactive approval:
    - `git`
    - `Node >= 22.16.0`
    - `pnpm`
-2. clone the repository to a stable location such as `~/pros/openclawcode`
+2. clone `https://github.com/zhyongrui/openclawcode.git` to a stable location
+   such as `~/pros/openclawcode`
 3. run:
    - `pnpm install`
    - `pnpm build`
@@ -58,12 +73,17 @@ Install and validate openclawcode on this machine.
 
 Requirements:
 - use Node >= 22.16.0
-- clone the repository to ~/pros/openclawcode
+- clone https://github.com/zhyongrui/openclawcode.git to ~/pros/openclawcode
 - run pnpm install
 - run pnpm build
 - run:
   - ./scripts/openclawcode-setup-check.sh --strict --json
   - ./scripts/openclawcode-setup-check.sh --strict --probe-built-startup --json
+
+Important repository constraint:
+- this is the forked OpenClaw checkout that contains openclawcode
+- do not search for a different public repository named openclawcode
+- if the checkout does not contain scripts/openclawcode-setup-check.sh, stop and report that the wrong repository was cloned
 
 Do not invent secrets. Stop only when you need:
 - GH_TOKEN or GITHUB_TOKEN
@@ -84,7 +104,7 @@ When finished, report:
 
 The smallest successful machine bootstrap looks like this:
 
-1. Codex clones `openclawcode`.
+1. Codex clones `zhyongrui/openclawcode`.
 2. Codex runs `pnpm install`.
 3. Codex runs `pnpm build`.
 4. The user provides `GH_TOKEN` or `GITHUB_TOKEN`.
