@@ -218,8 +218,8 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] expose provider diagnostics in chat surfaces
 - [x] add fallback-chain injection support via `OPENCLAWCODE_MODEL_FALLBACKS`
 - [x] expose model inventory and fallback readiness in setup-check JSON
-- [ ] configure and prove a second discoverable model on the live operator host
-- [ ] run a real fallback proof on the long-lived operator
+- [x] configure and prove a second discoverable model on the live operator host
+- [x] run a real fallback proof on the long-lived operator
 - [x] decide whether fallback should remain proof-only or become supported operator behavior
 - [x] document supported provider/model combinations
 - [x] document provider failure classes that should auto-pause the queue
@@ -301,9 +301,9 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] prove copied-root strict health checks
 - [x] prove a copied-root merged low-risk run
 - [x] prove a fully fresh external-style host from zero to first successful bind
-- [ ] prove a fully fresh external-style host from zero to one merged low-risk run
+- [x] prove a fully fresh external-style host from zero to one merged low-risk run
 - [x] prove a fully fresh external-style host from zero to one escalated path
-- [ ] prove a fully fresh external-style host from zero to one rerun path
+- [x] prove a fully fresh external-style host from zero to one rerun path
 - [x] document exact host prerequisites:
   - Node version
   - pnpm version
@@ -340,7 +340,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] re-prove a merged low-risk run on the latest long-lived `main` baseline after the most recent upstream promotion
 - [x] re-prove a no-op completion path on the latest long-lived `main` baseline after the most recent upstream promotion
 - [x] re-prove a blocked or escalated path on the latest long-lived `main` baseline after the most recent upstream promotion
-- [ ] prove one live fallback-model run if a second model becomes available
+- [x] prove one live fallback-model run if a second model becomes available
 - [x] document the exact proof matrix required before calling the operator "externally usable"
 
 ## Phase 12: Chat-Native Product Completion
@@ -408,7 +408,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] verify the rollback docs match the actual commands used by the operator
 - [x] verify the machine-readable contracts match real command output
 - [x] verify the current live proof matrix is recorded in dev logs and long-term docs
-- [ ] verify a fresh AI session can resume work from docs and memory without hidden context
+- [x] verify a fresh AI session can resume work from docs and memory without hidden context
 
 ## Immediate Next Queue
 

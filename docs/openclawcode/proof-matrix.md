@@ -24,9 +24,6 @@
 
 ## Still Pending Live Proofs
 
-- fresh-host external-style host merged low-risk proof
-- fresh-host external-style host rerun proof
-- fallback-model live proof on a real second model
 - blueprint-first live proof end-to-end from goal discussion to merged PR
 
 ## External-Usable Proof Gate
@@ -50,14 +47,24 @@ Current status on 2026-03-17:
 - sync-branch proof rows: complete on `sync/upstream-2026-03-17`
 - external/operator proof rows:
   - fresh zero-to-bind: complete
+  - fresh zero-to-merged low-risk: complete via run
+    `zhyongrui-openclawcode-130-1773737938218` and merged PR `#135`
   - fresh zero-to-escalated: complete
+  - fresh zero-to-rerun: complete via failed run
+    `zhyongrui-openclawcode-134-1773741281887` followed by rerun
+    `zhyongrui-openclawcode-134-1773741499523`
   - latest promoted baseline merged low-risk: complete via `origin/main @ 22e43ad3cb` (`feat: implement issue #130 (#135)`)
   - latest promoted baseline no-op: complete via run `zhyongrui-openclawcode-134-1773739257883`
   - latest promoted baseline escalated: complete via run `zhyongrui-openclawcode-132-1773739717720`
+  - fallback-model live proof: complete on 2026-03-17 via:
+    - live operator inventory showing a second discoverable model
+      (`openai-codex/gpt-5.4`)
+    - long-lived proof run `zhyongrui-openclawcode-129-1773741126413`
+      showing a real fallback chain auth failure
+    - long-lived proof run `zhyongrui-openclawcode-134-1773741968419`
+      logging `anthropic/claude-opus-4-6 -> crs/gpt-5.4` fallback handoff
+      before a separate sandbox-path failure
   - still pending:
-    - fresh zero-to-merged low-risk
-    - fresh zero-to-rerun
-    - fallback-model live proof
     - blueprint-first end-to-end proof
 
 ## How To Use This Matrix

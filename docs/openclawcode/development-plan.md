@@ -2375,11 +2375,30 @@ The next repo-local productization slice is now in place:
   - sample operator config
   - sample automation integration
 
-This closes a large local-code/local-doc gap, but not the external proof gap:
+This closes a large local-code/local-doc gap, and most of the external proof gap
+that was still blocking the operator:
 
-- live fallback proof is still pending
-- fresh-host external install proof is still pending
-- blueprint-first live proof is still pending
-- the next productization slice after the cleared command-layer queue is now:
-  - fresh-host external install proof
-  - followed by fallback-model live proof
+- live operator fallback proof now exists
+- fresh-host external merged and rerun proofs now exist
+- fresh AI session resume-from-docs proof now exists
+- the only remaining externally visible proof gap in this lane is now:
+  - blueprint-first live proof
+
+Live proof evidence recorded on 2026-03-17:
+
+- fresh zero-to-merged low-risk:
+  - run `zhyongrui-openclawcode-130-1773737938218`
+  - merged PR `#135`
+- fresh zero-to-rerun:
+  - intentional failed run `zhyongrui-openclawcode-134-1773741281887`
+  - rerun `zhyongrui-openclawcode-134-1773741499523`
+  - final stage `completed-without-changes`
+- second discoverable model on the live operator:
+  - live inventory reported `openai-codex/gpt-5.4`
+- long-lived fallback proof:
+  - run `zhyongrui-openclawcode-129-1773741126413` proved the auth-failure path
+  - run `zhyongrui-openclawcode-134-1773741968419` logged fallback handoff
+    from `anthropic/claude-opus-4-6` to `crs/gpt-5.4`
+- fresh AI session resume proof:
+  - independent `codex exec` session reconstructed startup context and the
+    remaining live checklist items from repo docs and memory alone

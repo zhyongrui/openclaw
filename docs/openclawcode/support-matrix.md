@@ -84,8 +84,15 @@ OpenClaw Code is not:
 Current decision as of 2026-03-17:
 
 - fallback remains **proof-only** operator behavior
-- it should not be treated as generally supported unattended production behavior
-  until:
-  - a second discoverable model is configured on the live operator host
-  - a real fallback proof succeeds on the long-lived operator
-  - the proof matrix is updated to show that proof as complete
+- the live operator now has a second discoverable model and a real fallback proof
+  trail, but fallback still should not be treated as generally supported
+  unattended production behavior
+- current live evidence:
+  - long-lived operator inventory reported `openai-codex/gpt-5.4` as
+    discoverable
+  - run `zhyongrui-openclawcode-129-1773741126413` proved a real fallback chain
+    failure path on the long-lived operator
+  - run `zhyongrui-openclawcode-134-1773741968419` proved a real fallback-model
+    handoff from `anthropic/claude-opus-4-6` to `crs/gpt-5.4`
+- fallback remains proof-only because the fallback-engaged run still uncovered a
+  separate sandbox-path issue; it is not yet a clean unattended production path
