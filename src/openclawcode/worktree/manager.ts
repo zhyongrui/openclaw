@@ -17,7 +17,14 @@ export interface WorkflowWorkspaceManager {
   cleanup(workspace: WorkflowWorkspace): Promise<void>;
 }
 
-const RUNTIME_ARTIFACT_RULES = [".openclaw/", "HEARTBEAT.md", "SOUL.md", "TOOLS.md"];
+const RUNTIME_ARTIFACT_RULES = [
+  ".agent/",
+  ".agents/",
+  ".openclaw/",
+  "HEARTBEAT.md",
+  "SOUL.md",
+  "TOOLS.md",
+];
 const SHARED_INSTALL_ARTIFACTS = ["node_modules"];
 
 function nowIso(): string {
