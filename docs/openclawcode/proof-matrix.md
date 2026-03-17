@@ -21,6 +21,10 @@
   - targeted conflict tests
   - `vitest.openclawcode`
   - `pnpm build`
+- refreshed-branch live no-op proof on `sync/upstream-2026-03-17-refresh2`:
+  - run `zhyongrui-openclawcode-134-1773744106266`
+  - final stage `completed-without-changes`
+  - issue closed automatically after verification
 
 ## Still Pending Live Proofs
 
