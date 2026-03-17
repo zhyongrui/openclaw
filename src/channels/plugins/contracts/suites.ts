@@ -9,6 +9,7 @@ import type {
   SessionBindingCapabilities,
   SessionBindingRecord,
 } from "../../../infra/outbound/session-binding-service.js";
+import { createNonExitingRuntime } from "../../../runtime.js";
 import { normalizeChatType } from "../../chat-type.js";
 import { resolveConversationLabel } from "../../conversation-label.js";
 import { validateSenderIdentity } from "../../sender-identity.js";
@@ -31,6 +32,7 @@ function sortStrings(values: readonly string[]) {
   return [...values].toSorted((left, right) => left.localeCompare(right));
 }
 
+const contractRuntime = createNonExitingRuntime();
 function expectDirectoryEntryShape(entry: ChannelDirectoryEntry) {
   expect(["user", "group", "channel"]).toContain(entry.kind);
   expect(typeof entry.id).toBe("string");
@@ -391,19 +393,21 @@ export function installChannelThreadingContractSuite(params: {
 
 export function installChannelDirectoryContractSuite(params: {
   plugin: Pick<ChannelPlugin, "id" | "directory">;
-  invokeLookups?: boolean;
+  coverage?: "lookups" | "presence";
+  cfg?: OpenClawConfig;
+  accountId?: string;
 }) {
   it("exposes the base directory contract", async () => {
     const directory = params.plugin.directory;
     expect(directory).toBeDefined();
 
-    if (params.invokeLookups === false) {
+    if (params.coverage === "presence") {
       return;
     }
-
     const self = await directory?.self?.({
-      cfg: {} as OpenClawConfig,
-      accountId: "default",
+      cfg: params.cfg ?? ({} as OpenClawConfig),
+      accountId: params.accountId ?? "default",
+      runtime: contractRuntime,
     });
     if (self) {
       expectDirectoryEntryShape(self);
@@ -411,10 +415,11 @@ export function installChannelDirectoryContractSuite(params: {
 
     const peers =
       (await directory?.listPeers?.({
-        cfg: {} as OpenClawConfig,
-        accountId: "default",
+        cfg: params.cfg ?? ({} as OpenClawConfig),
+        accountId: params.accountId ?? "default",
         query: "",
         limit: 5,
+        runtime: contractRuntime,
       })) ?? [];
     expect(Array.isArray(peers)).toBe(true);
     for (const peer of peers) {
@@ -423,10 +428,11 @@ export function installChannelDirectoryContractSuite(params: {
 
     const groups =
       (await directory?.listGroups?.({
-        cfg: {} as OpenClawConfig,
-        accountId: "default",
+        cfg: params.cfg ?? ({} as OpenClawConfig),
+        accountId: params.accountId ?? "default",
         query: "",
         limit: 5,
+        runtime: contractRuntime,
       })) ?? [];
     expect(Array.isArray(groups)).toBe(true);
     for (const group of groups) {
@@ -435,11 +441,11 @@ export function installChannelDirectoryContractSuite(params: {
 
     if (directory?.listGroupMembers && groups[0]?.id) {
       const members = await directory.listGroupMembers({
-        cfg: {} as OpenClawConfig,
-        accountId: "default",
+        cfg: params.cfg ?? ({} as OpenClawConfig),
+        accountId: params.accountId ?? "default",
         groupId: groups[0].id,
-        query: "",
         limit: 5,
+        runtime: contractRuntime,
       });
       expect(Array.isArray(members)).toBe(true);
       for (const member of members) {
@@ -452,6 +458,7 @@ export function installChannelDirectoryContractSuite(params: {
 export function installSessionBindingContractSuite(params: {
   getCapabilities: () => SessionBindingCapabilities;
   bindAndResolve: () => Promise<SessionBindingRecord>;
+  unbindAndVerify: (binding: SessionBindingRecord) => Promise<void>;
   cleanup: () => Promise<void> | void;
   expectedCapabilities: SessionBindingCapabilities;
 }) {
@@ -471,6 +478,11 @@ export function installSessionBindingContractSuite(params: {
     expect(typeof binding.conversation.conversationId).toBe("string");
     expect(["active", "ending", "ended"]).toContain(binding.status);
     expect(typeof binding.boundAt).toBe("number");
+  });
+
+  it("unbinds a registered binding through the shared service", async () => {
+    const binding = await params.bindAndResolve();
+    await params.unbindAndVerify(binding);
   });
 
   it("cleans up registered bindings", async () => {

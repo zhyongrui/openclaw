@@ -7,6 +7,8 @@ import {
   shouldDisableEmbeddedPiRetryForWorkspace,
 } from "./pi-project-settings.js";
 
+type EmbeddedPiSettingsArgs = Parameters<typeof buildEmbeddedPiSettingsSnapshot>[0];
+
 describe("resolveEmbeddedPiProjectSettingsPolicy", () => {
   it("defaults to sanitize", () => {
     expect(resolveEmbeddedPiProjectSettingsPolicy()).toBe(
@@ -94,6 +96,36 @@ describe("buildEmbeddedPiSettingsSnapshot", () => {
     expect(snapshot.compaction?.keepRecentTokens).toBe(64_000);
     expect(snapshot.compaction?.reserveTokens).toBe(32_000);
     expect(snapshot.hideThinkingBlock).toBe(true);
+  });
+
+  it("lets project Pi settings override bundle MCP defaults", () => {
+    const snapshot = buildEmbeddedPiSettingsSnapshot({
+      globalSettings,
+      pluginSettings: {
+        mcpServers: {
+          bundleProbe: {
+            command: "node",
+            args: ["/plugins/probe.mjs"],
+          },
+        },
+      } as EmbeddedPiSettingsArgs["pluginSettings"],
+      projectSettings: {
+        mcpServers: {
+          bundleProbe: {
+            command: "deno",
+            args: ["/workspace/probe.ts"],
+          },
+        },
+      } as EmbeddedPiSettingsArgs["projectSettings"],
+      policy: "sanitize",
+    });
+
+    expect((snapshot as Record<string, unknown>).mcpServers).toEqual({
+      bundleProbe: {
+        command: "deno",
+        args: ["/workspace/probe.ts"],
+      },
+    });
   });
 });
 
