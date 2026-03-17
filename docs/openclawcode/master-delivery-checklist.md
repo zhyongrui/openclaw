@@ -38,12 +38,12 @@ The finished product should let a teammate do this with bounded operator work:
 
 The program is only "done enough to hand to other people" when all of these are true:
 
-- [ ] a fresh operator host can be configured from docs without private tribal knowledge
+- [x] a fresh operator host can be configured from docs without private tribal knowledge
 - [x] a low-risk issue can run from Feishu to merged PR without manual repair
 - [x] a no-op issue can complete cleanly without creating a noisy PR
 - [x] a blocked or escalated issue is clearly surfaced without branch mutation
 - [x] provider failures are diagnosable from saved artifacts and chat surfaces
-- [ ] setup, promotion, rollback, and copied-root proofs are routine and documented
+- [x] setup, promotion, rollback, and copied-root proofs are routine and documented
 - [x] the machine-readable contracts are intentionally versioned and documented
 - [x] upstream sync can be repeated without putting the long-lived operator at risk
 - [x] release-facing docs explain scope, prerequisites, support policy, and known limits
@@ -220,7 +220,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] expose model inventory and fallback readiness in setup-check JSON
 - [ ] configure and prove a second discoverable model on the live operator host
 - [ ] run a real fallback proof on the long-lived operator
-- [ ] decide whether fallback should remain proof-only or become supported operator behavior
+- [x] decide whether fallback should remain proof-only or become supported operator behavior
 - [x] document supported provider/model combinations
 - [x] document provider failure classes that should auto-pause the queue
 - [x] document provider failure classes that should not auto-pause the queue

@@ -394,6 +394,12 @@ turning the working loop into a cleanly operable product:
 - chat-native intake can now propose multiple scoped draft variants for
   ambiguous one-line requests, and the operator can pick one with
   `/occode-intake-choose` before confirming issue creation
+- fallback policy is now explicit: it remains proof-only until a second
+  discoverable model is configured and a real fallback run succeeds on the
+  long-lived operator
+- fresh-host docs are now packaged with a dedicated readiness audit, and
+  setup/promotion/rollback/copied-root cadence is collected in
+  `operator-proof-routine.md`
 - command-layer issues `#101` and `#102` have now also been implemented,
   documented, and auto-closed through the same path
 - command-layer issue `#103` for `draftPullRequestTitle` has now also been

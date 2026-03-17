@@ -78,3 +78,14 @@ OpenClaw Code is not:
   deferred reroute replay
 - live fallback behavior is still proof-oriented, not fully productized
 - fresh-host and long-lived operator proofs still need real external runs
+
+## Fallback Decision
+
+Current decision as of 2026-03-17:
+
+- fallback remains **proof-only** operator behavior
+- it should not be treated as generally supported unattended production behavior
+  until:
+  - a second discoverable model is configured on the live operator host
+  - a real fallback proof succeeds on the long-lived operator
+  - the proof matrix is updated to show that proof as complete

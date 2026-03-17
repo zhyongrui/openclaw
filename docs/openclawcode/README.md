@@ -28,20 +28,22 @@ Recommended reading order:
 22. `policy-contract.md`
 23. `support-matrix.md`
 24. `fresh-host-install.md`
-25. `upgrade-and-rotation.md`
-26. `release-runbook.md`
-27. `troubleshooting.md`
-28. `proof-matrix.md`
-29. `sample-operator-config.md`
-30. `sample-automation-integration.md`
-31. `chat-intake-styles.md`
-32. `security-and-retention.md`
-33. `sync-conflict-history.md`
-34. `upstream-sync-policy.md`
-35. `operator-setup.md`
-36. `sync-promotion-runbook.md`
-37. `mvp-runbook.md`
-38. `webhook-operations.md`
+25. `fresh-host-readiness-audit.md`
+26. `upgrade-and-rotation.md`
+27. `release-runbook.md`
+28. `operator-proof-routine.md`
+29. `troubleshooting.md`
+30. `proof-matrix.md`
+31. `sample-operator-config.md`
+32. `sample-automation-integration.md`
+33. `chat-intake-styles.md`
+34. `security-and-retention.md`
+35. `sync-conflict-history.md`
+36. `upstream-sync-policy.md`
+37. `operator-setup.md`
+38. `sync-promotion-runbook.md`
+39. `mvp-runbook.md`
+40. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
