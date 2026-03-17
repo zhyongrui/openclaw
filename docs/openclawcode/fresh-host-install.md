@@ -1,5 +1,8 @@
 # OpenClaw Code Fresh-Host Install
 
+If you want Codex to perform this bootstrap on the fresh machine, use
+`codex-openclawcode-install.md` alongside this document.
+
 ## Prerequisites
 
 - git

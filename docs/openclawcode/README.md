@@ -47,6 +47,9 @@ Recommended reading order:
 
 Development logs live in `dev-log/`.
 
+For a fresh-machine bootstrap driven by Codex itself, see
+`codex-openclawcode-install.md`.
+
 ## Current Status
 
 As of 2026-03-17, the repository includes a working `openclawcode` issue-driven
