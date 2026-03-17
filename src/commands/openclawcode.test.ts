@@ -257,6 +257,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.publishedPullRequestHasUrl).toBe(true);
     expect(payload.publishedPullRequestHasOpenedAt).toBe(true);
     expect(payload.publishedPullRequestHasTitle).toBe(true);
+    expect(payload.publishedPullRequestHasBody).toBe(true);
     expect(payload.publishedPullRequestTitle).toBe(
       "[Issue #2] Include changed file list in JSON output",
     );
@@ -434,6 +435,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.publishedPullRequestHasUrl).toBe(false);
     expect(payload.publishedPullRequestHasOpenedAt).toBe(false);
     expect(payload.publishedPullRequestHasTitle).toBe(false);
+    expect(payload.publishedPullRequestHasBody).toBe(false);
     expect(payload.publishedPullRequestBranchName).toBeNull();
     expect(payload.publishedPullRequestBaseBranch).toBeNull();
     expect(payload.publishedPullRequestUrl).toBeNull();
@@ -931,6 +933,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.publishedPullRequestHasUrl).toBe(true);
     expect(payload.publishedPullRequestHasOpenedAt).toBe(true);
     expect(payload.publishedPullRequestHasTitle).toBe(true);
+    expect(payload.publishedPullRequestHasBody).toBe(true);
     expect(payload.publishedPullRequestTitle).toBe(
       "[Issue #2] Include changed file list in JSON output",
     );
@@ -939,6 +942,25 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.publishedPullRequestBaseBranch).toBe("main");
     expect(payload.publishedPullRequestUrl).toBe("https://github.com/openclaw/openclaw/pull/42");
     expect(payload.publishedPullRequestOpenedAt).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("treats blank published pull request bodies as absent in convenience signals", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        draftPullRequest: {
+          ...createRun().draftPullRequest!,
+          body: "   ",
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.pullRequestPublished).toBe(true);
+    expect(payload.publishedPullRequestBody).toBe("   ");
+    expect(payload.publishedPullRequestHasBody).toBe(false);
+    expect(payload.publishedPullRequestHasTitle).toBe(true);
   });
 
   it("prints skipped draft pr disposition when publication is skipped for a no-op run", async () => {

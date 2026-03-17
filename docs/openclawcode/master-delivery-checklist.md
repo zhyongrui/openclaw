@@ -437,6 +437,7 @@ These are the next narrow slices that should be consumed from the current state.
 - [x] implement `#127` for `publishedPullRequestHasUrl`
 - [x] implement `#128` for `publishedPullRequestHasOpenedAt`
 - [x] implement `#129` for `publishedPullRequestHasTitle`
+- [x] implement the next published-PR convenience mirror for `publishedPullRequestHasBody`
 - [ ] keep `run-json-contract.md` aligned with each new top-level field
 - [ ] keep `development-plan.md` and `full-program-roadmap.md` aligned with the latest pool state
 - [ ] decide whether the next productization slice after the current command-layer queue should be:

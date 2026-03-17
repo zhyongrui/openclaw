@@ -421,8 +421,9 @@ turning the working loop into a cleanly operable product:
 - command-layer issue `#128` for `publishedPullRequestHasOpenedAt` has now also
   been implemented, documented, and auto-closed through the same path
 - command-layer issue `#129` for `publishedPullRequestHasTitle` has now landed
-  on the refreshed sync branch; the next seed-ready mirror is now
-  `publishedPullRequestHasBody`
+  on the refreshed sync branch
+- the next published-PR convenience mirror, `publishedPullRequestHasBody`, has
+  now also landed on the refreshed sync branch
 - the `failureDiagnostics` family is now effectively mirrored at the top level
   for:
   - summary
