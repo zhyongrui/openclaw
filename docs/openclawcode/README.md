@@ -28,27 +28,31 @@ Recommended reading order:
 22. `policy-contract.md`
 23. `support-matrix.md`
 24. `fresh-host-install.md`
-25. `fresh-host-readiness-audit.md`
-26. `upgrade-and-rotation.md`
-27. `release-runbook.md`
-28. `operator-proof-routine.md`
-29. `troubleshooting.md`
-30. `proof-matrix.md`
-31. `sample-operator-config.md`
-32. `sample-automation-integration.md`
-33. `chat-intake-styles.md`
-34. `security-and-retention.md`
-35. `sync-conflict-history.md`
-36. `upstream-sync-policy.md`
-37. `operator-setup.md`
-38. `sync-promotion-runbook.md`
-39. `mvp-runbook.md`
-40. `webhook-operations.md`
+25. `single-login-bootstrap-proposal.md`
+26. `fresh-host-readiness-audit.md`
+27. `upgrade-and-rotation.md`
+28. `release-runbook.md`
+29. `operator-proof-routine.md`
+30. `troubleshooting.md`
+31. `proof-matrix.md`
+32. `sample-operator-config.md`
+33. `sample-automation-integration.md`
+34. `chat-intake-styles.md`
+35. `security-and-retention.md`
+36. `sync-conflict-history.md`
+37. `upstream-sync-policy.md`
+38. `operator-setup.md`
+39. `sync-promotion-runbook.md`
+40. `mvp-runbook.md`
+41. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
 For a fresh-machine bootstrap driven by Codex itself, see
 `codex-openclawcode-install.md`.
+
+For the product direction that should reduce fresh-host setup to one GitHub
+login plus one repo choice, see `single-login-bootstrap-proposal.md`.
 
 ## Current Status
 

@@ -113,6 +113,19 @@ The smallest successful machine bootstrap looks like this:
 7. Codex prepares the target repo mapping.
 8. The user chooses CLI-only or chatops validation.
 
+## Lowest-Touch User Goal
+
+The desired product outcome is even smaller than today's install flow:
+
+1. Codex installs the repo
+2. the user logs into GitHub once
+3. the user chooses `owner/repo`
+4. one bootstrap command configures the operator automatically
+
+That command is not fully productized yet. See
+`single-login-bootstrap-proposal.md` for the intended end state and the split
+between `openclaw` and `openclawcode`.
+
 ## After OpenClawCode Is Installed
 
 Once installation succeeds, yes: you can point `openclawcode` at a new
