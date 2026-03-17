@@ -32,6 +32,7 @@ import {
   type ShellRunner,
 } from "../runtime/index.js";
 import { deriveProjectStageGateArtifact, readProjectStageGateArtifact } from "../stage-gates.js";
+import { resolveAutoMergePolicy } from "../workflow-derived.js";
 import { transitionRun, type TimestampFactory } from "../workflow/index.js";
 import type { WorkflowWorkspaceManager } from "../worktree/index.js";
 
@@ -43,6 +44,10 @@ export interface IssueWorkflowRequest extends RepoRef {
   branchName?: string;
   openPullRequest?: boolean;
   mergeOnApprove?: boolean;
+  suitabilityOverride?: {
+    actor?: string;
+    reason?: string;
+  };
   rerunContext?: WorkflowRerunContext;
 }
 
@@ -349,11 +354,7 @@ function upsertRuntimeRoutingSelection(
 }
 
 function shouldAutoMerge(run: WorkflowRun): boolean {
-  return (
-    run.suitability?.decision === "auto-run" &&
-    run.buildResult?.issueClassification === "command-layer" &&
-    (run.buildResult.scopeCheck?.ok ?? true)
-  );
+  return resolveAutoMergePolicy(run).autoMergePolicyEligible;
 }
 
 function shouldSkipDraftPullRequest(run: WorkflowRun): boolean {
@@ -520,7 +521,9 @@ export async function runIssueWorkflow(
   }
   await deps.store.save(run);
 
-  const suitability = assessIssueSuitability(run, now());
+  const suitability = assessIssueSuitability(run, now(), {
+    override: request.suitabilityOverride,
+  });
   run = noteRun(
     {
       ...run,
@@ -727,7 +730,7 @@ export async function runIssueWorkflow(
     } else {
       run = noteRun(
         run,
-        "Auto-merge skipped: policy requires an auto-run suitability decision, command-layer scope, and a passing scope check",
+        `Auto-merge skipped: ${resolveAutoMergePolicy(run).autoMergePolicyReason}`,
         now,
       );
     }

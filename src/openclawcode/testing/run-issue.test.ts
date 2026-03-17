@@ -8,6 +8,7 @@ import {
   type PullRequestPublisher,
 } from "../app/index.js";
 import type {
+  BuildPolicySignals,
   BuildResult,
   IssueRef,
   VerificationReport,
@@ -147,6 +148,7 @@ class FakeBuilder implements Builder {
   constructor(
     private readonly scope: "command-layer" | "workflow-core" | "mixed" = "command-layer",
     private readonly changedFiles: string[] = ["src/commands/openclawcode.ts"],
+    private readonly policySignals?: BuildPolicySignals,
   ) {}
 
   async build(run: WorkflowRun): Promise<BuildResult> {
@@ -155,6 +157,7 @@ class FakeBuilder implements Builder {
       branchName: run.workspace?.branchName ?? "openclawcode/issue-1",
       summary: "Builder updated the CLI implementation.",
       changedFiles: this.changedFiles,
+      policySignals: this.policySignals,
       issueClassification: this.scope,
       scopeCheck: {
         ok: true,
@@ -628,7 +631,155 @@ describe("runIssueWorkflow", () => {
       expect(run.stage).toBe("ready-for-human-review");
       expect(run.suitability?.decision).toBe("needs-human-review");
       expect(run.history).toContain(
-        "Auto-merge skipped: policy requires an auto-run suitability decision, command-layer scope, and a passing scope check",
+        "Auto-merge skipped: Not eligible for auto-merge: suitability did not accept autonomous execution.",
+      );
+      expect(merger.merged).toBe(0);
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("lets an operator suitability override continue execution but still blocks auto-merge", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-179",
+        worktreePath: "/repo/.openclawcode/worktrees/run-179",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const github = new FakeGitHubClient();
+      github.issueOverride = {
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        number: 179,
+        title: "Expose orchestrator retry metadata in openclaw code run --json output",
+        body: [
+          "Update the CLI output and workflow persistence so retry metadata is visible.",
+          "This also requires orchestrator resume behavior and stored run record updates.",
+        ].join(" "),
+        labels: ["enhancement"],
+      };
+      const merger = new FakeMerger();
+      const builder = new FakeBuilder();
+
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 179,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          openPullRequest: true,
+          mergeOnApprove: true,
+          suitabilityOverride: {
+            actor: "chat:operator",
+            reason: "Operator approved this narrow exception.",
+          },
+        },
+        {
+          github,
+          planner: new OpenQuestionPlanner(),
+          builder,
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          publisher: new FakePublisher({
+            number: 179,
+            url: "https://github.com/zhyongrui/openclawcode/pull/179",
+          }),
+          merger,
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(builder.buildCalls).toBe(1);
+      expect(run.stage).toBe("ready-for-human-review");
+      expect(run.suitability).toMatchObject({
+        decision: "auto-run",
+        originalDecision: "needs-human-review",
+        overrideApplied: true,
+        overrideActor: "chat:operator",
+      });
+      expect(run.history).toContain(
+        "Auto-merge skipped: Not eligible for auto-merge: manual suitability overrides still require a human merge decision.",
+      );
+      expect(merger.merged).toBe(0);
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("skips auto-merge when build guardrails detect a large generated diff", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-180",
+        worktreePath: "/repo/.openclawcode/worktrees/run-180",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const merger = new FakeMerger();
+
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 180,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          openPullRequest: true,
+          mergeOnApprove: true,
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder("command-layer", ["src/generated/output.gen.ts"], {
+            changedLineCount: 420,
+            changedDirectoryCount: 5,
+            broadFanOut: true,
+            largeDiff: true,
+            generatedFiles: ["src/generated/output.gen.ts"],
+          }),
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/generated/output.gen.ts"]),
+          shellRunner: new NoopShellRunner(),
+          publisher: new FakePublisher({
+            number: 180,
+            url: "https://github.com/zhyongrui/openclawcode/pull/180",
+          }),
+          merger,
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.buildResult?.policySignals).toMatchObject({
+        broadFanOut: true,
+        largeDiff: true,
+        generatedFiles: ["src/generated/output.gen.ts"],
+      });
+      expect(run.history).toContain(
+        "Auto-merge skipped: Not eligible for auto-merge: generated files were changed and require explicit human review.",
       );
       expect(merger.merged).toBe(0);
     } finally {
@@ -755,7 +906,7 @@ describe("runIssueWorkflow", () => {
       expect(run.stage).toBe("ready-for-human-review");
       expect(merger.merged).toBe(0);
       expect(run.history).toContain(
-        "Auto-merge skipped: policy requires an auto-run suitability decision, command-layer scope, and a passing scope check",
+        "Auto-merge skipped: Not eligible for auto-merge: the run is not classified as command-layer.",
       );
     } finally {
       await fs.rm(stateDir, { recursive: true, force: true });

@@ -23,17 +23,27 @@ Recommended reading order:
 17. `operator-status-snapshot-contract.md`
 18. `validation-pool-contract.md`
 19. `release-artifacts-contract.md`
-20. `upstream-sync-policy.md`
-21. `operator-setup.md`
-22. `sync-promotion-runbook.md`
-23. `mvp-runbook.md`
-24. `webhook-operations.md`
+20. `policy.md`
+21. `policy-contract.md`
+22. `support-matrix.md`
+23. `fresh-host-install.md`
+24. `upgrade-and-rotation.md`
+25. `release-runbook.md`
+26. `troubleshooting.md`
+27. `proof-matrix.md`
+28. `sample-operator-config.md`
+29. `sample-automation-integration.md`
+30. `upstream-sync-policy.md`
+31. `operator-setup.md`
+32. `sync-promotion-runbook.md`
+33. `mvp-runbook.md`
+34. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
 ## Current Status
 
-As of 2026-03-16, the repository includes a working `openclawcode` issue-driven
+As of 2026-03-17, the repository includes a working `openclawcode` issue-driven
 loop with:
 
 - workflow state, persistence, and isolated worktree management
@@ -46,6 +56,7 @@ loop with:
   - `/occode-intake-edit`
   - `/occode-intake-reject`
   - `/occode-start`
+  - `/occode-start-override`
   - `/occode-rerun`
   - `/occode-takeover`
   - `/occode-resume-after-edit`
@@ -68,6 +79,12 @@ loop with:
 - an `openclaw code run ...` CLI path for issue-driven execution
 - a versioned top-level JSON contract for `openclaw code run --json`, anchored
   by `contractVersion: 1` and documented in `run-json-contract.md`
+- a versioned machine-readable policy contract for:
+  - `openclaw code policy-show --json`
+  - suitability allowlist / denylist rules
+  - build guardrail thresholds for large diffs, broad fan-out, and generated
+    files
+  - provider failure classes that do and do not auto-pause the queue
 - a fixed repo-local blueprint foundation at `PROJECT-BLUEPRINT.md`, with:
   - `openclaw code blueprint-init`
   - `openclaw code blueprint-show`
@@ -105,6 +122,11 @@ loop with:
   - `issueTitle`
   - `issueRepo`
   - `issueOwner`
+- guarded merge policy now also blocks:
+  - manual suitability overrides
+  - large diffs
+  - broad fan-out
+  - generated-file changes
 - persisted structured workflow failure diagnostics that now surface in both
   saved run artifacts and the top-level JSON contract as:
   - `failureDiagnostics`

@@ -22,6 +22,54 @@ function createRepoConfig(): OpenClawCodeChatopsRepoConfig {
 }
 
 describe("openclawcode chatops run request plumbing", () => {
+  it("carries suitability overrides into run requests", () => {
+    const request = buildRunRequestFromCommand({
+      command: {
+        action: "start",
+        issue: {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          number: 411,
+        },
+      },
+      config: createRepoConfig(),
+      suitabilityOverride: {
+        actor: "chat:operator",
+        reason: "Operator approved this narrow exception.",
+      },
+    });
+
+    expect(request.suitabilityOverride).toEqual({
+      actor: "chat:operator",
+      reason: "Operator approved this narrow exception.",
+    });
+  });
+
+  it("emits suitability override flags in the CLI argv", () => {
+    const argv = buildOpenClawCodeRunArgv({
+      owner: "zhyongrui",
+      repo: "openclawcode",
+      issueNumber: 411,
+      repoRoot: "/repo",
+      baseBranch: "main",
+      branchName: "openclawcode/issue-411",
+      builderAgent: "main-builder",
+      verifierAgent: "main-verifier",
+      testCommands: ["pnpm test"],
+      openPullRequest: true,
+      mergeOnApprove: false,
+      suitabilityOverride: {
+        actor: "chat:operator",
+        reason: "Operator approved this narrow exception.",
+      },
+    });
+
+    expect(argv).toContain("--suitability-override-actor");
+    expect(argv).toContain("chat:operator");
+    expect(argv).toContain("--suitability-override-reason");
+    expect(argv).toContain("Operator approved this narrow exception.");
+  });
+
   it("applies runtime reroute overrides to rerun requests", () => {
     const request = buildRunRequestFromCommand({
       command: {

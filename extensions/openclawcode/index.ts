@@ -803,15 +803,17 @@ function buildSuitabilityLedgerLines(snapshot: OpenClawCodeIssueStatusSnapshot):
   ]
     .filter(Boolean)
     .join(" | ")}`;
-  return [line];
+  const overrideLine = snapshot.suitabilityOverrideApplied
+    ? `  suitability override: applied${snapshot.suitabilityOverrideActor ? ` | actor=${snapshot.suitabilityOverrideActor}` : ""}${snapshot.suitabilityOverrideReason ? ` | ${trimToSingleLine(snapshot.suitabilityOverrideReason)}` : ""}`
+    : undefined;
+  return [line, overrideLine].filter((entry): entry is string => Boolean(entry));
 }
 
 function buildTopLevelSuitabilityPolicyLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
-  if (
-    !snapshot.suitabilityDecision ||
-    snapshot.suitabilityDecision === "auto-run" ||
-    !snapshot.suitabilitySummary
-  ) {
+  if (!snapshot.suitabilityDecision || !snapshot.suitabilitySummary) {
+    return [];
+  }
+  if (snapshot.suitabilityDecision === "auto-run" && !snapshot.suitabilityOverrideApplied) {
     return [];
   }
   return [
@@ -821,6 +823,11 @@ function buildTopLevelSuitabilityPolicyLines(snapshot: OpenClawCodeIssueStatusSn
     ]
       .filter(Boolean)
       .join(" | ")}`,
+    ...(snapshot.suitabilityOverrideApplied
+      ? [
+          `Suitability override: applied${snapshot.suitabilityOverrideReason ? ` | ${trimToSingleLine(snapshot.suitabilityOverrideReason)}` : ""}`,
+        ]
+      : []),
   ];
 }
 
@@ -3568,6 +3575,104 @@ export default {
         return {
           text: appendProviderPauseText({
             text: `Queued ${issueKey}. I will post status updates here.`,
+            pause: providerPause,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-start-override",
+      description: "Queue an openclawcode issue run with an explicit suitability override.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const command = parseChatopsCommand(`/occode-start ${ctx.args ?? ""}`, {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!command) {
+          return {
+            text:
+              "Usage: /occode-start-override owner/repo#123\n" +
+              "Or, when exactly one repo is configured: /occode-start-override #123",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, command.issue);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${command.issue.owner}/${command.issue.repo}.`,
+          };
+        }
+
+        const issueKey = formatIssueKey({
+          owner: command.issue.owner,
+          repo: command.issue.repo,
+          number: command.issue.number,
+        });
+        const currentStatus = await store.getStatus(issueKey);
+        const pendingApproval = await store.getPendingApproval(issueKey);
+        if (await store.isQueuedOrRunning(issueKey)) {
+          return { text: `${issueKey} is already in progress.\n${currentStatus ?? "Queued."}` };
+        }
+        const executionStartGate = await readExecutionStartGate(repoConfig.repoRoot);
+        if (executionStartGate && executionStartGate.gate.readiness !== "ready") {
+          await holdExecutionStartAttempt({
+            store,
+            issue: command.issue,
+            destination: {
+              channel:
+                pendingApproval?.notifyChannel ?? ctx.channel?.trim() ?? repoConfig.notifyChannel,
+              target:
+                resolveCommandNotifyTarget(ctx) ||
+                ctx.senderId?.trim() ||
+                pendingApproval?.notifyTarget ||
+                repoConfig.notifyTarget,
+            },
+          });
+          return {
+            text: buildExecutionStartGateBlockedMessage({
+              repo: {
+                owner: repoConfig.owner,
+                repo: repoConfig.repo,
+              },
+              gate: executionStartGate.gate,
+            }),
+          };
+        }
+
+        const request = buildRunRequestFromCommand({
+          command,
+          config: repoConfig,
+          suitabilityOverride: {
+            actor: resolveCommandNotifyTarget(ctx) || ctx.senderId?.trim(),
+            reason: "Chat operator approved a suitability override for this run.",
+          },
+        });
+        const notifyTarget =
+          resolveCommandNotifyTarget(ctx) ||
+          ctx.senderId?.trim() ||
+          pendingApproval?.notifyTarget ||
+          repoConfig.notifyTarget;
+        const queuedRun = await store.promotePendingApprovalToQueue({
+          issueKey,
+          request,
+          fallbackNotifyChannel: pendingApproval?.notifyChannel ?? repoConfig.notifyChannel,
+          fallbackNotifyTarget: notifyTarget,
+          status: pendingApproval
+            ? "Suitability override approved in chat and queued."
+            : "Queued with suitability override.",
+        });
+        if (!queuedRun) {
+          return { text: `${issueKey} is already queued or running.` };
+        }
+        const providerPause = await store.getActiveProviderPause();
+        kickQueueDrain(api, store);
+        return {
+          text: appendProviderPauseText({
+            text: `Queued ${issueKey} with an explicit suitability override. I will post status updates here.`,
             pause: providerPause,
           }),
         };

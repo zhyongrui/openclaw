@@ -46,7 +46,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [ ] setup, promotion, rollback, and copied-root proofs are routine and documented
 - [ ] the machine-readable contracts are intentionally versioned and documented
 - [ ] upstream sync can be repeated without putting the long-lived operator at risk
-- [ ] release-facing docs explain scope, prerequisites, support policy, and known limits
+- [x] release-facing docs explain scope, prerequisites, support policy, and known limits
 
 ## Phase -1: Blueprint-First Control Plane
 
@@ -177,13 +177,13 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] require command-layer scope for current auto-merge policy
 - [x] require verification approval for current auto-merge policy
 - [x] require suitability acceptance for current auto-merge policy
-- [ ] formalize a stable allowlist of low-risk categories for autonomous merge
-- [ ] formalize a stable denylist of high-risk categories for autonomous execution
-- [ ] add explicit operator override flow for suitability exceptions
+- [x] formalize a stable allowlist of low-risk categories for autonomous merge
+- [x] formalize a stable denylist of high-risk categories for autonomous execution
+- [x] add explicit operator override flow for suitability exceptions
 - [x] add explicit operator override flow for merge-policy exceptions
-- [ ] document supported labels and keywords that affect suitability
-- [ ] document supported labels and keywords that affect merge policy
-- [ ] make policy decisions machine-readable enough for external automation
+- [x] document supported labels and keywords that affect suitability
+- [x] document supported labels and keywords that affect merge policy
+- [x] make policy decisions machine-readable enough for external automation
 
 ## Phase 4: Builder, Verifier, And Workspace Integrity
 
@@ -200,11 +200,11 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] trim skill footprint for issue-worktree runs
 - [x] surface structured embedded agent failure diagnostics
 - [x] persist provider/model diagnostics into workflow artifacts
-- [ ] add more explicit guardrails around large generated diffs
-- [ ] add more explicit guardrails around broad file fan-out
-- [ ] add a dedicated diff-size or changed-lines policy signal
-- [ ] add a dedicated generated-file policy signal
-- [ ] add regression tests for pathological large-worktree prompts
+- [x] add more explicit guardrails around large generated diffs
+- [x] add more explicit guardrails around broad file fan-out
+- [x] add a dedicated diff-size or changed-lines policy signal
+- [x] add a dedicated generated-file policy signal
+- [x] add regression tests for pathological large-worktree prompts
 
 ## Phase 5: Provider Resilience
 
@@ -221,9 +221,9 @@ The program is only "done enough to hand to other people" when all of these are 
 - [ ] configure and prove a second discoverable model on the live operator host
 - [ ] run a real fallback proof on the long-lived operator
 - [ ] decide whether fallback should remain proof-only or become supported operator behavior
-- [ ] document supported provider/model combinations
-- [ ] document provider failure classes that should auto-pause the queue
-- [ ] document provider failure classes that should not auto-pause the queue
+- [x] document supported provider/model combinations
+- [x] document provider failure classes that should auto-pause the queue
+- [x] document provider failure classes that should not auto-pause the queue
 
 ## Phase 6: Machine-Readable Contracts
 
@@ -291,7 +291,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] add an explicit disaster-recovery checklist for a broken long-lived operator
 - [x] add a machine-readable promotion receipt saved on successful promotion
 - [x] add a machine-readable rollback receipt saved on rollback
-- [ ] document required secrets, environment variables, and least-privilege scopes
+- [x] document required secrets, environment variables, and least-privilege scopes
 - [ ] document how to rotate webhook secrets and operator tokens safely
 - [ ] document how to rotate Feishu bindings safely
 
@@ -359,38 +359,38 @@ The program is only "done enough to hand to other people" when all of these are 
 
 ## Phase 13: Release Docs And Public Usability
 
-- [ ] publish a support matrix:
+- [x] publish a support matrix:
   - repo shapes that are safe today
   - repo shapes that are experimental
   - repo shapes that are unsupported
-- [ ] publish a policy document:
+- [x] publish a policy document:
   - autonomous execution policy
   - merge policy
   - escalation policy
   - rerun policy
-- [ ] publish a release runbook:
+- [x] publish a release runbook:
   - first install
   - first proof
   - promotion
   - rollback
   - disaster recovery
-- [ ] publish a troubleshooting guide:
+- [x] publish a troubleshooting guide:
   - webhook failures
   - provider pauses
   - queue stalls
   - worktree conflicts
   - model inventory problems
   - Feishu binding problems
-- [ ] publish a "what this is not" section so operators do not over-trust the tool
-- [ ] publish known limits for large changes, secrets work, permissions changes, and infrastructure work
-- [ ] publish a sample operator config for an external repo
-- [ ] publish a sample CI or automation integration that consumes machine-readable contracts
+- [x] publish a "what this is not" section so operators do not over-trust the tool
+- [x] publish known limits for large changes, secrets work, permissions changes, and infrastructure work
+- [x] publish a sample operator config for an external repo
+- [x] publish a sample CI or automation integration that consumes machine-readable contracts
 
 ## Phase 14: Security And Operational Hygiene
 
-- [ ] document secret handling expectations for operator hosts
-- [ ] document least-privilege GitHub token expectations
-- [ ] document least-privilege Feishu app expectations
+- [x] document secret handling expectations for operator hosts
+- [x] document least-privilege GitHub token expectations
+- [x] document least-privilege Feishu app expectations
 - [ ] document redaction expectations for stored workflow diagnostics
 - [ ] review saved run artifacts for accidental sensitive data leakage
 - [ ] review chat-surface status output for accidental sensitive data leakage

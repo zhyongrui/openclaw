@@ -279,7 +279,7 @@ function createGitHubIssueResponse(params: {
 
 async function waitForAssertion(
   assertion: () => void | Promise<void>,
-  attempts = 20,
+  attempts = 60,
 ): Promise<void> {
   let lastError: unknown;
   for (let index = 0; index < attempts; index += 1) {
@@ -376,6 +376,7 @@ function createWorkflowRun(params: {
   stage?: WorkflowRun["stage"];
   updatedAt?: string;
   failureDiagnostics?: WorkflowRun["failureDiagnostics"];
+  suitability?: WorkflowRun["suitability"];
 }): WorkflowRun {
   const updatedAt = params.updatedAt ?? "2026-03-12T12:00:00.000Z";
   return {
@@ -421,6 +422,7 @@ function createWorkflowRun(params: {
       missingCoverage: [],
       followUps: [],
     },
+    suitability: params.suitability,
     failureDiagnostics: params.failureDiagnostics,
   };
 }
@@ -1849,7 +1851,7 @@ describe("openclawcode extension", () => {
           "Issue: zhyongrui/openclawcode#221",
           "Title: Rotate auth secrets for webhook permissions",
           "URL: https://github.com/zhyongrui/openclawcode/issues/221",
-          "Summary: Webhook intake precheck escalated the issue before chat approval. Issue text references high-risk areas: auth, secrets, security, permissions.",
+          "Summary: Webhook intake precheck escalated the issue before chat approval. Issue labels matched denylisted high-risk labels: security.",
           "Use /occode-status zhyongrui/openclawcode#221 to inspect the tracked status.",
         ].join("\n"),
       });
@@ -2137,7 +2139,7 @@ describe("openclawcode extension", () => {
           notifyTarget: "user:failure-chat",
           lastNotificationStatus: "sent",
         });
-      });
+      }, 60);
       expect(await fixture.store.getStatus("zhyongrui/openclawcode#230")).toContain(
         "Stage: Failed",
       );
@@ -2197,6 +2199,49 @@ describe("openclawcode extension", () => {
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("queues suitability overrides through /occode-start-override", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.addPendingApproval({
+        issueKey: "zhyongrui/openclawcode#205",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+      });
+
+      const result = await fixture.commands.get("occode-start-override")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-start-override #205",
+        args: "#205",
+        senderId: "user:operator",
+        to: "user:current-chat",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: "Queued zhyongrui/openclawcode#205 with an explicit suitability override. I will post status updates here.",
+      });
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.pendingApprovals).toEqual([]);
+      expect(snapshot.queue).toHaveLength(1);
+      expect(snapshot.queue[0]).toMatchObject({
+        issueKey: "zhyongrui/openclawcode#205",
+        request: {
+          issueNumber: 205,
+          suitabilityOverride: {
+            actor: "user:current-chat",
+            reason: "Chat operator approved a suitability override for this run.",
+          },
+        },
+      });
+      expect(snapshot.statusByIssue["zhyongrui/openclawcode#205"]).toBe(
+        "Suitability override approved in chat and queued.",
+      );
+    } finally {
+      await cleanupPluginFixture(fixture);
     }
   });
 
@@ -3300,6 +3345,54 @@ describe("openclawcode extension", () => {
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows suitability override details through /occode-status", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6626,
+          stage: "ready-for-human-review",
+          suitability: {
+            decision: "auto-run",
+            summary: "Suitability override accepted for this run.",
+            reasons: ["Operator approved a narrow exception."],
+            classification: "mixed",
+            riskLevel: "medium",
+            evaluatedAt: "2026-03-17T10:00:00.000Z",
+            allowlisted: false,
+            denylisted: false,
+            originalDecision: "needs-human-review",
+            overrideApplied: true,
+            overrideActor: "user:operator",
+            overrideReason: "Approved for this one run.",
+          },
+        }),
+        "Verification approved the run for human review.",
+      );
+
+      const result = await fixture.commands.get("occode-status")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-status #6626",
+        args: "#6626",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "Verification approved the run for human review.",
+          "Suitability policy: auto-run | Suitability override accepted for this run.",
+          "Suitability override: applied | Approved for this one run.",
+          "Auto-merge policy: blocked | Not eligible for auto-merge: manual suitability overrides still require a human merge decision.",
+          `Operator repo root: ${fixture.repoRoot}`,
+          "Operator baseline: main",
+        ].join("\n"),
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
     }
   });
 

@@ -1,40 +1,11 @@
 import type {
-  IssueRef,
   RiskLevel,
   SuitabilityAssessment,
   SuitabilityDecision,
   WorkflowRun,
 } from "../contracts/index.js";
+import { collectSuitabilityPolicySignals } from "../policy.js";
 import { classifyIssueScope } from "./scope.js";
-
-const HIGH_RISK_SIGNALS: Array<{ name: string; patterns: string[] }> = [
-  { name: "auth", patterns: ["auth", "authentication", "oauth", "login", "sign-in", "signin"] },
-  { name: "secrets", patterns: ["secret", "credential", "password", "api key", "private key"] },
-  { name: "security", patterns: ["security", "vulnerability", "encryption", "decrypt"] },
-  { name: "migrations", patterns: ["migration", "schema", "database", "backfill"] },
-  { name: "billing", patterns: ["billing", "payment", "invoice", "subscription"] },
-  {
-    name: "permissions",
-    patterns: ["permission", "access control", "rbac", "authorization"],
-  },
-];
-
-function buildIssueText(issue: Pick<IssueRef, "title" | "body" | "labels">): string {
-  return [issue.title, issue.body ?? "", ...(issue.labels ?? [])].join("\n").toLowerCase();
-}
-
-export function collectIssueRiskSignals(
-  issue: Pick<IssueRef, "title" | "body" | "labels">,
-): string[] {
-  const text = buildIssueText(issue);
-  const matches: string[] = [];
-  for (const signal of HIGH_RISK_SIGNALS) {
-    if (signal.patterns.some((pattern) => text.includes(pattern))) {
-      matches.push(signal.name);
-    }
-  }
-  return matches;
-}
 
 function buildAcceptedReasons(riskLevel: RiskLevel): string[] {
   return [
@@ -55,20 +26,38 @@ function buildSummary(decision: SuitabilityDecision, reasons: string[]): string 
   return `Suitability escalated the issue before branch mutation. ${detail}`;
 }
 
+export interface SuitabilityOverrideRequest {
+  actor?: string;
+  reason?: string;
+}
+
 export function assessIssueSuitability(
   run: WorkflowRun,
   evaluatedAt: string,
+  options?: {
+    override?: SuitabilityOverrideRequest;
+  },
 ): SuitabilityAssessment {
   const classification = classifyIssueScope(run);
   const riskLevel = run.executionSpec?.riskLevel ?? "medium";
-  const riskSignals = collectIssueRiskSignals(run.issue);
+  const policySignals = collectSuitabilityPolicySignals(run.issue);
   const reasons: string[] = [];
 
   if (riskLevel === "high") {
     reasons.push("Planner marked this issue as high risk.");
   }
-  if (riskSignals.length > 0) {
-    reasons.push(`Issue text references high-risk areas: ${riskSignals.join(", ")}.`);
+  if (policySignals.matchedHighRiskLabels.length > 0) {
+    reasons.push(
+      `Issue labels matched denylisted high-risk labels: ${policySignals.matchedHighRiskLabels.join(", ")}.`,
+    );
+  }
+  if (policySignals.matchedHighRiskKeywords.length > 0) {
+    reasons.push(
+      `Issue text references high-risk areas: ${policySignals.matchedHighRiskKeywords.join(", ")}.`,
+    );
+  }
+  if (policySignals.allowlisted) {
+    reasons.push("Issue matched the low-risk allowlist used for autonomous execution review.");
   }
   if ((run.executionSpec?.openQuestions.length ?? 0) > 0) {
     reasons.push("Planner left open questions that still need human confirmation.");
@@ -83,7 +72,7 @@ export function assessIssueSuitability(
   }
 
   let decision: SuitabilityDecision;
-  if (riskLevel === "high" || riskSignals.length > 0) {
+  if (riskLevel === "high" || policySignals.denylisted) {
     decision = "escalate";
   } else if (
     classification !== "command-layer" ||
@@ -95,13 +84,45 @@ export function assessIssueSuitability(
     decision = "auto-run";
   }
 
-  const normalizedReasons = decision === "auto-run" ? buildAcceptedReasons(riskLevel) : reasons;
+  const normalizedReasons =
+    decision === "auto-run"
+      ? [
+          ...buildAcceptedReasons(riskLevel),
+          ...(policySignals.allowlisted
+            ? ["Issue matched the low-risk allowlist used for autonomous execution review."]
+            : []),
+        ]
+      : reasons;
+  const overrideApplied = Boolean(options?.override && decision !== "auto-run");
+  const effectiveDecision = overrideApplied ? "auto-run" : decision;
+  const summary = overrideApplied
+    ? [
+        "Suitability override accepted for this run.",
+        `Original decision: ${decision}.`,
+        buildSummary(decision, normalizedReasons),
+        options?.override?.reason?.trim()
+          ? `Override reason: ${options.override.reason.trim()}`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : buildSummary(effectiveDecision, normalizedReasons);
   return {
-    decision,
-    summary: buildSummary(decision, normalizedReasons),
+    decision: effectiveDecision,
+    summary,
     reasons: normalizedReasons,
     classification,
     riskLevel,
     evaluatedAt,
+    allowlisted: policySignals.allowlisted,
+    denylisted: policySignals.denylisted,
+    matchedLowRiskLabels: policySignals.matchedLowRiskLabels,
+    matchedLowRiskKeywords: policySignals.matchedLowRiskKeywords,
+    matchedHighRiskLabels: policySignals.matchedHighRiskLabels,
+    matchedHighRiskKeywords: policySignals.matchedHighRiskKeywords,
+    originalDecision: overrideApplied ? decision : undefined,
+    overrideApplied,
+    overrideActor: options?.override?.actor?.trim() || undefined,
+    overrideReason: options?.override?.reason?.trim() || undefined,
   };
 }

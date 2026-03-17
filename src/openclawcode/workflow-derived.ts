@@ -34,6 +34,14 @@ export function resolveAutoMergePolicy(run: WorkflowRun): {
     };
   }
 
+  if (run.suitability?.overrideApplied) {
+    return {
+      autoMergePolicyEligible: false,
+      autoMergePolicyReason:
+        "Not eligible for auto-merge: manual suitability overrides still require a human merge decision.",
+    };
+  }
+
   if (run.buildResult?.issueClassification !== "command-layer") {
     return {
       autoMergePolicyEligible: false,
@@ -46,6 +54,30 @@ export function resolveAutoMergePolicy(run: WorkflowRun): {
     return {
       autoMergePolicyEligible: false,
       autoMergePolicyReason: "Not eligible for auto-merge: the scope check did not pass.",
+    };
+  }
+
+  if (run.buildResult?.policySignals?.generatedFiles.length) {
+    return {
+      autoMergePolicyEligible: false,
+      autoMergePolicyReason:
+        "Not eligible for auto-merge: generated files were changed and require explicit human review.",
+    };
+  }
+
+  if (run.buildResult?.policySignals?.largeDiff) {
+    return {
+      autoMergePolicyEligible: false,
+      autoMergePolicyReason:
+        "Not eligible for auto-merge: the changed-line budget exceeded the large-diff threshold.",
+    };
+  }
+
+  if (run.buildResult?.policySignals?.broadFanOut) {
+    return {
+      autoMergePolicyEligible: false,
+      autoMergePolicyReason:
+        "Not eligible for auto-merge: the change set touched too many files or directories.",
     };
   }
 

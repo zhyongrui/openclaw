@@ -655,3 +655,9 @@ The major remaining work is the missing upstream control plane:
 - discovery
 - provider-role routing
 - stage-level human handoff
+
+Recent repo-local closures that now reduce that gap:
+
+- explicit policy and guardrail snapshot via `openclaw code policy-show --json`
+- documented support matrix, release runbook, troubleshooting, and fresh-host install path
+- repo-local suitability override flow and machine-readable build guardrails

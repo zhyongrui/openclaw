@@ -92,6 +92,11 @@ export interface OpenClawCodeIssueStatusSnapshot {
   rerunRequestedVerifierAgentId?: string;
   suitabilityDecision?: SuitabilityDecision;
   suitabilitySummary?: string;
+  suitabilityAllowlisted?: boolean;
+  suitabilityDenylisted?: boolean;
+  suitabilityOverrideApplied?: boolean;
+  suitabilityOverrideActor?: string;
+  suitabilityOverrideReason?: string;
   autoMergePolicyEligible?: boolean;
   autoMergePolicyReason?: string;
   autoMergeDisposition?: "merged" | "skipped" | "failed";
@@ -356,6 +361,26 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
         : undefined,
     suitabilitySummary:
       typeof candidate.suitabilitySummary === "string" ? candidate.suitabilitySummary : undefined,
+    suitabilityAllowlisted:
+      typeof candidate.suitabilityAllowlisted === "boolean"
+        ? candidate.suitabilityAllowlisted
+        : undefined,
+    suitabilityDenylisted:
+      typeof candidate.suitabilityDenylisted === "boolean"
+        ? candidate.suitabilityDenylisted
+        : undefined,
+    suitabilityOverrideApplied:
+      typeof candidate.suitabilityOverrideApplied === "boolean"
+        ? candidate.suitabilityOverrideApplied
+        : undefined,
+    suitabilityOverrideActor:
+      typeof candidate.suitabilityOverrideActor === "string"
+        ? candidate.suitabilityOverrideActor
+        : undefined,
+    suitabilityOverrideReason:
+      typeof candidate.suitabilityOverrideReason === "string"
+        ? candidate.suitabilityOverrideReason
+        : undefined,
     autoMergePolicyEligible:
       typeof candidate.autoMergePolicyEligible === "boolean"
         ? candidate.autoMergePolicyEligible
@@ -595,6 +620,11 @@ function buildStatusSnapshot(params: {
     rerunRequestedVerifierAgentId: params.run.rerunContext?.requestedVerifierAgentId,
     suitabilityDecision: params.run.suitability?.decision,
     suitabilitySummary: params.run.suitability?.summary,
+    suitabilityAllowlisted: params.run.suitability?.allowlisted,
+    suitabilityDenylisted: params.run.suitability?.denylisted,
+    suitabilityOverrideApplied: params.run.suitability?.overrideApplied,
+    suitabilityOverrideActor: params.run.suitability?.overrideActor,
+    suitabilityOverrideReason: params.run.suitability?.overrideReason,
     autoMergePolicyEligible: autoMergePolicy.autoMergePolicyEligible,
     autoMergePolicyReason: autoMergePolicy.autoMergePolicyReason,
     autoMergeDisposition: autoMergeDisposition.autoMergeDisposition ?? undefined,

@@ -84,6 +84,15 @@ those nested objects.
 - `changedFilesPresent`
 - `changedFileListStable`
 - `changedFileCount`
+- `buildPolicySignals`
+- `buildPolicySignalsPresent`
+- `buildChangedLineCount`
+- `buildChangedDirectoryCount`
+- `buildBroadFanOut`
+- `buildLargeDiff`
+- `buildGeneratedFilesPresent`
+- `buildGeneratedFiles`
+- `buildGeneratedFileCount`
 - `changeDisposition`
 - `changeDispositionReason`
 - `issueClassification`
@@ -170,6 +179,10 @@ those nested objects.
 - `suitabilityClassification`
 - `suitabilityRiskLevel`
 - `suitabilityEvaluatedAt`
+- `suitabilityAllowlisted`
+- `suitabilityDenylisted`
+- `suitabilityOverrideApplied`
+- `suitabilityOriginalDecision`
 
 ### Planning Metadata
 

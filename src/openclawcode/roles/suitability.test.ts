@@ -56,10 +56,21 @@ describe("assessIssueSuitability", () => {
         "Issue stays within command-layer scope.",
         "Planner risk level is medium.",
         "No high-risk issue signals were detected in the issue text or labels.",
+        "Issue matched the low-risk allowlist used for autonomous execution review.",
       ],
       classification: "command-layer",
       riskLevel: "medium",
       evaluatedAt: "2026-03-12T07:01:00.000Z",
+      allowlisted: true,
+      denylisted: false,
+      matchedLowRiskLabels: [],
+      matchedLowRiskKeywords: ["openclaw code run", "--json", "cli"],
+      matchedHighRiskLabels: [],
+      matchedHighRiskKeywords: [],
+      originalDecision: undefined,
+      overrideApplied: false,
+      overrideActor: undefined,
+      overrideReason: undefined,
     });
   });
 
@@ -138,9 +149,64 @@ describe("assessIssueSuitability", () => {
 
     expect(result.decision).toBe("escalate");
     expect(result.reasons).toContain("Planner marked this issue as high risk.");
-    expect(result.reasons).toContain(
-      "Issue text references high-risk areas: auth, secrets, security, permissions.",
-    );
+    expect(result.denylisted).toBe(true);
+    expect(result.matchedHighRiskLabels).toEqual(["security"]);
+    expect(result.matchedHighRiskKeywords).toEqual([
+      "auth",
+      "authentication",
+      "secret",
+      "security",
+      "permission",
+    ]);
+    expect(result.reasons).toContain("Issue labels matched denylisted high-risk labels: security.");
     expect(result.summary).toContain("Suitability escalated the issue before branch mutation.");
+  });
+
+  it("records denylisted keyword-only matches even without denylisted labels", () => {
+    const run: WorkflowRun = {
+      ...createRun(),
+      issue: {
+        ...createRun().issue,
+        title: "Document database backfill workflow",
+        body: "Explain the schema backfill path and the database migration steps.",
+        labels: ["docs"],
+      },
+    };
+
+    const result = assessIssueSuitability(run, "2026-03-12T07:01:00.000Z");
+
+    expect(result.decision).toBe("escalate");
+    expect(result.allowlisted).toBe(true);
+    expect(result.denylisted).toBe(true);
+    expect(result.matchedHighRiskLabels).toEqual([]);
+    expect(result.matchedHighRiskKeywords).toEqual(["migration", "schema", "database", "backfill"]);
+  });
+
+  it("allows an operator override to promote a blocked issue into auto-run", () => {
+    const run: WorkflowRun = {
+      ...createRun(),
+      issue: {
+        ...createRun().issue,
+        title: "Expose orchestrator retry metadata in openclaw code run --json output",
+        body: [
+          "Update the CLI output and workflow persistence so retry metadata is visible.",
+          "This also requires orchestrator resume behavior and stored run record updates.",
+        ].join(" "),
+      },
+    };
+
+    const result = assessIssueSuitability(run, "2026-03-12T07:01:00.000Z", {
+      override: {
+        actor: "chat:operator",
+        reason: "Operator approved this narrow exception.",
+      },
+    });
+
+    expect(result.decision).toBe("auto-run");
+    expect(result.originalDecision).toBe("needs-human-review");
+    expect(result.overrideApplied).toBe(true);
+    expect(result.overrideActor).toBe("chat:operator");
+    expect(result.overrideReason).toBe("Operator approved this narrow exception.");
+    expect(result.summary).toContain("Suitability override accepted for this run.");
   });
 });

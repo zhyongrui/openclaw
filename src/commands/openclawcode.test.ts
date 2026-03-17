@@ -12,6 +12,7 @@ import {
   DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS,
   DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS,
   openclawCodeBlueprintInitCommand,
+  openclawCodePolicyShowCommand,
   openclawCodeOperatorStatusSnapshotShowCommand,
   openclawCodeBlueprintSetSectionCommand,
   openclawCodeBlueprintSetProviderRoleCommand,
@@ -193,6 +194,14 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.changedFilesPresent).toBe(true);
     expect(payload.changedFileListStable).toBe(true);
     expect(payload.changedFileCount).toBe(2);
+    expect(payload.buildPolicySignalsPresent).toBe(true);
+    expect(payload.buildChangedLineCount).toBe(24);
+    expect(payload.buildChangedDirectoryCount).toBe(2);
+    expect(payload.buildBroadFanOut).toBe(false);
+    expect(payload.buildLargeDiff).toBe(false);
+    expect(payload.buildGeneratedFilesPresent).toBe(false);
+    expect(payload.buildGeneratedFiles).toEqual([]);
+    expect(payload.buildGeneratedFileCount).toBe(0);
     expect(payload.changeDisposition).toBe("modified");
     expect(payload.changeDispositionReason).toBe("Run produced 2 changed file(s).");
     expect(payload.buildResult.changedFiles).toEqual(payload.changedFiles);
@@ -272,6 +281,10 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.suitabilityClassification).toBe("command-layer");
     expect(payload.suitabilityRiskLevel).toBe("medium");
     expect(payload.suitabilityEvaluatedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(payload.suitabilityAllowlisted).toBe(true);
+    expect(payload.suitabilityDenylisted).toBe(false);
+    expect(payload.suitabilityOverrideApplied).toBe(false);
+    expect(payload.suitabilityOriginalDecision).toBeNull();
     expect(payload.acceptanceCriteriaPresent).toBe(false);
     expect(payload.openQuestionsPresent).toBe(false);
     expect(payload.risksPresent).toBe(false);
@@ -402,6 +415,29 @@ describe("openclawCodeRunCommand", () => {
     ).rejects.toThrow("OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS must be a positive integer when set.");
 
     expect(mocks.runIssueWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("forwards suitability override metadata into workflow runs", async () => {
+    await openclawCodeRunCommand(
+      {
+        issue: "2",
+        repoRoot: "/repo",
+        json: true,
+        suitabilityOverrideActor: "chat:operator",
+        suitabilityOverrideReason: "Operator approved this exception.",
+      },
+      runtime,
+    );
+
+    expect(mocks.runIssueWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        suitabilityOverride: {
+          actor: "chat:operator",
+          reason: "Operator approved this exception.",
+        },
+      }),
+      expect.anything(),
+    );
   });
 
   it("prints empty top-level scope fields and blocks auto-merge when workflow data is missing", async () => {
@@ -3430,6 +3466,25 @@ describe("openclawCodeRunCommand", () => {
   });
 });
 
+describe("openclawCodePolicyShowCommand", () => {
+  const runtime = createTestRuntime();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("prints a machine-readable policy snapshot", async () => {
+    await openclawCodePolicyShowCommand({ json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.contractVersion).toBe(1);
+    expect(payload.suitability.lowRiskLabels).toContain("json");
+    expect(payload.suitability.highRiskLabels).toContain("security");
+    expect(payload.buildGuardrails.largeDiffLineThreshold).toBe(300);
+    expect(payload.providerFailureHandling.autoPauseClasses).toContain("provider-internal-error");
+  });
+});
+
 async function createValidationAssessmentRepoRoot(params: { fieldName: string }): Promise<string> {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-validation-"));
   await mkdir(path.join(repoRoot, "src/commands"), { recursive: true });
@@ -3608,6 +3663,13 @@ function createRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
       branchName: "openclawcode/issue-2",
       summary: "Updated JSON output",
       changedFiles: ["src/openclawcode/app/run-issue.ts", "src/openclawcode/contracts/types.ts"],
+      policySignals: {
+        changedLineCount: 24,
+        changedDirectoryCount: 2,
+        broadFanOut: false,
+        largeDiff: false,
+        generatedFiles: [],
+      },
       issueClassification: "command-layer",
       scopeCheck: {
         ok: true,
@@ -3630,6 +3692,9 @@ function createRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
       classification: "command-layer",
       riskLevel: "medium",
       evaluatedAt: "2026-01-01T00:00:00.000Z",
+      allowlisted: true,
+      denylisted: false,
+      overrideApplied: false,
     },
     blueprintContext: {
       path: "/repo/PROJECT-BLUEPRINT.md",

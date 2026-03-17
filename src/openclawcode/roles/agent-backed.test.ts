@@ -156,6 +156,29 @@ describe("AgentBackedBuilder prompt", () => {
     expect(prompt).toContain("- docs/openclawcode/openclaw-plugin-integration.md");
     expect(prompt).not.toContain("- docs/openclawcode/plugin-integration.md");
   });
+
+  it("deduplicates repeated explicit path hints to keep large-worktree prompts compact", () => {
+    const prompt = __testing.buildBuilderPrompt(
+      {
+        ...createRun(),
+        issue: {
+          ...createRun().issue,
+          number: 44,
+          title: "Keep builder hints narrow in a large repo",
+          body: [
+            "Summary",
+            "Focus on `src/commands/openclawcode.ts`, `src/commands/openclawcode.ts`, and `src/commands/openclawcode.test.ts`.",
+            "Do not scan the whole repo when `src/commands/openclawcode.ts` is already the target.",
+          ].join("\n"),
+        },
+      },
+      ["pnpm exec vitest run src/commands/openclawcode.test.ts --pool threads"],
+    );
+
+    expect(prompt.match(/- src\/commands\/openclawcode\.ts/g)).toHaveLength(1);
+    expect(prompt.match(/- src\/commands\/openclawcode\.test\.ts/g)).toHaveLength(1);
+    expect(prompt).toContain("Avoid broad scans such as `rg ... .`");
+  });
 });
 
 describe("AgentBacked transient retry timing", () => {
@@ -191,6 +214,42 @@ describe("AgentBacked transient retry timing", () => {
         delayMs: 1_000,
       }),
     ).toBe(2_000);
+  });
+});
+
+describe("AgentBacked build policy guardrails", () => {
+  it("derives broad fan-out, large diff, and generated-file signals", () => {
+    const signals = __testing.deriveBuildPolicySignals({
+      changedFiles: [
+        "src/commands/openclawcode.ts",
+        "src/openclawcode/app/run-issue.ts",
+        "src/openclawcode/contracts/types.ts",
+        "src/openclawcode/roles/suitability.ts",
+        "docs/openclawcode/README.md",
+        "docs/openclawcode/policy.md",
+        "generated/openclawcode/output.gen.ts",
+        "scripts/openclawcode-setup-check.sh",
+      ],
+      changedLineCount: 420,
+    });
+
+    expect(signals.changedLineCount).toBe(420);
+    expect(signals.changedDirectoryCount).toBe(7);
+    expect(signals.broadFanOut).toBe(true);
+    expect(signals.largeDiff).toBe(true);
+    expect(signals.generatedFiles).toEqual(["generated/openclawcode/output.gen.ts"]);
+  });
+
+  it("keeps narrow command-layer changes below the guardrail thresholds", () => {
+    const signals = __testing.deriveBuildPolicySignals({
+      changedFiles: ["src/commands/openclawcode.ts", "src/commands/openclawcode.test.ts"],
+      changedLineCount: 24,
+    });
+
+    expect(signals.changedDirectoryCount).toBe(1);
+    expect(signals.broadFanOut).toBe(false);
+    expect(signals.largeDiff).toBe(false);
+    expect(signals.generatedFiles).toEqual([]);
   });
 });
 

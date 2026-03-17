@@ -299,7 +299,8 @@ describe("openclaw plugin integration helpers", () => {
     });
     expect(decision.precheck?.summary).toContain("Webhook intake precheck escalated");
     expect(decision.precheck?.reasons).toEqual([
-      "Issue text references high-risk areas: auth, secrets, security, permissions.",
+      "Issue labels matched denylisted high-risk labels: security.",
+      "Issue text references high-risk areas: auth, authentication, secret, security, permission.",
     ]);
   });
 

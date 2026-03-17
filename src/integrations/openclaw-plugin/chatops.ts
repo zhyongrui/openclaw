@@ -6,7 +6,7 @@ import type {
   WorkflowRerunContext,
   WorkflowRun,
 } from "../../openclawcode/contracts/index.js";
-import { collectIssueRiskSignals } from "../../openclawcode/roles/index.js";
+import { collectSuitabilityPolicySignals } from "../../openclawcode/policy.js";
 
 const SUPPORTED_ISSUE_ACTIONS = new Set(["opened", "reopened", "labeled"]);
 
@@ -106,6 +106,10 @@ export interface OpenClawCodeChatopsRunRequest {
   testCommands: string[];
   openPullRequest: boolean;
   mergeOnApprove: boolean;
+  suitabilityOverride?: {
+    actor?: string;
+    reason?: string;
+  };
   rerunContext?: WorkflowRerunContext;
 }
 
@@ -324,9 +328,21 @@ export function decideIssueWebhookIntake(params: {
     labels,
   };
 
-  const riskSignals = collectIssueRiskSignals(issue);
-  if (riskSignals.length > 0) {
-    const reason = `Issue text references high-risk areas: ${riskSignals.join(", ")}.`;
+  const policySignals = collectSuitabilityPolicySignals(issue);
+  if (policySignals.denylisted) {
+    const reasons = [
+      ...(policySignals.matchedHighRiskLabels.length > 0
+        ? [
+            `Issue labels matched denylisted high-risk labels: ${policySignals.matchedHighRiskLabels.join(", ")}.`,
+          ]
+        : []),
+      ...(policySignals.matchedHighRiskKeywords.length > 0
+        ? [
+            `Issue text references high-risk areas: ${policySignals.matchedHighRiskKeywords.join(", ")}.`,
+          ]
+        : []),
+    ];
+    const reason = reasons[0] ?? "Issue matched the denylisted high-risk suitability policy.";
     return {
       accept: true,
       reason: "Issue requires escalation before approval or auto-run.",
@@ -334,7 +350,7 @@ export function decideIssueWebhookIntake(params: {
       precheck: {
         decision: "escalate",
         summary: `Webhook intake precheck escalated the issue before chat approval. ${reason}`,
-        reasons: [reason],
+        reasons,
       },
     };
   }
@@ -557,6 +573,10 @@ function defaultBranchName(issueNumber: number): string {
 export function buildRunRequestFromCommand(params: {
   command: OpenClawCodeChatopsCommand;
   config: OpenClawCodeChatopsRepoConfig;
+  suitabilityOverride?: {
+    actor?: string;
+    reason?: string;
+  };
   rerunContext?: WorkflowRerunContext;
   runtimeAgentOverrides?: {
     coderAgentId?: string;
@@ -583,6 +603,12 @@ export function buildRunRequestFromCommand(params: {
     testCommands: [...config.testCommands],
     openPullRequest: config.openPullRequest !== false,
     mergeOnApprove: config.mergeOnApprove === true,
+    suitabilityOverride: params.suitabilityOverride
+      ? {
+          actor: params.suitabilityOverride.actor?.trim() || undefined,
+          reason: params.suitabilityOverride.reason?.trim() || undefined,
+        }
+      : undefined,
     rerunContext: params.rerunContext
       ? {
           ...params.rerunContext,
@@ -630,6 +656,12 @@ export function buildOpenClawCodeRunArgv(request: OpenClawCodeChatopsRunRequest)
   }
   if (request.mergeOnApprove) {
     argv.push("--merge-on-approve");
+  }
+  if (request.suitabilityOverride?.actor) {
+    argv.push("--suitability-override-actor", request.suitabilityOverride.actor);
+  }
+  if (request.suitabilityOverride?.reason) {
+    argv.push("--suitability-override-reason", request.suitabilityOverride.reason);
   }
   if (request.rerunContext?.priorRunId) {
     argv.push("--rerun-prior-run-id", request.rerunContext.priorRunId);

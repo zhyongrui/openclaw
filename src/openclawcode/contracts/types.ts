@@ -50,12 +50,31 @@ export interface SuitabilityAssessment {
   classification: IssueImplementationScope;
   riskLevel: RiskLevel;
   evaluatedAt: string;
+  allowlisted?: boolean;
+  denylisted?: boolean;
+  matchedLowRiskLabels?: string[];
+  matchedLowRiskKeywords?: string[];
+  matchedHighRiskLabels?: string[];
+  matchedHighRiskKeywords?: string[];
+  originalDecision?: SuitabilityDecision;
+  overrideApplied?: boolean;
+  overrideActor?: string;
+  overrideReason?: string;
+}
+
+export interface BuildPolicySignals {
+  changedLineCount: number;
+  changedDirectoryCount: number;
+  broadFanOut: boolean;
+  largeDiff: boolean;
+  generatedFiles: string[];
 }
 
 export interface BuildResult {
   branchName: string;
   summary: string;
   changedFiles: string[];
+  policySignals?: BuildPolicySignals;
   issueClassification?: IssueImplementationScope;
   scopeCheck?: {
     ok: boolean;

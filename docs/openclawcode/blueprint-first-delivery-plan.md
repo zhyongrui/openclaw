@@ -254,6 +254,11 @@ Current foothold:
   - `openclaw code operator-status-snapshot-show --json` exposes a stable
     contract for the queue, bindings, tracked issue snapshots, and repo-level
     chat status summaries
+- the policy/productization slice now also has a stable repo-local surface:
+  - `openclaw code policy-show --json`
+  - explicit suitability allowlist / denylist rules
+  - explicit build guardrails for large diffs, broad fan-out, and generated files
+  - suitability override persistence in runs and operator snapshots
 
 ### Phase B7: Proofs And Productization
 

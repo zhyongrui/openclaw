@@ -2314,3 +2314,44 @@ This does not yet complete the whole handoff story:
 
 - provider switching mid-run is still missing
 - promotion override and release receipts are still missing
+
+## 2026-03-17 Policy And Operator-Docs Hardening
+
+The next repo-local productization slice is now in place:
+
+- stable policy source:
+  - `src/openclawcode/policy.ts`
+  - `openclaw code policy-show --json`
+  - `docs/openclawcode/policy.md`
+  - `docs/openclawcode/policy-contract.md`
+- suitability policy now has:
+  - an explicit low-risk allowlist
+  - an explicit high-risk denylist
+  - operator-driven suitability overrides
+  - persisted override metadata in workflow runs and operator snapshots
+- build policy now has explicit guardrails for:
+  - changed-line budget
+  - broad file / directory fan-out
+  - generated-file changes
+- guarded auto-merge now blocks:
+  - suitability overrides
+  - generated-file changes
+  - large diffs
+  - broad fan-out
+- `openclaw code run --json` now mirrors the new policy state directly at the
+  top level
+- release-facing docs now exist for:
+  - support matrix
+  - fresh-host install
+  - upgrade and rotation
+  - release runbook
+  - troubleshooting
+  - proof matrix
+  - sample operator config
+  - sample automation integration
+
+This closes a large local-code/local-doc gap, but not the external proof gap:
+
+- live fallback proof is still pending
+- fresh-host external install proof is still pending
+- blueprint-first live proof is still pending

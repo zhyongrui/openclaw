@@ -13,6 +13,7 @@ import {
   openclawCodeDiscoverWorkItemsCommand,
   openclawCodeListValidationIssuesCommand,
   openclawCodeOperatorStatusSnapshotShowCommand,
+  openclawCodePolicyShowCommand,
   openclawCodePromotionGateRefreshCommand,
   openclawCodePromotionGateShowCommand,
   openclawCodePromotionReceiptRecordCommand,
@@ -115,6 +116,10 @@ ${formatHelpExamples([
   [
     "openclaw code operator-status-snapshot-show --json",
     "Inspect the stable machine-readable operator state snapshot behind chat-visible status.",
+  ],
+  [
+    "openclaw code policy-show --json",
+    "Inspect the stable machine-readable suitability, guardrail, and provider-pause policy surface.",
   ],
   [
     'openclaw code stage-gates-decide --gate execution-start --decision approved --note "Proceed with autonomous execution" --json',
@@ -605,6 +610,21 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     });
 
   code
+    .command("policy-show")
+    .description("Show the stable machine-readable openclawcode policy surface")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodePolicyShowCommand(
+          {
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
     .command("run")
     .description("Execute the openclawcode workflow for a GitHub issue")
     .requiredOption("--issue <number>", "GitHub issue number")
@@ -635,6 +655,11 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .option("--rerun-review-url <url>", "URL for the latest GitHub review")
     .option("--rerun-coder-agent <id>", "Requested coder agent id for this rerun")
     .option("--rerun-verifier-agent <id>", "Requested verifier agent id for this rerun")
+    .option(
+      "--suitability-override-actor <actor>",
+      "Actor recording a structured suitability override",
+    )
+    .option("--suitability-override-reason <text>", "Reason for a structured suitability override")
     .option("--json", "Output JSON", false)
     .action(async (opts) => {
       await runCommandWithRuntime(defaultRuntime, async () => {
@@ -677,6 +702,8 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             rerunReviewUrl: opts.rerunReviewUrl as string | undefined,
             rerunRequestedCoderAgentId: opts.rerunCoderAgent as string | undefined,
             rerunRequestedVerifierAgentId: opts.rerunVerifierAgent as string | undefined,
+            suitabilityOverrideActor: opts.suitabilityOverrideActor as string | undefined,
+            suitabilityOverrideReason: opts.suitabilityOverrideReason as string | undefined,
             json: Boolean(opts.json),
           },
           defaultRuntime,

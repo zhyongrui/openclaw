@@ -753,7 +753,7 @@ If a new session starts cold, it should read:
 As of this revision:
 
 - active engineering branch:
-  - `main`
+  - `sync/upstream-2026-03-17`
 - current live-ops baseline after the promotion:
   - the documented repo-local gateway entrypoint now binds
     `127.0.0.1:18789` again when run on Node `>=22.16.0`
@@ -766,16 +766,12 @@ As of this revision:
     `OPENCLAWCODE_SETUP_NODE_BIN` and bounds direct CLI probes so setup
     diagnostics no longer hang indefinitely on a bad runtime
 - next planned slice after the current one:
-  - debug why the real `~/.openclaw` operator environment can still stall
-    before the listener appears, even though the generic built entrypoint is
-    healthy on `main`
-  - start with the now-isolated plugin signal:
-    - `openclawcode-disabled` boots cleanly under the real config
-    - `feishu-disabled` while keeping `openclawcode` enabled stalls before the
-      listener
-  - restart the long-lived Feishu operator on the repaired build
-  - run one more low-risk merged proof, one no-op completion proof, and one
-    blocked or escalated proof on `main`
+  - finish the remaining live/operator proofs on the latest sync branch:
+    - fresh-host external install proof
+    - fallback-model proof
+    - blueprint-first end-to-end proof
+  - keep policy, support docs, and machine-readable contracts aligned while
+    those live proofs land
 
 Fresh proof result carried forward:
 

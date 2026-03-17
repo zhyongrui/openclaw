@@ -7,6 +7,7 @@ import type {
   WorkflowRun,
   WorkflowRuntimeRoleSelection,
 } from "../contracts/index.js";
+import { deriveBuildPolicySignals } from "../policy.js";
 import type { AgentRunner, ShellRunner } from "../runtime/index.js";
 import type { Builder, Verifier } from "./interfaces.js";
 import { buildScopeGuardrail, checkBuildScope } from "./scope.js";
@@ -428,6 +429,34 @@ async function findUnexpectedlyEmptyTrackedFiles(
   return offenders;
 }
 
+async function readChangedLineCount(
+  workspaceDir: string,
+  shellRunner: ShellRunner,
+  changedFiles: string[],
+): Promise<number> {
+  if (changedFiles.length === 0) {
+    return 0;
+  }
+  const pathArgs = changedFiles.map((entry) => JSON.stringify(entry)).join(" ");
+  const result = await shellRunner.run({
+    cwd: workspaceDir,
+    command: `git diff --numstat -- ${pathArgs}`,
+  });
+  if (result.code !== 0) {
+    throw new Error(result.stderr || "Failed to inspect changed line counts");
+  }
+  return result.stdout
+    .split("\n")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .reduce((total, line) => {
+      const [added, removed] = line.split("\t");
+      const nextTotal =
+        (Number.parseInt(added ?? "", 10) || 0) + (Number.parseInt(removed ?? "", 10) || 0);
+      return total + nextTotal;
+    }, 0);
+}
+
 function formatUnexpectedEmptyTrackedFilesError(paths: string[]): string {
   return [
     "Builder workspace integrity check failed: existing tracked file(s) became empty in the isolated worktree.",
@@ -547,6 +576,15 @@ export class AgentBackedBuilder implements Builder {
     if (!scopeCheck.ok) {
       throw new Error(scopeCheck.summary);
     }
+    const changedLineCount = await readChangedLineCount(
+      run.workspace.worktreePath,
+      this.options.shellRunner,
+      changedFiles,
+    );
+    const policySignals = deriveBuildPolicySignals({
+      changedFiles,
+      changedLineCount,
+    });
 
     const testResults: string[] = [];
     for (const command of this.options.testCommands) {
@@ -578,6 +616,7 @@ export class AgentBackedBuilder implements Builder {
       summary:
         result.text || `Implemented issue #${run.issue.number} in ${run.workspace.worktreePath}.`,
       changedFiles,
+      policySignals,
       issueClassification: scopeCheck.classification,
       scopeCheck: {
         ok: scopeCheck.ok,
@@ -590,6 +629,13 @@ export class AgentBackedBuilder implements Builder {
         `Workspace: ${run.workspace.worktreePath}`,
         `Issue classification: ${scopeCheck.classification}`,
         scopeCheck.summary,
+        `Changed lines: ${policySignals.changedLineCount}`,
+        `Changed directories: ${policySignals.changedDirectoryCount}`,
+        `Broad fan-out: ${policySignals.broadFanOut ? "yes" : "no"}`,
+        `Large diff: ${policySignals.largeDiff ? "yes" : "no"}`,
+        ...(policySignals.generatedFiles.length > 0
+          ? [`Generated files: ${policySignals.generatedFiles.join(", ")}`]
+          : []),
       ],
     };
   }
@@ -632,6 +678,7 @@ export const __testing = {
   buildBuilderPrompt,
   buildVerifierPrompt,
   deriveRuntimeRoleSelection,
+  deriveBuildPolicySignals,
   isRetryableAgentFailure,
   resolveTransientRetryDelayMs,
 };

@@ -58,6 +58,7 @@ import {
   writeProjectRollbackSuggestionArtifact,
   writeProjectRoleRoutingPlan,
   writeProjectWorkItemInventory,
+  buildOpenClawCodePolicySnapshot,
   resolveAutoMergeDisposition,
   resolveAutoMergePolicy,
   type OpenClawCodeOperatorStatusSnapshot,
@@ -87,6 +88,8 @@ export interface OpenClawCodeRunOpts {
   rerunReviewUrl?: string;
   rerunRequestedCoderAgentId?: string;
   rerunRequestedVerifierAgentId?: string;
+  suitabilityOverrideActor?: string;
+  suitabilityOverrideReason?: string;
   json?: boolean;
 }
 
@@ -254,6 +257,10 @@ export interface OpenClawCodeRollbackReceiptShowOpts {
 
 export interface OpenClawCodeOperatorStatusSnapshotShowOpts {
   stateDir?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodePolicyShowOpts {
   json?: boolean;
 }
 
@@ -683,6 +690,28 @@ function logOpenClawCodeOperatorStatusSnapshot(params: {
   }
 }
 
+function logOpenClawCodePolicySnapshot(params: { runtime: RuntimeEnv; json?: boolean }): void {
+  const snapshot = buildOpenClawCodePolicySnapshot();
+  if (params.json) {
+    params.runtime.log(JSON.stringify(snapshot, null, 2));
+    return;
+  }
+
+  params.runtime.log(`Policy contract version: ${snapshot.contractVersion}`);
+  params.runtime.log(
+    `Suitability allowlist labels: ${snapshot.suitability.lowRiskLabels.join(", ")}`,
+  );
+  params.runtime.log(
+    `Suitability denylist labels: ${snapshot.suitability.highRiskLabels.join(", ")}`,
+  );
+  params.runtime.log(
+    `Build guardrails: lines>=${snapshot.buildGuardrails.largeDiffLineThreshold}, files>=${snapshot.buildGuardrails.largeDiffFileThreshold}, fan-out files>=${snapshot.buildGuardrails.broadFanOutFileThreshold}, dirs>=${snapshot.buildGuardrails.broadFanOutDirectoryThreshold}`,
+  );
+  params.runtime.log(
+    `Provider auto-pause classes: ${snapshot.providerFailureHandling.autoPauseClasses.join(", ")}`,
+  );
+}
+
 function resolveOperatorStateDir(stateDir?: string): string {
   const envStateDir = process.env.OPENCLAW_STATE_DIR?.trim();
   return path.resolve(stateDir ?? envStateDir ?? path.join(os.homedir(), ".openclaw"));
@@ -1074,6 +1103,15 @@ function toWorkflowRunJson(run: WorkflowRun) {
     changedFilesPresent: (run.buildResult?.changedFiles.length ?? 0) > 0,
     changedFileListStable: resolveChangedFileListStable(run),
     changedFileCount: run.buildResult?.changedFiles.length ?? null,
+    buildPolicySignals: run.buildResult?.policySignals ?? null,
+    buildPolicySignalsPresent: run.buildResult?.policySignals != null,
+    buildChangedLineCount: run.buildResult?.policySignals?.changedLineCount ?? null,
+    buildChangedDirectoryCount: run.buildResult?.policySignals?.changedDirectoryCount ?? null,
+    buildBroadFanOut: run.buildResult?.policySignals?.broadFanOut ?? null,
+    buildLargeDiff: run.buildResult?.policySignals?.largeDiff ?? null,
+    buildGeneratedFilesPresent: (run.buildResult?.policySignals?.generatedFiles.length ?? 0) > 0,
+    buildGeneratedFiles: run.buildResult?.policySignals?.generatedFiles ?? null,
+    buildGeneratedFileCount: run.buildResult?.policySignals?.generatedFiles.length ?? null,
     changeDisposition: changeDisposition.changeDisposition,
     changeDispositionReason: changeDisposition.changeDispositionReason,
     issueClassification: run.buildResult?.issueClassification ?? null,
@@ -1160,6 +1198,10 @@ function toWorkflowRunJson(run: WorkflowRun) {
     suitabilityClassification: run.suitability?.classification ?? null,
     suitabilityRiskLevel: run.suitability?.riskLevel ?? null,
     suitabilityEvaluatedAt: run.suitability?.evaluatedAt ?? null,
+    suitabilityAllowlisted: run.suitability?.allowlisted ?? false,
+    suitabilityDenylisted: run.suitability?.denylisted ?? false,
+    suitabilityOverrideApplied: run.suitability?.overrideApplied ?? false,
+    suitabilityOriginalDecision: run.suitability?.originalDecision ?? null,
     acceptanceCriteriaPresent: (run.executionSpec?.acceptanceCriteria.length ?? 0) > 0,
     acceptanceCriteriaCount: run.executionSpec?.acceptanceCriteria.length ?? null,
     openQuestionsPresent: (run.executionSpec?.openQuestions.length ?? 0) > 0,
@@ -1334,6 +1376,13 @@ export async function openclawCodeRunCommand(
       branchName: opts.branchName,
       openPullRequest: Boolean(opts.openPr),
       mergeOnApprove: Boolean(opts.mergeOnApprove),
+      suitabilityOverride:
+        opts.suitabilityOverrideActor || opts.suitabilityOverrideReason
+          ? {
+              actor: opts.suitabilityOverrideActor,
+              reason: opts.suitabilityOverrideReason,
+            }
+          : undefined,
       rerunContext: resolveRerunContext(opts),
     },
     {
@@ -1363,6 +1412,16 @@ export async function openclawCodeRunCommand(
   if (run.draftPullRequest?.url) {
     runtime.log(`Draft PR: ${run.draftPullRequest.url}`);
   }
+}
+
+export async function openclawCodePolicyShowCommand(
+  opts: OpenClawCodePolicyShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  logOpenClawCodePolicySnapshot({
+    runtime,
+    json: opts.json,
+  });
 }
 
 export async function openclawCodeBlueprintInitCommand(
