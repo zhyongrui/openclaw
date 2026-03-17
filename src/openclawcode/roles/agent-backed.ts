@@ -361,7 +361,7 @@ async function autoCommitChanges(
 
   const add = await shellRunner.run({
     cwd: workspaceDir,
-    command: `git add -A -- ${pathArgs}`,
+    command: `git add -A -f -- ${pathArgs}`,
   });
   if (add.code !== 0) {
     throw new Error(add.stderr || "Failed to stage changes");
@@ -677,6 +677,7 @@ export class AgentBackedVerifier implements Verifier {
 export const __testing = {
   buildBuilderPrompt,
   buildVerifierPrompt,
+  autoCommitChanges,
   deriveRuntimeRoleSelection,
   deriveBuildPolicySignals,
   isRetryableAgentFailure,

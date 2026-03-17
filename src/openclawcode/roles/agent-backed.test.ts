@@ -217,6 +217,44 @@ describe("AgentBacked transient retry timing", () => {
   });
 });
 
+describe("AgentBacked auto-commit staging", () => {
+  it("forces staging for tracked paths that are also matched by .gitignore", async () => {
+    const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-agent-backed-"));
+    await runGit(repoRoot, ["init"]);
+    await runGit(repoRoot, ["config", "user.name", "OpenClaw Code Tests"]);
+    await runGit(repoRoot, ["config", "user.email", "tests@openclawcode.local"]);
+    await fs.mkdir(path.join(repoRoot, ".agents", "skills", "tracked-ignored"), {
+      recursive: true,
+    });
+    await fs.writeFile(path.join(repoRoot, ".gitignore"), ".agents\n", "utf8");
+    await fs.writeFile(
+      path.join(repoRoot, ".agents", "skills", "tracked-ignored", "SKILL.md"),
+      "tracked\n",
+      "utf8",
+    );
+    await runGit(repoRoot, ["add", ".gitignore"]);
+    await runGit(repoRoot, ["add", "-f", ".agents/skills/tracked-ignored/SKILL.md"]);
+    await runGit(repoRoot, ["commit", "-m", "init"]);
+    await fs.rm(path.join(repoRoot, ".agents", "skills", "tracked-ignored", "SKILL.md"));
+
+    try {
+      await __testing.autoCommitChanges(
+        repoRoot,
+        new HostShellRunner(),
+        "remove tracked ignored file",
+        [".agents/skills/tracked-ignored/SKILL.md"],
+      );
+
+      expect(await runGit(repoRoot, ["status", "--short"])).toBe("");
+      expect(await runGit(repoRoot, ["log", "-1", "--pretty=%s"])).toBe(
+        "remove tracked ignored file",
+      );
+    } finally {
+      await fs.rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("AgentBacked build policy guardrails", () => {
   it("derives broad fan-out, large diff, and generated-file signals", () => {
     const signals = __testing.deriveBuildPolicySignals({
