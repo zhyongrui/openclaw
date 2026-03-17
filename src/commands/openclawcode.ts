@@ -1276,12 +1276,16 @@ function toWorkflowRunJson(run: WorkflowRun) {
     run.rerunContext?.reviewSubmittedAt != null ||
     run.rerunContext?.reviewSummary != null ||
     run.rerunContext?.reviewUrl != null;
+  const runHasUpdatedAt =
+    run.updatedAt === true ||
+    (Array.isArray(run.updatedAt) && run.updatedAt.length > 0) ||
+    (typeof run.updatedAt === "string" && run.updatedAt.length > 0);
   return {
     ...run,
     contractVersion: OPENCLAWCODE_RUN_JSON_CONTRACT_VERSION,
     runCreatedAt: run.createdAt ?? null,
     runUpdatedAt: run.updatedAt ?? null,
-    runHasUpdatedAt: run.updatedAt != null,
+    runHasUpdatedAt,
     runAgeSeconds: resolveElapsedSeconds(run.createdAt, run.updatedAt),
     issueNumber: run.issue.number ?? null,
     issueLabelCount: run.issue.labels?.length ?? null,
