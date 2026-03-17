@@ -421,6 +421,10 @@ These are the next narrow slices that should be consumed from the current state.
 - [x] implement `#111` for `workspaceRepoRoot`
 - [x] implement `#112` for `workspacePreparedAt`
 - [x] implement `#113` for `workspaceWorktreePath`
+- [x] implement the workspace convenience mirrors for `workspaceHasPreparedAt`
+- [x] implement the workspace convenience mirrors for `workspaceHasWorktreePath`
+- [x] implement the workspace convenience mirrors for `workspaceRepoRootPresent`
+- [x] implement the workspace convenience mirrors for `workspaceBranchMatchesIssue`
 - [x] implement `#114` for `runCreatedAt`
 - [x] implement `#115` for `runUpdatedAt`
 - [x] implement `#116` for `issueNumber`

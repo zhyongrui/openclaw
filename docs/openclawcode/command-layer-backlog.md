@@ -87,10 +87,10 @@ Rules:
 - [x] `workspaceRepoRoot`
 - [x] `workspacePreparedAt`
 - [x] `workspaceWorktreePath`
-- [ ] `workspaceHasPreparedAt`
-- [ ] `workspaceHasWorktreePath`
-- [ ] `workspaceRepoRootPresent`
-- [ ] `workspaceBranchMatchesIssue`
+- [x] `workspaceHasPreparedAt`
+- [x] `workspaceHasWorktreePath`
+- [x] `workspaceRepoRootPresent`
+- [x] `workspaceBranchMatchesIssue`
 
 ## Run Lifecycle Mirrors
 

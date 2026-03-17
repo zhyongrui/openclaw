@@ -436,6 +436,12 @@ turning the working loop into a cleanly operable product:
   - `issueHasBody`
   - `issueBodyLength`
   - `issueTitleLength`
+- the workspace convenience-signal batch now also lands on the refreshed sync
+  branch:
+  - `workspaceHasPreparedAt`
+  - `workspaceHasWorktreePath`
+  - `workspaceRepoRootPresent`
+  - `workspaceBranchMatchesIssue`
 - the `failureDiagnostics` family is now effectively mirrored at the top level
   for:
   - summary

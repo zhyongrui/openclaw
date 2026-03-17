@@ -1102,8 +1102,15 @@ function toWorkflowRunJson(run: WorkflowRun) {
     outOfScopeCount: run.executionSpec?.outOfScope.length ?? null,
     workspaceBaseBranch: run.workspace.baseBranch ?? null,
     workspaceBranchName: run.workspace.branchName ?? null,
+    workspaceBranchMatchesIssue:
+      run.issue.number != null
+        ? (run.workspace.branchName?.endsWith(`issue-${run.issue.number}`) ?? false)
+        : false,
     workspaceRepoRoot: run.workspace.repoRoot ?? null,
+    workspaceRepoRootPresent: (run.workspace.repoRoot?.trim().length ?? 0) > 0,
+    workspaceHasPreparedAt: run.workspace.preparedAt != null,
     workspacePreparedAt: run.workspace.preparedAt ?? null,
+    workspaceHasWorktreePath: run.workspace.worktreePath != null,
     workspaceWorktreePath: run.workspace.worktreePath ?? null,
     draftPullRequestHasTitle: (run.draftPullRequest?.title?.trim().length ?? 0) > 0,
     draftPullRequestHasBody: (run.draftPullRequest?.body?.trim().length ?? 0) > 0,

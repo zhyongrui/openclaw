@@ -160,8 +160,12 @@ those nested objects.
 
 - `workspaceBaseBranch`
 - `workspaceBranchName`
+- `workspaceBranchMatchesIssue`
 - `workspaceRepoRoot`
+- `workspaceRepoRootPresent`
+- `workspaceHasPreparedAt`
 - `workspacePreparedAt`
+- `workspaceHasWorktreePath`
 - `workspaceWorktreePath`
 
 ### Pull Request And Merge State
