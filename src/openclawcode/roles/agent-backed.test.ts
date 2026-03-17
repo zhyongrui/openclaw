@@ -101,6 +101,9 @@ describe("AgentBackedBuilder prompt", () => {
     expect(prompt).toContain(
       "Do not run package-manager or formatter commands inside the agent sandbox",
     );
+    expect(prompt).toContain(
+      "Do not assume optional runtimes such as `bun` or `bunx` are installed on the workflow host",
+    );
   });
 
   it("adds command-layer hints for CLI-facing issues", () => {
