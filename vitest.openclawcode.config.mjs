@@ -1,52 +1,15 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
-const pluginSdkSubpaths = [
-  "account-id",
-  "core",
-  "compat",
-  "telegram",
-  "discord",
-  "slack",
-  "signal",
-  "imessage",
-  "whatsapp",
-  "line",
-  "msteams",
-  "acpx",
-  "bluebubbles",
-  "copilot-proxy",
-  "device-pair",
-  "diagnostics-otel",
-  "diffs",
-  "feishu",
-  "googlechat",
-  "irc",
-  "llm-task",
-  "lobster",
-  "matrix",
-  "mattermost",
-  "memory-core",
-  "memory-lancedb",
-  "minimax-portal-auth",
-  "nextcloud-talk",
-  "nostr",
-  "open-prose",
-  "phone-control",
-  "qwen-portal-auth",
-  "synology-chat",
-  "talk-voice",
-  "test-utils",
-  "thread-ownership",
-  "tlon",
-  "twitch",
-  "voice-call",
-  "zalo",
-  "zalouser",
-  "keyed-async-queue",
-];
+const pluginSdkSubpaths = fs
+  .readdirSync(path.join(repoRoot, "src", "plugin-sdk"))
+  .filter((name) => name.endsWith(".ts"))
+  .filter((name) => !name.endsWith(".test.ts"))
+  .filter((name) => name !== "index.ts")
+  .map((name) => name.replace(/\.ts$/, ""));
 
 export default defineConfig({
   resolve: {
