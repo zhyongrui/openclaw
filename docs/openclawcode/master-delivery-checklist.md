@@ -300,9 +300,9 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] prove a copied-root setup path
 - [x] prove copied-root strict health checks
 - [x] prove a copied-root merged low-risk run
-- [ ] prove a fully fresh external-style host from zero to first successful bind
+- [x] prove a fully fresh external-style host from zero to first successful bind
 - [ ] prove a fully fresh external-style host from zero to one merged low-risk run
-- [ ] prove a fully fresh external-style host from zero to one escalated path
+- [x] prove a fully fresh external-style host from zero to one escalated path
 - [ ] prove a fully fresh external-style host from zero to one rerun path
 - [x] document exact host prerequisites:
   - Node version
@@ -337,9 +337,9 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] prove at least one review-changes-requested lifecycle replay
 - [x] prove at least one review-approved lifecycle replay
 - [x] prove at least one closed-without-merge lifecycle replay
-- [ ] re-prove a merged low-risk run on the latest long-lived `main` baseline after the most recent upstream promotion
-- [ ] re-prove a no-op completion path on the latest long-lived `main` baseline after the most recent upstream promotion
-- [ ] re-prove a blocked or escalated path on the latest long-lived `main` baseline after the most recent upstream promotion
+- [x] re-prove a merged low-risk run on the latest long-lived `main` baseline after the most recent upstream promotion
+- [x] re-prove a no-op completion path on the latest long-lived `main` baseline after the most recent upstream promotion
+- [x] re-prove a blocked or escalated path on the latest long-lived `main` baseline after the most recent upstream promotion
 - [ ] prove one live fallback-model run if a second model becomes available
 - [x] document the exact proof matrix required before calling the operator "externally usable"
 

@@ -1206,6 +1206,7 @@ function resolveStageGateReadiness(run: WorkflowRun, gateId: string): string | n
 }
 
 function toWorkflowRunJson(run: WorkflowRun) {
+  const workspace = run.workspace;
   const autoMergePolicy = resolveAutoMergePolicy(run);
   const autoMergeDisposition = resolveAutoMergeDisposition(run);
   const publishedPullRequest = resolvePublishedPullRequest(run);
@@ -1367,18 +1368,18 @@ function toWorkflowRunJson(run: WorkflowRun) {
     scopeItemCount: run.executionSpec?.scope.length ?? null,
     outOfScopePresent: (run.executionSpec?.outOfScope.length ?? 0) > 0,
     outOfScopeCount: run.executionSpec?.outOfScope.length ?? null,
-    workspaceBaseBranch: run.workspace.baseBranch ?? null,
-    workspaceBranchName: run.workspace.branchName ?? null,
+    workspaceBaseBranch: workspace?.baseBranch ?? null,
+    workspaceBranchName: workspace?.branchName ?? null,
     workspaceBranchMatchesIssue:
       run.issue.number != null
-        ? (run.workspace.branchName?.endsWith(`issue-${run.issue.number}`) ?? false)
+        ? (workspace?.branchName?.endsWith(`issue-${run.issue.number}`) ?? false)
         : false,
-    workspaceRepoRoot: run.workspace.repoRoot ?? null,
-    workspaceRepoRootPresent: (run.workspace.repoRoot?.trim().length ?? 0) > 0,
-    workspaceHasPreparedAt: run.workspace.preparedAt != null,
-    workspacePreparedAt: run.workspace.preparedAt ?? null,
-    workspaceHasWorktreePath: run.workspace.worktreePath != null,
-    workspaceWorktreePath: run.workspace.worktreePath ?? null,
+    workspaceRepoRoot: workspace?.repoRoot ?? null,
+    workspaceRepoRootPresent: (workspace?.repoRoot?.trim().length ?? 0) > 0,
+    workspaceHasPreparedAt: workspace?.preparedAt != null,
+    workspacePreparedAt: workspace?.preparedAt ?? null,
+    workspaceHasWorktreePath: workspace?.worktreePath != null,
+    workspaceWorktreePath: workspace?.worktreePath ?? null,
     draftPullRequestHasTitle: (run.draftPullRequest?.title?.trim().length ?? 0) > 0,
     draftPullRequestHasBody: (run.draftPullRequest?.body?.trim().length ?? 0) > 0,
     draftPullRequestHasOpenedAt: run.draftPullRequest?.openedAt != null,

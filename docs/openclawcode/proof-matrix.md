@@ -24,9 +24,8 @@
 
 ## Still Pending Live Proofs
 
-- fresh-host external install proof
-- low-risk merged run on the long-lived operator after the latest policy hardening
-- blocked or escalated proof on the latest promoted baseline
+- fresh-host external-style host merged low-risk proof
+- fresh-host external-style host rerun proof
 - fallback-model live proof on a real second model
 - blueprint-first live proof end-to-end from goal discussion to merged PR
 
@@ -49,7 +48,17 @@ Current status on 2026-03-17:
 
 - repo-local proof rows: complete
 - sync-branch proof rows: complete on `sync/upstream-2026-03-17`
-- external/operator proof rows: still pending
+- external/operator proof rows:
+  - fresh zero-to-bind: complete
+  - fresh zero-to-escalated: complete
+  - latest promoted baseline merged low-risk: complete via `origin/main @ 22e43ad3cb` (`feat: implement issue #130 (#135)`)
+  - latest promoted baseline no-op: complete via run `zhyongrui-openclawcode-134-1773739257883`
+  - latest promoted baseline escalated: complete via run `zhyongrui-openclawcode-132-1773739717720`
+  - still pending:
+    - fresh zero-to-merged low-risk
+    - fresh zero-to-rerun
+    - fallback-model live proof
+    - blueprint-first end-to-end proof
 
 ## How To Use This Matrix
 

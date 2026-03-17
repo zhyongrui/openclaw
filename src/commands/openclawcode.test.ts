@@ -857,6 +857,44 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.workspaceBaseBranch).toBeNull();
   });
 
+  it("prints null workspace fields when the run escalates before workspace preparation", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        stage: "escalated",
+        workspace: undefined,
+        suitability: {
+          decision: "escalate",
+          summary: "Suitability escalated the issue before branch mutation.",
+          reasons: ["High-risk issue signals were detected in the issue text."],
+          classification: "mixed",
+          riskLevel: "high",
+          evaluatedAt: "2026-01-01T00:00:00.000Z",
+          allowlisted: false,
+          denylisted: true,
+          matchedLowRiskLabels: [],
+          matchedLowRiskKeywords: [],
+          matchedHighRiskLabels: [],
+          matchedHighRiskKeywords: ["secret"],
+          overrideApplied: false,
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.stage).toBe("escalated");
+    expect(payload.workspaceBaseBranch).toBeNull();
+    expect(payload.workspaceBranchName).toBeNull();
+    expect(payload.workspaceBranchMatchesIssue).toBe(false);
+    expect(payload.workspaceRepoRoot).toBeNull();
+    expect(payload.workspaceRepoRootPresent).toBe(false);
+    expect(payload.workspaceHasPreparedAt).toBe(false);
+    expect(payload.workspacePreparedAt).toBeNull();
+    expect(payload.workspaceHasWorktreePath).toBe(false);
+    expect(payload.workspaceWorktreePath).toBeNull();
+  });
+
   it("prints workspaceBranchName as null when workspace branch metadata is unavailable", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
