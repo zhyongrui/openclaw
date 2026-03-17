@@ -10,6 +10,11 @@ import { collectSuitabilityPolicySignals } from "../../openclawcode/policy.js";
 
 const SUPPORTED_ISSUE_ACTIONS = new Set(["opened", "reopened", "labeled"]);
 
+function trimToSingleLine(value: string | undefined): string | undefined {
+  const trimmed = value?.replace(/\s+/g, " ").trim();
+  return trimmed ? trimmed : undefined;
+}
+
 export interface GitHubIssueWebhookEvent {
   action: string;
   repository: {

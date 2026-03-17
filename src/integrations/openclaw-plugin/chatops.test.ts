@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildWorkflowFailureDiagnosticLines,
   buildOpenClawCodeRunArgv,
   buildRunRequestFromCommand,
   type OpenClawCodeChatopsRepoConfig,
@@ -22,6 +23,16 @@ function createRepoConfig(): OpenClawCodeChatopsRepoConfig {
 }
 
 describe("openclawcode chatops run request plumbing", () => {
+  it("falls back to a single-line diagnostic summary when compact fields are absent", () => {
+    expect(
+      buildWorkflowFailureDiagnosticLines({
+        diagnostics: {
+          summary: "line one\nline two",
+        },
+      }),
+    ).toEqual(["  diagnostics: line one line two"]);
+  });
+
   it("carries suitability overrides into run requests", () => {
     const request = buildRunRequestFromCommand({
       command: {
