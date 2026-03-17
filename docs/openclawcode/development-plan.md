@@ -442,6 +442,14 @@ turning the working loop into a cleanly operable product:
   - `workspaceHasWorktreePath`
   - `workspaceRepoRootPresent`
   - `workspaceBranchMatchesIssue`
+- the build convenience-signal batch now also lands on the refreshed sync
+  branch:
+  - `buildSummary`
+  - `buildSummaryPresent`
+  - `changedFilesPresent`
+  - `testCommandsPresent`
+  - `testResultsPresent`
+  - `notesPresent`
 - the `failureDiagnostics` family is now effectively mirrored at the top level
   for:
   - summary

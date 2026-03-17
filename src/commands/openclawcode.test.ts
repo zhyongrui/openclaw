@@ -178,10 +178,13 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.planningAttemptCount).toBe(1);
     expect(payload.buildAttemptCount).toBe(1);
     expect(payload.verificationAttemptCount).toBe(1);
+    expect(payload.buildSummary).toBe("Updated JSON output");
+    expect(payload.buildSummaryPresent).toBe(true);
     expect(payload.changedFiles).toEqual([
       "src/openclawcode/app/run-issue.ts",
       "src/openclawcode/contracts/types.ts",
     ]);
+    expect(payload.changedFilesPresent).toBe(true);
     expect(payload.changedFileCount).toBe(2);
     expect(payload.changeDisposition).toBe("modified");
     expect(payload.changeDispositionReason).toBe("Run produced 2 changed file(s).");
@@ -198,8 +201,11 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.scopeCheckHasBlockedFiles).toBe(false);
     expect(payload.scopeBlockedFiles).toEqual([]);
     expect(payload.scopeBlockedFileCount).toBe(0);
+    expect(payload.testCommandsPresent).toBe(true);
     expect(payload.testCommandCount).toBe(1);
+    expect(payload.testResultsPresent).toBe(true);
     expect(payload.testResultCount).toBe(1);
+    expect(payload.notesPresent).toBe(true);
     expect(payload.noteCount).toBe(1);
     expect(payload.buildResult.issueClassification).toBe(payload.issueClassification);
     expect(payload.buildResult.scopeCheck).toEqual(payload.scopeCheck);
@@ -379,7 +385,10 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.planningAttemptCount).toBe(1);
     expect(payload.buildAttemptCount).toBe(1);
     expect(payload.verificationAttemptCount).toBe(1);
+    expect(payload.buildSummary).toBeNull();
+    expect(payload.buildSummaryPresent).toBe(false);
     expect(payload.changedFiles).toEqual([]);
+    expect(payload.changedFilesPresent).toBe(false);
     expect(payload.changeDisposition).toBeNull();
     expect(payload.changeDispositionReason).toBeNull();
     expect(payload.stageLabel).toBe("Draft PR Opened");
@@ -391,8 +400,11 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.scopeBlockedFiles).toBeNull();
     expect(payload.scopeBlockedFileCount).toBeNull();
     expect(payload.changedFileCount).toBeNull();
+    expect(payload.testCommandsPresent).toBe(false);
     expect(payload.testCommandCount).toBeNull();
+    expect(payload.testResultsPresent).toBe(false);
     expect(payload.testResultCount).toBeNull();
+    expect(payload.notesPresent).toBe(false);
     expect(payload.noteCount).toBeNull();
     expect(payload.blueprintContext).toBeNull();
     expect(payload.blueprintStatus).toBeNull();

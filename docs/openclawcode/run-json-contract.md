@@ -72,7 +72,10 @@ those nested objects.
 
 ### Change And Scope Signals
 
+- `buildSummary`
+- `buildSummaryPresent`
 - `changedFiles`
+- `changedFilesPresent`
 - `changedFileCount`
 - `changeDisposition`
 - `changeDispositionReason`
@@ -87,8 +90,11 @@ those nested objects.
 
 ### Build/Test Summary
 
+- `testCommandsPresent`
 - `testCommandCount`
+- `testResultsPresent`
 - `testResultCount`
+- `notesPresent`
 - `noteCount`
 
 ### Failure Diagnostics

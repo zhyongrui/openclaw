@@ -109,12 +109,12 @@ Rules:
 - [x] `testCommandCount`
 - [x] `testResultCount`
 - [x] `noteCount`
-- [ ] `buildSummary`
-- [ ] `buildSummaryPresent`
-- [ ] `changedFilesPresent`
-- [ ] `testCommandsPresent`
-- [ ] `testResultsPresent`
-- [ ] `notesPresent`
+- [x] `buildSummary`
+- [x] `buildSummaryPresent`
+- [x] `changedFilesPresent`
+- [x] `testCommandsPresent`
+- [x] `testResultsPresent`
+- [x] `notesPresent`
 - [ ] `changedFileListStable`
 
 ## Scope Check Mirrors
