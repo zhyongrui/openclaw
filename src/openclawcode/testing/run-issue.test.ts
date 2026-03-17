@@ -1534,6 +1534,73 @@ describe("runIssueWorkflow", () => {
     }
   });
 
+  it("closes an existing pull request and completes without changes when the latest run is a no-op", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-60",
+        worktreePath: "/repo/.openclawcode/worktrees/run-60",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const github = new ReusedPullRequestGitHubClient({
+        number: 103,
+        url: "https://github.com/zhyongrui/openclawcode/pull/103",
+      });
+      const publisher = new FakePublisher({
+        number: 104,
+        url: "https://github.com/zhyongrui/openclawcode/pull/104",
+      });
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 60,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          openPullRequest: true,
+        },
+        {
+          github,
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder("command-layer", []),
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "No changes were needed.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, []),
+          shellRunner: new NoopShellRunner(),
+          publisher,
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.stage).toBe("completed-without-changes");
+      expect(run.history).toContain(
+        "Closed stale pull request because the latest run produced no code changes: https://github.com/zhyongrui/openclawcode/pull/103",
+      );
+      expect(run.history).toContain(
+        "Draft PR skipped: no new commits were produced between the base branch and openclawcode/issue-60.",
+      );
+      expect(run.history).toContain(
+        "Workflow completed without code changes; no pull request was needed.",
+      );
+      expect(run.draftPullRequest?.number).toBeUndefined();
+      expect(run.draftPullRequest?.url).toBeUndefined();
+      expect(publisher.published).toBe(0);
+      expect(github.closedIssues).toEqual([103, 60]);
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("captures blueprint, role-routing, and stage-gate snapshots in workflow artifacts", async () => {
     const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-blueprint-run-"));
     const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));

@@ -371,6 +371,10 @@ function formatNoCommitPullRequestNote(run: WorkflowRun): string {
   return `Draft PR skipped: no new commits were produced between the base branch and ${branchName}.`;
 }
 
+function formatClosedStalePullRequestNote(pullRequest: PullRequestRef): string {
+  return `Closed stale pull request because the latest run produced no code changes: ${pullRequest.url}`;
+}
+
 function hasNoCommitPullRequestNote(run: WorkflowRun): boolean {
   return run.history.some((entry) =>
     entry.startsWith("Draft PR skipped: no new commits were produced"),
@@ -593,60 +597,84 @@ export async function runIssueWorkflow(
     if (!run.workspace) {
       throw new Error("Run workspace is required before publishing a pull request.");
     }
-    const existingPullRequest = await deps.github.findOpenPullRequestForBranch({
-      owner: request.owner,
-      repo: request.repo,
-      head: run.workspace.branchName,
-      base: request.baseBranch,
-    });
-    if (existingPullRequest) {
-      await pushIssueBranch({
-        shellRunner: deps.shellRunner,
-        workspace: run.workspace,
+    if (shouldSkipDraftPullRequest(run)) {
+      const existingPullRequest = await deps.github.findOpenPullRequestForBranch({
+        owner: request.owner,
+        repo: request.repo,
+        head: run.workspace.branchName,
+        base: request.baseBranch,
       });
-      publishedPullRequest = existingPullRequest;
-      run = noteRun(
-        {
-          ...run,
-          draftPullRequest: {
-            ...run.draftPullRequest!,
-            number: existingPullRequest.number,
-            url: existingPullRequest.url,
-          },
-        },
-        formatExistingPullRequestNote(existingPullRequest),
-        now,
-      );
-    } else if (shouldSkipDraftPullRequest(run)) {
-      run = noteRun(run, formatNoCommitPullRequestNote(run), now);
-    } else {
-      try {
-        publishedPullRequest = await deps.publisher.publish({
-          run,
-          repo: {
+      if (existingPullRequest) {
+        try {
+          await deps.github.closeIssue({
             owner: request.owner,
             repo: request.repo,
-          },
-          draft: publishAsDraft,
+            issueNumber: existingPullRequest.number,
+          });
+          run = noteRun(run, formatClosedStalePullRequestNote(existingPullRequest), now);
+        } catch (error) {
+          run = noteRun(
+            run,
+            `Stale pull request close failed for #${existingPullRequest.number}: ${error instanceof Error ? error.message : String(error)}`,
+            now,
+          );
+        }
+      }
+      run = noteRun(run, formatNoCommitPullRequestNote(run), now);
+    } else {
+      const existingPullRequest = await deps.github.findOpenPullRequestForBranch({
+        owner: request.owner,
+        repo: request.repo,
+        head: run.workspace.branchName,
+        base: request.baseBranch,
+      });
+      if (existingPullRequest) {
+        await pushIssueBranch({
+          shellRunner: deps.shellRunner,
+          workspace: run.workspace,
         });
+        publishedPullRequest = existingPullRequest;
         run = noteRun(
           {
             ...run,
             draftPullRequest: {
               ...run.draftPullRequest!,
-              number: publishedPullRequest.number,
-              url: publishedPullRequest.url,
-              openedAt: now(),
+              number: existingPullRequest.number,
+              url: existingPullRequest.url,
             },
           },
-          `${publishAsDraft ? "Draft PR" : "Pull request"} opened: ${publishedPullRequest.url}`,
+          formatExistingPullRequestNote(existingPullRequest),
           now,
         );
-      } catch (error) {
-        if (!isNoCommitPullRequestError(error)) {
-          throw error;
+      } else {
+        try {
+          publishedPullRequest = await deps.publisher.publish({
+            run,
+            repo: {
+              owner: request.owner,
+              repo: request.repo,
+            },
+            draft: publishAsDraft,
+          });
+          run = noteRun(
+            {
+              ...run,
+              draftPullRequest: {
+                ...run.draftPullRequest!,
+                number: publishedPullRequest.number,
+                url: publishedPullRequest.url,
+                openedAt: now(),
+              },
+            },
+            `${publishAsDraft ? "Draft PR" : "Pull request"} opened: ${publishedPullRequest.url}`,
+            now,
+          );
+        } catch (error) {
+          if (!isNoCommitPullRequestError(error)) {
+            throw error;
+          }
+          run = noteRun(run, formatNoCommitPullRequestNote(run), now);
         }
-        run = noteRun(run, formatNoCommitPullRequestNote(run), now);
       }
     }
     await deps.store.save(run);
