@@ -30,6 +30,27 @@
 - fallback-model live proof on a real second model
 - blueprint-first live proof end-to-end from goal discussion to merged PR
 
+## External-Usable Proof Gate
+
+Do not call the operator "externally usable" until all of these rows have a
+dated proof entry:
+
+1. fresh-host zero-to-bind proof
+2. fresh-host zero-to-merged low-risk run proof
+3. fresh-host zero-to-escalated-path proof
+4. fresh-host zero-to-rerun-path proof
+5. latest promoted baseline merged low-risk proof
+6. latest promoted baseline no-op proof
+7. latest promoted baseline blocked or escalated proof
+8. fallback-model live proof, if a second model is configured
+9. blueprint-first end-to-end proof from goal discussion to merged PR
+
+Current status on 2026-03-17:
+
+- repo-local proof rows: complete
+- sync-branch proof rows: complete on `sync/upstream-2026-03-17`
+- external/operator proof rows: still pending
+
 ## How To Use This Matrix
 
 - treat repo-local proofs as engineering confidence, not production proof

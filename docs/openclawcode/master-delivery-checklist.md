@@ -39,13 +39,13 @@ The finished product should let a teammate do this with bounded operator work:
 The program is only "done enough to hand to other people" when all of these are true:
 
 - [ ] a fresh operator host can be configured from docs without private tribal knowledge
-- [ ] a low-risk issue can run from Feishu to merged PR without manual repair
-- [ ] a no-op issue can complete cleanly without creating a noisy PR
-- [ ] a blocked or escalated issue is clearly surfaced without branch mutation
-- [ ] provider failures are diagnosable from saved artifacts and chat surfaces
+- [x] a low-risk issue can run from Feishu to merged PR without manual repair
+- [x] a no-op issue can complete cleanly without creating a noisy PR
+- [x] a blocked or escalated issue is clearly surfaced without branch mutation
+- [x] provider failures are diagnosable from saved artifacts and chat surfaces
 - [ ] setup, promotion, rollback, and copied-root proofs are routine and documented
-- [ ] the machine-readable contracts are intentionally versioned and documented
-- [ ] upstream sync can be repeated without putting the long-lived operator at risk
+- [x] the machine-readable contracts are intentionally versioned and documented
+- [x] upstream sync can be repeated without putting the long-lived operator at risk
 - [x] release-facing docs explain scope, prerequisites, support policy, and known limits
 
 ## Phase -1: Blueprint-First Control Plane
@@ -61,7 +61,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] map Codex and Claude Code into that shared role model
 - [x] persist runtime-applied coder and verifier routing selections in workflow artifacts
 - [x] allow structured rerun-time coder and verifier overrides from chat and CLI
-- [ ] support stage-level human handoff, edit, resume, and provider switching
+- [x] support stage-level human handoff, edit, resume, and provider switching
 - [x] persist blueprint and stage-gate decisions in machine-readable artifacts
 
 ## Phase 0: Already-Proven Foundations
@@ -260,16 +260,16 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] support number validation template
 - [x] support string validation template
 - [x] keep the pool replenished after each consumed command-layer issue
-- [ ] add dedicated templates for timestamp-like string fields if the generic string template becomes ambiguous
-- [ ] add dedicated templates for URL string fields if the generic string template becomes ambiguous
-- [ ] add dedicated templates for enum string fields if the generic string template becomes ambiguous
-- [ ] decide and document the minimum pool size for:
+- [x] add dedicated templates for timestamp-like string fields if the generic string template becomes ambiguous
+- [x] add dedicated templates for URL string fields if the generic string template becomes ambiguous
+- [x] add dedicated templates for enum string fields if the generic string template becomes ambiguous
+- [x] decide and document the minimum pool size for:
   - command-layer issues
   - operator-doc issues
   - high-risk validation issues
-- [ ] add a CLI option to enforce that minimum pool size automatically
-- [ ] add a CLI option to seed a balanced pool in one command
-- [ ] document the validation-pool maintenance cadence
+- [x] add a CLI option to enforce that minimum pool size automatically
+- [x] add a CLI option to seed a balanced pool in one command
+- [x] document the validation-pool maintenance cadence
 
 ## Phase 8: Setup, Install, And Promotion
 
@@ -284,16 +284,16 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] sanitize model inventory probes to avoid plugin or channel noise
 - [x] retry transient GitHub webhook subscription transport failures
 - [x] support explicit Node binary selection for setup-check
-- [ ] add a documented install path for a completely fresh external host
-- [ ] add an upgrade path from one release tag to the next
+- [x] add a documented install path for a completely fresh external host
+- [x] add an upgrade path from one release tag to the next
 - [x] add a rollback path from a broken promotion to the previous good baseline
 - [x] add a promotion checklist tied to exact commands and expected outputs
 - [x] add an explicit disaster-recovery checklist for a broken long-lived operator
 - [x] add a machine-readable promotion receipt saved on successful promotion
 - [x] add a machine-readable rollback receipt saved on rollback
 - [x] document required secrets, environment variables, and least-privilege scopes
-- [ ] document how to rotate webhook secrets and operator tokens safely
-- [ ] document how to rotate Feishu bindings safely
+- [x] document how to rotate webhook secrets and operator tokens safely
+- [x] document how to rotate Feishu bindings safely
 
 ## Phase 9: Fresh-Host Reproducibility
 
@@ -304,15 +304,15 @@ The program is only "done enough to hand to other people" when all of these are 
 - [ ] prove a fully fresh external-style host from zero to one merged low-risk run
 - [ ] prove a fully fresh external-style host from zero to one escalated path
 - [ ] prove a fully fresh external-style host from zero to one rerun path
-- [ ] document exact host prerequisites:
+- [x] document exact host prerequisites:
   - Node version
   - pnpm version
   - git version
   - GitHub token scopes
   - model provider configuration
   - Feishu app/bot configuration
-- [ ] document exact expected outputs for each proof gate on a fresh host
-- [ ] document common failure signatures and first recovery steps for fresh hosts
+- [x] document exact expected outputs for each proof gate on a fresh host
+- [x] document common failure signatures and first recovery steps for fresh hosts
 
 ## Phase 10: Upstream Sync Discipline
 
@@ -326,7 +326,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] define a hard threshold for "behind upstream" that forces a sync slice
 - [x] document the promotion checklist after each successful sync
 - [x] document the rollback checklist if a promoted sync regresses the live operator
-- [ ] keep a short conflict-history appendix for recurring hotspots
+- [x] keep a short conflict-history appendix for recurring hotspots
 
 ## Phase 11: Low-Risk Live-Proof Ladder
 
@@ -341,7 +341,7 @@ The program is only "done enough to hand to other people" when all of these are 
 - [ ] re-prove a no-op completion path on the latest long-lived `main` baseline after the most recent upstream promotion
 - [ ] re-prove a blocked or escalated path on the latest long-lived `main` baseline after the most recent upstream promotion
 - [ ] prove one live fallback-model run if a second model becomes available
-- [ ] document the exact proof matrix required before calling the operator "externally usable"
+- [x] document the exact proof matrix required before calling the operator "externally usable"
 
 ## Phase 12: Chat-Native Product Completion
 
@@ -351,11 +351,11 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] precheck high-risk chat-intake issues
 - [x] preview a generated issue before submission
 - [x] allow the operator to ask for clarification before issue creation
-- [ ] allow the operator to propose multiple scoped issue drafts for ambiguous requests
+- [x] allow the operator to propose multiple scoped issue drafts for ambiguous requests
 - [x] allow a teammate to confirm or reject the generated issue draft in chat
 - [x] allow a teammate to edit title or summary in chat before creation
-- [ ] document the supported prompt styles for chat-native intake
-- [ ] document the unsupported or intentionally blocked prompt styles for chat-native intake
+- [x] document the supported prompt styles for chat-native intake
+- [x] document the unsupported or intentionally blocked prompt styles for chat-native intake
 
 ## Phase 13: Release Docs And Public Usability
 
@@ -391,23 +391,23 @@ The program is only "done enough to hand to other people" when all of these are 
 - [x] document secret handling expectations for operator hosts
 - [x] document least-privilege GitHub token expectations
 - [x] document least-privilege Feishu app expectations
-- [ ] document redaction expectations for stored workflow diagnostics
-- [ ] review saved run artifacts for accidental sensitive data leakage
-- [ ] review chat-surface status output for accidental sensitive data leakage
-- [ ] define retention expectations for old workflow artifacts
-- [ ] define retention expectations for operator queue and snapshot state
-- [ ] define retention expectations for validation-pool history
+- [x] document redaction expectations for stored workflow diagnostics
+- [x] review saved run artifacts for accidental sensitive data leakage
+- [x] review chat-surface status output for accidental sensitive data leakage
+- [x] define retention expectations for old workflow artifacts
+- [x] define retention expectations for operator queue and snapshot state
+- [x] define retention expectations for validation-pool history
 
 ## Phase 15: Completion Sweep
 
-- [ ] verify every item in this checklist that should be `[x]` is reflected in docs and machine-readable output
-- [ ] verify every remaining `[ ]` item is either still real or intentionally removed
-- [ ] verify the README reading order still points to the right canonical documents
-- [ ] verify the release docs are internally consistent
-- [ ] verify the promotion docs match the actual commands used by the operator
-- [ ] verify the rollback docs match the actual commands used by the operator
-- [ ] verify the machine-readable contracts match real command output
-- [ ] verify the current live proof matrix is recorded in dev logs and long-term docs
+- [x] verify every item in this checklist that should be `[x]` is reflected in docs and machine-readable output
+- [x] verify every remaining `[ ]` item is either still real or intentionally removed
+- [x] verify the README reading order still points to the right canonical documents
+- [x] verify the release docs are internally consistent
+- [x] verify the promotion docs match the actual commands used by the operator
+- [x] verify the rollback docs match the actual commands used by the operator
+- [x] verify the machine-readable contracts match real command output
+- [x] verify the current live proof matrix is recorded in dev logs and long-term docs
 - [ ] verify a fresh AI session can resume work from docs and memory without hidden context
 
 ## Immediate Next Queue
@@ -472,9 +472,9 @@ These are the next narrow slices that should be consumed from the current state.
 - [x] implement the suitability convenience mirrors for `suitabilityDecisionIsAutoRun`
 - [x] implement the suitability convenience mirrors for `suitabilityDecisionIsNeedsHumanReview`
 - [x] implement the suitability convenience mirrors for `suitabilityDecisionIsEscalate`
-- [ ] keep `run-json-contract.md` aligned with each new top-level field
-- [ ] keep `development-plan.md` and `full-program-roadmap.md` aligned with the latest pool state
-- [ ] decide whether the next productization slice after the current command-layer queue should be:
+- [x] keep `run-json-contract.md` aligned with each new top-level field
+- [x] keep `development-plan.md` and `full-program-roadmap.md` aligned with the latest pool state
+- [x] decide whether the next productization slice after the current command-layer queue should be:
   - chat-native draft confirmation
   - fallback-model live proof
   - fresh-host external install proof

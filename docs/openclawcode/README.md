@@ -22,22 +22,26 @@ Recommended reading order:
 16. `run-json-contract.md`
 17. `operator-status-snapshot-contract.md`
 18. `validation-pool-contract.md`
-19. `release-artifacts-contract.md`
-20. `policy.md`
-21. `policy-contract.md`
-22. `support-matrix.md`
-23. `fresh-host-install.md`
-24. `upgrade-and-rotation.md`
-25. `release-runbook.md`
-26. `troubleshooting.md`
-27. `proof-matrix.md`
-28. `sample-operator-config.md`
-29. `sample-automation-integration.md`
-30. `upstream-sync-policy.md`
-31. `operator-setup.md`
-32. `sync-promotion-runbook.md`
-33. `mvp-runbook.md`
-34. `webhook-operations.md`
+19. `validation-pool-maintenance.md`
+20. `release-artifacts-contract.md`
+21. `policy.md`
+22. `policy-contract.md`
+23. `support-matrix.md`
+24. `fresh-host-install.md`
+25. `upgrade-and-rotation.md`
+26. `release-runbook.md`
+27. `troubleshooting.md`
+28. `proof-matrix.md`
+29. `sample-operator-config.md`
+30. `sample-automation-integration.md`
+31. `chat-intake-styles.md`
+32. `security-and-retention.md`
+33. `sync-conflict-history.md`
+34. `upstream-sync-policy.md`
+35. `operator-setup.md`
+36. `sync-promotion-runbook.md`
+37. `mvp-runbook.md`
+38. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
@@ -54,6 +58,7 @@ loop with:
   - `/occode-intake`
   - `/occode-intake-confirm`
   - `/occode-intake-edit`
+  - `/occode-intake-choose`
   - `/occode-intake-reject`
   - `/occode-start`
   - `/occode-start-override`
@@ -407,16 +412,25 @@ loop with:
   - `openclaw code seed-validation-issue`
   - `openclaw code list-validation-issues`
   - `openclaw code reconcile-validation-issues`
+  - `openclaw code seed-validation-issue --balanced`
+  - `openclaw code reconcile-validation-issues --enforce-minimum-pool-size`
   - `list-validation-issues --json` and `reconcile-validation-issues --json`
     now expose `contractVersion: 1`, documented in
     `docs/openclawcode/validation-pool-contract.md`
+  - `docs/openclawcode/validation-pool-maintenance.md` now documents:
+    - the minimum-pool targets
+    - the balanced-pool seeding path
+    - the maintenance cadence
   - `openclaw code list-validation-issues` now reports template-level counts in
     both text and JSON output
   - `openclaw code reconcile-validation-issues` now classifies validation
     issues as `implemented`, `pending`, or `manual-review` and can close
     already-implemented command-layer issues directly from the repo-local CLI
+  - `openclaw code list-validation-issues` now also reports minimum-pool
+    targets and per-class deficits
   - `openclaw code seed-validation-issue` now also supports
-    `command-json-string` for low-risk string-or-null convenience fields
+    `command-json-string`, `command-json-string-timestamp`,
+    `command-json-string-url`, and `command-json-string-enum`
   - `docs/openclawcode/command-layer-backlog.md` now keeps a much longer
     seed-ready queue than the tiny live GitHub validation pool
   - seeded issue creation now reuses an existing open match instead of creating

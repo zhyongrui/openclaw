@@ -32,6 +32,22 @@
 - one local issue run reaches `ready-for-human-review` or a clearly explained
   blocked/escalated state
 
+Exact proof-gate expectations:
+
+- strict setup-check:
+  - gateway reachable
+  - route probe ready
+  - built-startup proof ready when requested
+- binding:
+  - repo binding appears in operator-status snapshot
+- low-risk run:
+  - build and verification succeed
+  - PR or merge path is explicit
+- escalated path:
+  - no branch mutation happens before the escalation is recorded
+- rerun path:
+  - rerun context is preserved and visible in run JSON or status
+
 ## Common Failure Signatures
 
 - webhook route unreachable

@@ -9,6 +9,7 @@ import {
   applyPullRequestWebhookToSnapshot,
   buildIssueApprovalMessage,
   buildIssueEscalationMessage,
+  deriveScopedChatIssueDrafts,
   buildOpenClawCodeRunArgv,
   buildRunRequestFromCommand,
   buildRunStatusMessage,
@@ -1266,6 +1267,10 @@ function buildPendingIntakeDraftMessage(params: {
     title: string;
     body: string;
     bodySynthesized: boolean;
+    scopedDrafts?: Array<{
+      title: string;
+      reason: string;
+    }>;
   };
   clarification: ChatIntakeClarificationReport;
 }): string {
@@ -1277,8 +1282,17 @@ function buildPendingIntakeDraftMessage(params: {
     params.draft.body,
     `Clarifications: ${params.clarification.questions.length}`,
     ...params.clarification.questions.slice(0, 3).map((question) => `- ${question}`),
+    `Scoped drafts: ${params.draft.scopedDrafts?.length ?? 0}`,
+    ...(params.draft.scopedDrafts ?? [])
+      .slice(0, 3)
+      .map((draft, index) => `- [${index + 1}] ${draft.title} (${draft.reason})`),
     `Suggestions: ${params.clarification.suggestions.length}`,
     ...params.clarification.suggestions.slice(0, 2).map((suggestion) => `- ${suggestion}`),
+    ...(params.draft.scopedDrafts?.length
+      ? [
+          `Use /occode-intake-choose ${formatRepoKey(params.repo)} <index> to replace the pending draft with one scoped variant.`,
+        ]
+      : []),
     `Use /occode-intake-edit ${formatRepoKey(params.repo)} <title>\\n<body...> to refine the draft.`,
     `Use /occode-intake-confirm ${formatRepoKey(params.repo)} when the draft is ready to create on GitHub.`,
     `Use /occode-intake-reject ${formatRepoKey(params.repo)} [reason] to discard the pending draft.`,
@@ -3229,12 +3243,14 @@ export default {
             title: command.draft.title,
             bodySynthesized: command.draft.bodySynthesized,
           });
+          const scopedDrafts = deriveScopedChatIssueDrafts(command.draft.title);
           await store.upsertPendingIntakeDraft({
             ...draftHandle,
             title: command.draft.title,
             body: command.draft.body,
             sourceRequest: command.draft.sourceRequest,
             bodySynthesized: command.draft.bodySynthesized,
+            scopedDrafts,
             clarificationQuestions: clarification.questions,
             clarificationSuggestions: clarification.suggestions,
             createdAt: new Date().toISOString(),
@@ -3243,7 +3259,10 @@ export default {
           return {
             text: buildPendingIntakeDraftMessage({
               repo: command.repo,
-              draft: command.draft,
+              draft: {
+                ...command.draft,
+                scopedDrafts,
+              },
               clarification,
             }),
           };
@@ -3335,6 +3354,7 @@ export default {
           body: nextBody,
           sourceRequest: parsed.body,
           bodySynthesized: false,
+          scopedDrafts: [],
           clarificationQuestions: clarification.questions,
           clarificationSuggestions: clarification.suggestions,
           updatedAt: new Date().toISOString(),
@@ -3346,6 +3366,111 @@ export default {
               title: nextTitle,
               body: nextBody,
               bodySynthesized: false,
+              scopedDrafts: [],
+            },
+            clarification,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-intake-choose",
+      description: "Replace the pending chat-native intake draft with one scoped variant.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const tokens = (ctx.args ?? "")
+          .split(/\s+/)
+          .map((token) => token.trim())
+          .filter(Boolean);
+        const explicitRepo = tokens.length > 0 ? parseChatopsRepoReference(tokens[0] ?? "") : null;
+        const repo =
+          explicitRepo ??
+          parseChatopsRepoReference("", {
+            owner: defaultRepo?.owner,
+            repo: defaultRepo?.repo,
+          });
+        const indexToken = explicitRepo ? tokens[1] : tokens[0];
+        const selectedIndex = Number.parseInt(indexToken ?? "", 10);
+        if (!repo || !Number.isInteger(selectedIndex) || selectedIndex < 1) {
+          return {
+            text:
+              "Usage: /occode-intake-choose owner/repo <index>\n" +
+              "Or, when exactly one repo is configured: /occode-intake-choose <index>",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+
+        const binding = await store.getRepoBinding(formatRepoKey(repo));
+        const destination = resolveInteractiveNotificationDestination({
+          ctx,
+          repoConfig,
+          binding,
+        });
+        const draftHandle = {
+          repoKey: formatRepoKey(repo),
+          notifyChannel: destination.channel,
+          notifyTarget: destination.target,
+        };
+        const existing = await store.getPendingIntakeDraft(draftHandle);
+        if (!existing) {
+          return {
+            text: [
+              `No pending intake draft found for ${formatRepoKey(repo)} in this chat.`,
+              `Use /occode-intake ${formatRepoKey(repo)} <request> to create one first.`,
+            ].join("\n"),
+          };
+        }
+        if (existing.scopedDrafts.length === 0) {
+          return {
+            text: [
+              `No scoped draft variants are available for ${formatRepoKey(repo)}.`,
+              `Use /occode-intake-edit ${formatRepoKey(repo)} <title>\\n<body...> to refine the draft manually.`,
+            ].join("\n"),
+          };
+        }
+
+        const selected = existing.scopedDrafts[selectedIndex - 1];
+        if (!selected) {
+          return {
+            text: [
+              `Scoped draft index ${selectedIndex} is out of range for ${formatRepoKey(repo)}.`,
+              `Available variants: 1-${existing.scopedDrafts.length}`,
+            ].join("\n"),
+          };
+        }
+
+        const clarification = analyzeChatIntakeDraft({
+          title: selected.title,
+          bodySynthesized: false,
+        });
+        await store.upsertPendingIntakeDraft({
+          ...existing,
+          ...draftHandle,
+          title: selected.title,
+          body: selected.body,
+          bodySynthesized: false,
+          scopedDrafts: [],
+          clarificationQuestions: clarification.questions,
+          clarificationSuggestions: clarification.suggestions,
+          updatedAt: new Date().toISOString(),
+        });
+        return {
+          text: buildPendingIntakeDraftMessage({
+            repo,
+            draft: {
+              title: selected.title,
+              body: selected.body,
+              bodySynthesized: false,
+              scopedDrafts: [],
             },
             clarification,
           }),

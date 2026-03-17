@@ -1904,7 +1904,45 @@ describe("openclawcode extension", () => {
         repoKey: "zhyongrui/openclawcode",
         title: "Expose issueCount in openclaw code run --json output",
         bodySynthesized: true,
+        scopedDrafts: [],
       });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("offers multiple scoped drafts for ambiguous one-line intake requests", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await fixture.commands.get("occode-intake")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: [
+          "/occode-intake",
+          "Expose issueCount and issueRepo in openclaw code run --json output",
+        ].join("\n"),
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Scoped drafts: 2");
+      expect(result?.text).toContain("/occode-intake-choose");
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.pendingIntakeDrafts[0]?.scopedDrafts).toEqual([
+        expect.objectContaining({
+          title: "Expose issueCount in openclaw code run --json output",
+        }),
+        expect.objectContaining({
+          title: "Expose issueRepo in openclaw code run --json output",
+        }),
+      ]);
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -2046,6 +2084,81 @@ describe("openclawcode extension", () => {
 
       expect(rejected?.text).toContain("discarded the pending intake draft");
       expect(rejected?.text).toContain("Reason: too broad for one issue");
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.pendingIntakeDrafts).toEqual([]);
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("can choose a scoped draft before confirming chat intake", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      vi.stubEnv("GH_TOKEN", "test-token");
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify(
+            createGitHubIssueResponse({
+              issueNumber: 223,
+              title: "Expose issueRepo in openclaw code run --json output",
+              body: [
+                "Summary",
+                "Expose issueRepo in openclaw code run --json output",
+                "",
+                "Problem to solve",
+                "This issue was drafted directly from chat intake and needs the workflow to translate the request into the concrete code change.",
+                "",
+                "Requested from chat intake",
+                "Expose issueRepo in openclaw code run --json output",
+              ].join("\n"),
+            }),
+          ),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      await fixture.commands.get("occode-intake")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: [
+          "/occode-intake",
+          "Expose issueCount and issueRepo in openclaw code run --json output",
+        ].join("\n"),
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      const chosen = await fixture.commands.get("occode-intake-choose")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-intake-choose 2",
+        args: "2",
+        to: "user:intake-chat",
+        config: {},
+      });
+      expect(chosen?.text).toContain("Title: Expose issueRepo in openclaw code run --json output");
+      expect(chosen?.text).toContain("Scoped drafts: 0");
+
+      const confirmed = await fixture.commands.get("occode-intake-confirm")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-intake-confirm",
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      expect(confirmed?.text).toContain("Issue: zhyongrui/openclawcode#223");
+      expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+        title: "Expose issueRepo in openclaw code run --json output",
+      });
 
       const snapshot = await fixture.store.snapshot();
       expect(snapshot.pendingIntakeDrafts).toEqual([]);

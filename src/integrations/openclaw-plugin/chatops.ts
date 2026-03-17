@@ -94,6 +94,12 @@ export interface OpenClawCodeChatopsIssueDraftCommand {
   };
 }
 
+export interface OpenClawCodeScopedIssueDraft {
+  title: string;
+  body: string;
+  reason: string;
+}
+
 export interface OpenClawCodeChatopsRunRequest {
   owner: string;
   repo: string;
@@ -553,7 +559,7 @@ export function parseChatopsIssueDraftCommand(
   };
 }
 
-function buildMinimalChatIssueBody(title: string): string {
+export function buildMinimalChatIssueBody(title: string): string {
   return [
     "Summary",
     title,
@@ -564,6 +570,38 @@ function buildMinimalChatIssueBody(title: string): string {
     "Requested from chat intake",
     title,
   ].join("\n");
+}
+
+export function deriveScopedChatIssueDrafts(title: string): OpenClawCodeScopedIssueDraft[] {
+  const trimmed = title.trim();
+  const match = trimmed.match(
+    /^(Expose|Add|Document|Clarify|Support|Implement)\s+(.+?)\s+(in|for|on|via|within)\s+(.+)$/i,
+  );
+  if (!match) {
+    return [];
+  }
+
+  const verb = match[1] ?? "";
+  const subject = match[2] ?? "";
+  const preposition = match[3] ?? "";
+  const scope = match[4] ?? "";
+  const items = subject
+    .split(/\s*,\s*|\s+and\s+/i)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const uniqueItems = [...new Set(items)];
+  if (uniqueItems.length < 2 || uniqueItems.length > 4) {
+    return [];
+  }
+
+  return uniqueItems.map((item) => {
+    const scopedTitle = `${verb} ${item} ${preposition} ${scope}`;
+    return {
+      title: scopedTitle,
+      body: buildMinimalChatIssueBody(scopedTitle),
+      reason: `Narrow the request to just ${item}.`,
+    };
+  });
 }
 
 function defaultBranchName(issueNumber: number): string {

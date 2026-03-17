@@ -450,6 +450,7 @@ describe("OpenClawCodeChatopsStore", () => {
         body: "Summary\nExpose issueCount in run json",
         sourceRequest: "Expose issueCount in run json",
         bodySynthesized: true,
+        scopedDrafts: [],
         clarificationQuestions: ["What proof should show the request succeeded?"],
         clarificationSuggestions: ["Use /occode-intake-edit before /occode-intake-confirm."],
         createdAt,

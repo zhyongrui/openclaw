@@ -7,6 +7,7 @@ import type {
   WorkflowStage,
 } from "../../openclawcode/contracts/index.js";
 import { resolveAutoMergeDisposition, resolveAutoMergePolicy } from "../../openclawcode/index.js";
+import type { OpenClawCodeScopedIssueDraft } from "./chatops.js";
 import type { OpenClawCodeChatopsRunRequest } from "./chatops.js";
 
 export interface OpenClawCodeQueuedRun {
@@ -33,6 +34,7 @@ export interface OpenClawCodePendingIntakeDraft {
   body: string;
   sourceRequest: string;
   bodySynthesized: boolean;
+  scopedDrafts: OpenClawCodeScopedIssueDraft[];
   clarificationQuestions: string[];
   clarificationSuggestions: string[];
   createdAt: string;
@@ -210,6 +212,28 @@ function normalizePendingIntakeDraft(raw: unknown): OpenClawCodePendingIntakeDra
     body: candidate.body,
     sourceRequest: candidate.sourceRequest,
     bodySynthesized: candidate.bodySynthesized,
+    scopedDrafts: Array.isArray(candidate.scopedDrafts)
+      ? candidate.scopedDrafts.flatMap((entry) => {
+          if (!entry || typeof entry !== "object") {
+            return [];
+          }
+          const candidateDraft = entry as Partial<OpenClawCodeScopedIssueDraft>;
+          if (
+            typeof candidateDraft.title !== "string" ||
+            typeof candidateDraft.body !== "string" ||
+            typeof candidateDraft.reason !== "string"
+          ) {
+            return [];
+          }
+          return [
+            {
+              title: candidateDraft.title,
+              body: candidateDraft.body,
+              reason: candidateDraft.reason,
+            } satisfies OpenClawCodeScopedIssueDraft,
+          ];
+        })
+      : [],
     clarificationQuestions: Array.isArray(candidate.clarificationQuestions)
       ? candidate.clarificationQuestions.filter(
           (value): value is string => typeof value === "string",

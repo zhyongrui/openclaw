@@ -29,6 +29,7 @@ import {
   HeuristicPlanner,
   HostShellRunner,
   listValidationIssueTemplates,
+  listValidationPoolMinimumTargets,
   OpenClawAgentRunner,
   parseValidationIssue,
   AgentBackedBuilder,
@@ -62,6 +63,7 @@ import {
   resolveAutoMergeDisposition,
   resolveAutoMergePolicy,
   type OpenClawCodeOperatorStatusSnapshot,
+  resolveValidationPoolDeficits,
 } from "../openclawcode/index.js";
 import type { RuntimeEnv } from "../runtime.js";
 
@@ -94,7 +96,7 @@ export interface OpenClawCodeRunOpts {
 }
 
 export interface OpenClawCodeSeedValidationIssueOpts {
-  template: ValidationIssueTemplateId;
+  template?: ValidationIssueTemplateId;
   owner?: string;
   repo?: string;
   repoRoot?: string;
@@ -102,6 +104,7 @@ export interface OpenClawCodeSeedValidationIssueOpts {
   sourcePath?: string;
   docPath?: string;
   summary?: string;
+  balanced?: boolean;
   dryRun?: boolean;
   json?: boolean;
 }
@@ -119,6 +122,7 @@ export interface OpenClawCodeReconcileValidationIssuesOpts {
   repo?: string;
   repoRoot?: string;
   closeImplemented?: boolean;
+  enforceMinimumPoolSize?: boolean;
   json?: boolean;
 }
 
@@ -933,22 +937,20 @@ function summarizeValidationIssueImplementationCounts(issues: ValidationIssueInv
 function resolveValidationPoolNextAction(params: {
   issues: ValidationIssueInventoryEntry[];
   closeImplemented: boolean;
+  totalMissing: number;
+  enforceMinimumPoolSize: boolean;
 }): string {
   const closableOpenIssues = params.issues.filter(
     (issue) => issue.state === "open" && issue.autoClosable,
   );
-  const remainingOpenCommandLayer = params.issues.filter(
-    (issue) =>
-      issue.state === "open" && issue.issueClass === "command-layer" && !issue.autoClosable,
-  ).length;
 
   if (!params.closeImplemented && closableOpenIssues.length > 0) {
     return "close-implemented-validation-issues";
   }
-  if (remainingOpenCommandLayer === 0) {
-    return "seed-command-layer-validation-issue";
+  if (params.totalMissing > 0) {
+    return params.enforceMinimumPoolSize ? "validation-pool-balanced" : "enforce-minimum-pool-size";
   }
-  return "validation-pool-actionable";
+  return "validation-pool-balanced";
 }
 
 async function listValidationIssueInventory(params: {
@@ -994,6 +996,153 @@ async function listValidationIssueInventory(params: {
       ];
     })
     .toSorted((left, right) => left.issueNumber - right.issueNumber);
+}
+
+function resolveValidationIssueClassCounts(issues: ValidationIssueInventoryEntry[]) {
+  return {
+    commandLayer: issues.filter((issue) => issue.issueClass === "command-layer").length,
+    operatorDocs: issues.filter((issue) => issue.issueClass === "operator-docs").length,
+    highRiskValidation: issues.filter((issue) => issue.issueClass === "high-risk-validation")
+      .length,
+  };
+}
+
+function resolveValidationPoolSummary(issues: ValidationIssueInventoryEntry[]) {
+  const minimumPoolTargets = listValidationPoolMinimumTargets();
+  const openIssues = issues.filter((issue) => issue.state === "open");
+  const poolDeficits = resolveValidationPoolDeficits(openIssues).map((deficit) => ({
+    issueClass: deficit.issueClass,
+    minimumOpenIssues: deficit.minimumOpenIssues,
+    currentOpenIssues: deficit.currentOpenIssues,
+    missingIssues: deficit.missingIssues,
+    rationale: deficit.rationale,
+  }));
+  return {
+    minimumPoolTargets,
+    poolDeficits,
+    totalMissing: poolDeficits.reduce((sum, deficit) => sum + deficit.missingIssues, 0),
+  };
+}
+
+type ValidationIssueSeedAction = {
+  template: ValidationIssueTemplateId;
+  issueClass: string;
+  title: string;
+  issueNumber: number | null;
+  issueUrl: string | null;
+  created: boolean;
+  reusedExisting: boolean;
+  dryRun: boolean;
+};
+
+async function seedValidationIssueDraft(params: {
+  owner: string;
+  repo: string;
+  draft: ReturnType<typeof buildValidationIssueDraft>;
+  dryRun: boolean;
+  github: GitHubRestClient;
+  existingOpenIssues?: Awaited<ReturnType<GitHubRestClient["listIssues"]>>;
+}): Promise<ValidationIssueSeedAction> {
+  const openIssues =
+    params.existingOpenIssues ??
+    (await params.github.listIssues({
+      owner: params.owner,
+      repo: params.repo,
+      state: "open",
+    }));
+  const existing = openIssues
+    .filter((issue) => {
+      const classified = classifyValidationIssue({
+        title: issue.title,
+        body: issue.body,
+      });
+      return classified?.template === params.draft.template && issue.title === params.draft.title;
+    })
+    .toSorted((left, right) => left.number - right.number)[0];
+
+  if (existing) {
+    return {
+      template: params.draft.template,
+      issueClass: params.draft.issueClass,
+      title: params.draft.title,
+      issueNumber: existing.number,
+      issueUrl: existing.url,
+      created: false,
+      reusedExisting: true,
+      dryRun: params.dryRun,
+    };
+  }
+
+  if (params.dryRun) {
+    return {
+      template: params.draft.template,
+      issueClass: params.draft.issueClass,
+      title: params.draft.title,
+      issueNumber: null,
+      issueUrl: null,
+      created: false,
+      reusedExisting: false,
+      dryRun: true,
+    };
+  }
+
+  const created = await params.github.createIssue({
+    owner: params.owner,
+    repo: params.repo,
+    title: params.draft.title,
+    body: params.draft.body,
+  });
+  return {
+    template: params.draft.template,
+    issueClass: params.draft.issueClass,
+    title: params.draft.title,
+    issueNumber: created.number,
+    issueUrl: created.url,
+    created: true,
+    reusedExisting: false,
+    dryRun: false,
+  };
+}
+
+async function seedBalancedValidationPool(params: {
+  owner: string;
+  repo: string;
+  repoRoot: string;
+  openIssues: ValidationIssueInventoryEntry[];
+  dryRun: boolean;
+  github: GitHubRestClient;
+}) {
+  const deficits = resolveValidationPoolDeficits(params.openIssues);
+  const requests = deficits.flatMap((deficit) => {
+    if (deficit.missingIssues === 0) {
+      return [];
+    }
+    return deficit.defaultSeedRequests.slice(0, deficit.missingIssues);
+  });
+  const existingOpenIssues = await params.github.listIssues({
+    owner: params.owner,
+    repo: params.repo,
+    state: "open",
+  });
+  const actions: ValidationIssueSeedAction[] = [];
+  for (const request of requests) {
+    const draft = buildValidationIssueDraft(request);
+    actions.push(
+      await seedValidationIssueDraft({
+        owner: params.owner,
+        repo: params.repo,
+        draft,
+        dryRun: params.dryRun,
+        github: params.github,
+        existingOpenIssues,
+      }),
+    );
+  }
+
+  return {
+    deficits,
+    actions,
+  };
 }
 
 function resolveRunSummary(run: WorkflowRun): string {
@@ -1834,6 +1983,76 @@ export async function openclawCodeSeedValidationIssueCommand(
     repo: opts.repo,
     repoRoot,
   });
+  const github = new GitHubRestClient();
+
+  if (opts.balanced) {
+    if (opts.template) {
+      throw new Error("--template and --balanced cannot be used together");
+    }
+    const openIssues = await listValidationIssueInventory({
+      owner: repoRef.owner,
+      repo: repoRef.repo,
+      repoRoot,
+      state: "open",
+      github,
+    });
+    const { minimumPoolTargets, poolDeficits } = resolveValidationPoolSummary(openIssues);
+    const result = await seedBalancedValidationPool({
+      owner: repoRef.owner,
+      repo: repoRef.repo,
+      repoRoot,
+      openIssues,
+      dryRun: Boolean(opts.dryRun),
+      github,
+    });
+
+    if (opts.json) {
+      runtime.log(
+        JSON.stringify(
+          {
+            contractVersion: OPENCLAWCODE_VALIDATION_POOL_CONTRACT_VERSION,
+            owner: repoRef.owner,
+            repo: repoRef.repo,
+            balanced: true,
+            dryRun: Boolean(opts.dryRun),
+            minimumPoolTargets,
+            poolDeficits,
+            seedActions: result.actions,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+
+    runtime.log(`Repo: ${repoRef.owner}/${repoRef.repo}`);
+    runtime.log(`Balanced seeding dry-run: ${Boolean(opts.dryRun)}`);
+    for (const target of minimumPoolTargets) {
+      runtime.log(
+        `- ${target.issueClass}: minimum ${target.minimumOpenIssues} (${target.rationale})`,
+      );
+    }
+    for (const deficit of poolDeficits) {
+      runtime.log(
+        `- deficit ${deficit.issueClass}: current=${deficit.currentOpenIssues} missing=${deficit.missingIssues}`,
+      );
+    }
+    for (const action of result.actions) {
+      runtime.log(
+        `${action.created ? "created" : action.reusedExisting ? "reused" : "would-create"} ${action.issueClass}/${action.template}: ${action.title}`,
+      );
+      if (action.issueUrl) {
+        runtime.log(action.issueUrl);
+      }
+    }
+    return;
+  }
+
+  if (!opts.template) {
+    throw new Error("--template is required unless --balanced is used");
+  }
+
   const draft = buildValidationIssueDraft({
     template: opts.template,
     fieldName: opts.fieldName,
@@ -1841,7 +2060,6 @@ export async function openclawCodeSeedValidationIssueCommand(
     docPath: opts.docPath,
     summary: opts.summary,
   });
-
   if (opts.dryRun) {
     if (opts.json) {
       runtime.log(
@@ -1867,33 +2085,24 @@ export async function openclawCodeSeedValidationIssueCommand(
     return;
   }
 
-  const github = new GitHubRestClient();
-  const existing = (
-    await github.listIssues({
-      owner: repoRef.owner,
-      repo: repoRef.repo,
-      state: "open",
-    })
-  )
-    .filter((issue) => {
-      const classified = classifyValidationIssue({
-        title: issue.title,
-        body: issue.body,
-      });
-      return classified?.template === draft.template && issue.title === draft.title;
-    })
-    .toSorted((left, right) => left.number - right.number)[0];
+  const action = await seedValidationIssueDraft({
+    owner: repoRef.owner,
+    repo: repoRef.repo,
+    draft,
+    dryRun: false,
+    github,
+  });
 
-  if (existing) {
+  if (action.reusedExisting) {
     if (opts.json) {
       runtime.log(
         JSON.stringify(
           {
             ...draft,
-            owner: existing.owner,
-            repo: existing.repo,
-            issueNumber: existing.number,
-            issueUrl: existing.url,
+            owner: repoRef.owner,
+            repo: repoRef.repo,
+            issueNumber: action.issueNumber,
+            issueUrl: action.issueUrl,
             dryRun: false,
             created: false,
             reusedExisting: true,
@@ -1904,28 +2113,21 @@ export async function openclawCodeSeedValidationIssueCommand(
       );
       return;
     }
-    runtime.log(`Using existing issue #${existing.number}: ${existing.url}`);
+    runtime.log(`Using existing issue #${action.issueNumber}: ${action.issueUrl}`);
     runtime.log(`Template: ${draft.template}`);
     runtime.log(`Issue class: ${draft.issueClass}`);
     return;
   }
-
-  const created = await github.createIssue({
-    owner: repoRef.owner,
-    repo: repoRef.repo,
-    title: draft.title,
-    body: draft.body,
-  });
 
   if (opts.json) {
     runtime.log(
       JSON.stringify(
         {
           ...draft,
-          owner: created.owner,
-          repo: created.repo,
-          issueNumber: created.number,
-          issueUrl: created.url,
+          owner: repoRef.owner,
+          repo: repoRef.repo,
+          issueNumber: action.issueNumber,
+          issueUrl: action.issueUrl,
           dryRun: false,
           created: true,
           reusedExisting: false,
@@ -1937,7 +2139,7 @@ export async function openclawCodeSeedValidationIssueCommand(
     return;
   }
 
-  runtime.log(`Created issue #${created.number}: ${created.url}`);
+  runtime.log(`Created issue #${action.issueNumber}: ${action.issueUrl}`);
   runtime.log(`Template: ${draft.template}`);
   runtime.log(`Issue class: ${draft.issueClass}`);
 }
@@ -1960,13 +2162,7 @@ export async function openclawCodeListValidationIssuesCommand(
     state: opts.state ?? "open",
     github,
   });
-
-  const counts = {
-    commandLayer: issues.filter((issue) => issue.issueClass === "command-layer").length,
-    operatorDocs: issues.filter((issue) => issue.issueClass === "operator-docs").length,
-    highRiskValidation: issues.filter((issue) => issue.issueClass === "high-risk-validation")
-      .length,
-  };
+  const counts = resolveValidationIssueClassCounts(issues);
   const implementationCounts = summarizeValidationIssueImplementationCounts(issues);
   const templateCounts = issues.reduce<Partial<Record<ValidationIssueTemplateId, number>>>(
     (summary, issue) => {
@@ -1975,6 +2171,7 @@ export async function openclawCodeListValidationIssuesCommand(
     },
     {},
   );
+  const { minimumPoolTargets, poolDeficits } = resolveValidationPoolSummary(issues);
 
   if (opts.json) {
     runtime.log(
@@ -1988,6 +2185,8 @@ export async function openclawCodeListValidationIssuesCommand(
           counts,
           implementationCounts,
           templateCounts,
+          minimumPoolTargets,
+          poolDeficits,
           issues,
         },
         null,
@@ -2006,6 +2205,14 @@ export async function openclawCodeListValidationIssuesCommand(
   runtime.log(`- implemented: ${implementationCounts.implemented}`);
   runtime.log(`- pending: ${implementationCounts.pending}`);
   runtime.log(`- manual-review: ${implementationCounts.manualReview}`);
+  for (const target of minimumPoolTargets) {
+    runtime.log(`- minimum ${target.issueClass}: ${target.minimumOpenIssues}`);
+  }
+  for (const deficit of poolDeficits) {
+    runtime.log(
+      `- deficit ${deficit.issueClass}: current=${deficit.currentOpenIssues} missing=${deficit.missingIssues}`,
+    );
+  }
   for (const [template, count] of Object.entries(templateCounts).toSorted(([left], [right]) =>
     left.localeCompare(right),
   )) {
@@ -2088,9 +2295,29 @@ export async function openclawCodeReconcileValidationIssuesCommand(
     });
   }
 
+  const remainingOpenIssues = opts.closeImplemented
+    ? issues.filter((issue) => !issue.autoClosable)
+    : issues;
+  const { minimumPoolTargets, poolDeficits, totalMissing } =
+    resolveValidationPoolSummary(remainingOpenIssues);
+  const seedActions =
+    opts.enforceMinimumPoolSize && totalMissing > 0
+      ? (
+          await seedBalancedValidationPool({
+            owner: repoRef.owner,
+            repo: repoRef.repo,
+            repoRoot,
+            openIssues: remainingOpenIssues,
+            dryRun: false,
+            github,
+          })
+        ).actions
+      : [];
   const nextAction = resolveValidationPoolNextAction({
-    issues,
+    issues: remainingOpenIssues,
     closeImplemented: Boolean(opts.closeImplemented),
+    totalMissing,
+    enforceMinimumPoolSize: Boolean(opts.enforceMinimumPoolSize),
   });
   const closedCount = actions.filter((action) => action.action === "closed").length;
   const closableCount = closable.length;
@@ -2103,9 +2330,14 @@ export async function openclawCodeReconcileValidationIssuesCommand(
           owner: repoRef.owner,
           repo: repoRef.repo,
           closeImplemented: Boolean(opts.closeImplemented),
+          enforceMinimumPoolSize: Boolean(opts.enforceMinimumPoolSize),
           totalValidationIssues: issues.length,
           closableImplementedIssues: closableCount,
           closedIssues: closedCount,
+          minimumPoolTargets,
+          poolDeficits,
+          seededIssues: seedActions.filter((action) => action.created).length,
+          seedActions,
           nextAction,
           actions,
         },
@@ -2120,10 +2352,28 @@ export async function openclawCodeReconcileValidationIssuesCommand(
   runtime.log(`Validation issues inspected: ${issues.length}`);
   runtime.log(`Closable implemented issues: ${closableCount}`);
   runtime.log(`Closed issues: ${closedCount}`);
+  runtime.log(`Enforced minimum pool size: ${Boolean(opts.enforceMinimumPoolSize)}`);
+  for (const target of minimumPoolTargets) {
+    runtime.log(`- minimum ${target.issueClass}: ${target.minimumOpenIssues}`);
+  }
+  for (const deficit of poolDeficits) {
+    runtime.log(
+      `- deficit ${deficit.issueClass}: current=${deficit.currentOpenIssues} missing=${deficit.missingIssues}`,
+    );
+  }
+  runtime.log(`Seeded issues: ${seedActions.filter((action) => action.created).length}`);
   runtime.log(`Next action: ${nextAction}`);
   for (const action of actions) {
     runtime.log(`#${action.issueNumber} [${action.action}] ${action.title}`);
     runtime.log(action.implementationSummary);
+  }
+  for (const seedAction of seedActions) {
+    runtime.log(
+      `${seedAction.created ? "created" : "reused"} ${seedAction.issueClass}/${seedAction.template}: ${seedAction.title}`,
+    );
+    if (seedAction.issueUrl) {
+      runtime.log(seedAction.issueUrl);
+    }
   }
 }
 

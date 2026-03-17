@@ -2342,6 +2342,7 @@ describe("openclawCodeRunCommand", () => {
       body: "Persist and surface a machine-readable operator snapshot.",
       sourceRequest: "Need a stable operator snapshot contract.",
       bodySynthesized: false,
+      scopedDrafts: [],
       clarificationQuestions: [],
       clarificationSuggestions: [],
       createdAt: "2026-03-16T00:00:00.000Z",
@@ -3235,6 +3236,49 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.body).toContain("`failureDiagnostics.provider`");
   });
 
+  it("renders dedicated string validation templates for timestamp, url, and enum-like fields", async () => {
+    const templateExpectations = [
+      {
+        template: "command-json-string-timestamp" as const,
+        fieldName: "publishedPullRequestOpenedAt",
+        sourcePath: "publishedPullRequest.openedAt",
+        snippet: "timestamp-like string field",
+      },
+      {
+        template: "command-json-string-url" as const,
+        fieldName: "issueUrl",
+        sourcePath: "issue.url",
+        snippet: "URL string field",
+      },
+      {
+        template: "command-json-string-enum" as const,
+        fieldName: "verificationDecision",
+        sourcePath: "verificationReport.decision",
+        snippet: "enum-like string field",
+      },
+    ];
+
+    for (const entry of templateExpectations) {
+      runtime.log.mockClear();
+      await openclawCodeSeedValidationIssueCommand(
+        {
+          template: entry.template,
+          repoRoot: "/repo",
+          fieldName: entry.fieldName,
+          sourcePath: entry.sourcePath,
+          dryRun: true,
+          json: true,
+        },
+        runtime,
+      );
+
+      const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+      expect(payload.template).toBe(entry.template);
+      expect(payload.body).toContain(entry.snippet);
+      expect(payload.body).toContain("string | null");
+    }
+  });
+
   it("creates a validation issue from the selected template", async () => {
     await openclawCodeSeedValidationIssueCommand(
       {
@@ -3258,8 +3302,8 @@ describe("openclawCodeRunCommand", () => {
     expect(payload).toMatchObject({
       template: "operator-doc-note",
       issueClass: "operator-docs",
-      owner: "openclaw",
-      repo: "openclaw",
+      owner: "zhyongrui",
+      repo: "openclawcode",
       issueNumber: 99,
       issueUrl: "https://github.com/openclaw/openclaw/issues/99",
       dryRun: false,
@@ -3298,8 +3342,65 @@ describe("openclawCodeRunCommand", () => {
       "command-json-boolean",
       "command-json-number",
       "command-json-string",
+      "command-json-string-timestamp",
+      "command-json-string-url",
+      "command-json-string-enum",
       "operator-doc-note",
       "webhook-precheck-high-risk",
+    ]);
+  });
+
+  it("previews balanced validation-pool seeding from the minimum-pool policy", async () => {
+    await openclawCodeSeedValidationIssueCommand(
+      {
+        repoRoot: "/repo",
+        balanced: true,
+        dryRun: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      contractVersion: 1,
+      owner: "openclaw",
+      repo: "openclaw",
+      balanced: true,
+      dryRun: true,
+    });
+    expect(payload.minimumPoolTargets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueClass: "command-layer",
+          minimumOpenIssues: 0,
+        }),
+        expect.objectContaining({
+          issueClass: "operator-docs",
+          minimumOpenIssues: 1,
+        }),
+        expect.objectContaining({
+          issueClass: "high-risk-validation",
+          minimumOpenIssues: 1,
+        }),
+      ]),
+    );
+    expect(payload.poolDeficits).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueClass: "high-risk-validation",
+          missingIssues: 1,
+        }),
+      ]),
+    );
+    expect(payload.seedActions).toEqual([
+      expect.objectContaining({
+        template: "webhook-precheck-high-risk",
+        issueClass: "high-risk-validation",
+        created: false,
+        reusedExisting: false,
+        dryRun: true,
+      }),
     ]);
   });
 
@@ -3338,6 +3439,22 @@ describe("openclawCodeRunCommand", () => {
         pending: 0,
         manualReview: 1,
       },
+      minimumPoolTargets: expect.arrayContaining([
+        expect.objectContaining({
+          issueClass: "command-layer",
+          minimumOpenIssues: 0,
+        }),
+        expect.objectContaining({
+          issueClass: "high-risk-validation",
+          minimumOpenIssues: 1,
+        }),
+      ]),
+      poolDeficits: expect.arrayContaining([
+        expect.objectContaining({
+          issueClass: "high-risk-validation",
+          missingIssues: 1,
+        }),
+      ]),
       templateCounts: {
         "command-json-boolean": 1,
         "operator-doc-note": 1,
@@ -3385,6 +3502,12 @@ describe("openclawCodeRunCommand", () => {
       "- implemented: 1",
       "- pending: 0",
       "- manual-review: 1",
+      "- minimum command-layer: 0",
+      "- minimum operator-docs: 1",
+      "- minimum high-risk-validation: 1",
+      "- deficit command-layer: current=1 missing=0",
+      "- deficit operator-docs: current=1 missing=0",
+      "- deficit high-risk-validation: current=0 missing=1",
       "- template command-json-boolean: 1",
       "- template operator-doc-note: 1",
       expect.stringContaining("#99 [command-layer/command-json-boolean/implemented]"),
@@ -3461,8 +3584,61 @@ describe("openclawCodeRunCommand", () => {
       closeImplemented: true,
       closableImplementedIssues: 1,
       closedIssues: 1,
-      nextAction: "seed-command-layer-validation-issue",
+      enforceMinimumPoolSize: false,
+      nextAction: "enforce-minimum-pool-size",
+      poolDeficits: expect.arrayContaining([
+        expect.objectContaining({
+          issueClass: "high-risk-validation",
+          missingIssues: 1,
+        }),
+      ]),
     });
+  });
+
+  it("can enforce the minimum pool size during reconciliation", async () => {
+    const repoRoot = await createValidationAssessmentRepoRoot({
+      fieldName: "verificationHasMissingCoverage",
+    });
+
+    await openclawCodeReconcileValidationIssuesCommand(
+      {
+        repoRoot,
+        closeImplemented: true,
+        enforceMinimumPoolSize: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    expect(mocks.closeIssue).toHaveBeenCalledWith({
+      owner: "openclaw",
+      repo: "openclaw",
+      issueNumber: 99,
+    });
+    expect(mocks.createIssue).toHaveBeenCalledWith({
+      owner: "openclaw",
+      repo: "openclaw",
+      title:
+        "[Validation]: Webhook intake should precheck-escalate credential or secret exposure requests",
+      body: expect.stringContaining("credential or secret exposure requests"),
+    });
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      contractVersion: 1,
+      closeImplemented: true,
+      enforceMinimumPoolSize: true,
+      closedIssues: 1,
+      seededIssues: 1,
+      nextAction: "validation-pool-balanced",
+    });
+    expect(payload.seedActions).toEqual([
+      expect.objectContaining({
+        template: "webhook-precheck-high-risk",
+        issueClass: "high-risk-validation",
+        created: true,
+        reusedExisting: false,
+      }),
+    ]);
   });
 });
 

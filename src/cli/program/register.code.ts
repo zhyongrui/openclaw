@@ -142,12 +142,16 @@ ${formatHelpExamples([
     "Draft a low-risk validation issue without creating it on GitHub.",
   ],
   [
+    "openclaw code seed-validation-issue --balanced --dry-run --json",
+    "Preview the minimum balanced validation pool without creating GitHub issues.",
+  ],
+  [
     "openclaw code list-validation-issues --json",
     "Inspect the current validation-pool inventory for the current repo.",
   ],
   [
-    "openclaw code reconcile-validation-issues --close-implemented --json",
-    "Close already-implemented validation issues and report the next pool action.",
+    "openclaw code reconcile-validation-issues --close-implemented --enforce-minimum-pool-size --json",
+    "Close already-implemented validation issues and replenish any missing minimum-pool entries.",
   ],
 ])}
 
@@ -714,9 +718,14 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
   code
     .command("seed-validation-issue")
     .description("Create or preview a repository-local validation issue for openclawcode")
-    .requiredOption(
+    .option(
       "--template <id>",
       `Template id (${openclawCodeSeedValidationIssueTemplateIds().join(", ")})`,
+    )
+    .option(
+      "--balanced",
+      "Seed or preview the balanced validation pool using the minimum-pool policy",
+      false,
     )
     .option("--owner <owner>", "GitHub owner")
     .option("--repo <repo>", "GitHub repository name")
@@ -741,6 +750,7 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             sourcePath: opts.sourcePath as string | undefined,
             docPath: opts.docPath as string | undefined,
             summary: opts.summary as string | undefined,
+            balanced: Boolean(opts.balanced),
             dryRun: Boolean(opts.dryRun),
             json: Boolean(opts.json),
           },
@@ -783,6 +793,11 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
       "Close command-layer validation issues already satisfied by the repo",
       false,
     )
+    .option(
+      "--enforce-minimum-pool-size",
+      "Seed the balanced minimum validation pool after reconciliation if any class is below policy",
+      false,
+    )
     .option("--json", "Output JSON", false)
     .action(async (opts) => {
       await runCommandWithRuntime(defaultRuntime, async () => {
@@ -792,6 +807,7 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             repo: opts.repo as string | undefined,
             repoRoot: opts.repoRoot as string | undefined,
             closeImplemented: Boolean(opts.closeImplemented),
+            enforceMinimumPoolSize: Boolean(opts.enforceMinimumPoolSize),
             json: Boolean(opts.json),
           },
           defaultRuntime,

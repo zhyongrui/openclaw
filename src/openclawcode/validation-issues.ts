@@ -2,6 +2,9 @@ export type ValidationIssueTemplateId =
   | "command-json-boolean"
   | "command-json-number"
   | "command-json-string"
+  | "command-json-string-timestamp"
+  | "command-json-string-url"
+  | "command-json-string-enum"
   | "operator-doc-note"
   | "webhook-precheck-high-risk";
 
@@ -55,6 +58,22 @@ export interface ValidationIssueImplementationAssessment {
   fieldName?: string;
 }
 
+export interface ValidationPoolMinimumTarget {
+  issueClass: ValidationIssueClass;
+  minimumOpenIssues: number;
+  rationale: string;
+}
+
+export interface ValidationPoolBalancedSeedRequest extends ValidationIssueDraftInput {
+  issueClass: ValidationIssueClass;
+}
+
+export interface ValidationPoolDeficit extends ValidationPoolMinimumTarget {
+  currentOpenIssues: number;
+  missingIssues: number;
+  defaultSeedRequests: ValidationPoolBalancedSeedRequest[];
+}
+
 const VALIDATION_ISSUE_TEMPLATES: readonly ValidationIssueTemplateSummary[] = [
   {
     id: "command-json-boolean",
@@ -73,6 +92,24 @@ const VALIDATION_ISSUE_TEMPLATES: readonly ValidationIssueTemplateSummary[] = [
     description: "Seed a low-risk JSON string-or-null field issue derived from nested metadata.",
   },
   {
+    id: "command-json-string-timestamp",
+    issueClass: "command-layer",
+    description:
+      "Seed a low-risk JSON timestamp-string-or-null field issue derived from nested metadata.",
+  },
+  {
+    id: "command-json-string-url",
+    issueClass: "command-layer",
+    description:
+      "Seed a low-risk JSON URL-string-or-null field issue derived from nested metadata.",
+  },
+  {
+    id: "command-json-string-enum",
+    issueClass: "command-layer",
+    description:
+      "Seed a low-risk JSON enum-string-or-null field issue derived from nested metadata.",
+  },
+  {
     id: "operator-doc-note",
     issueClass: "operator-docs",
     description: "Seed a low-risk docs or operator note issue for one specific file.",
@@ -85,6 +122,41 @@ const VALIDATION_ISSUE_TEMPLATES: readonly ValidationIssueTemplateSummary[] = [
 ] as const;
 
 const VALIDATION_ISSUE_MARKER_PREFIX = "<!-- openclawcode-validation";
+
+const VALIDATION_POOL_MINIMUM_TARGETS: readonly ValidationPoolMinimumTarget[] = [
+  {
+    issueClass: "command-layer",
+    minimumOpenIssues: 0,
+    rationale:
+      "The seed-ready command-layer queue is currently exhausted, so zero open command-layer issues is an intentional steady state until a new candidate is identified.",
+  },
+  {
+    issueClass: "operator-docs",
+    minimumOpenIssues: 1,
+    rationale:
+      "Keep one low-risk docs/operator note in the pool so the operator can continuously validate docs-only flows without waiting for a new manual seed.",
+  },
+  {
+    issueClass: "high-risk-validation",
+    minimumOpenIssues: 1,
+    rationale:
+      "Keep one precheck-escalation validation issue available so high-risk routing remains easy to prove after changes.",
+  },
+] as const;
+
+const VALIDATION_POOL_BALANCED_SEED_REQUESTS: readonly ValidationPoolBalancedSeedRequest[] = [
+  {
+    issueClass: "operator-docs",
+    template: "operator-doc-note",
+    docPath: "docs/openclawcode/validation-pool-contract.md",
+    summary: "validation-pool maintenance cadence and minimum-pool expectations",
+  },
+  {
+    issueClass: "high-risk-validation",
+    template: "webhook-precheck-high-risk",
+    summary: "credential or secret exposure requests",
+  },
+] as const;
 
 function requireTrimmedOption(optionName: string, value: string | undefined): string {
   const trimmed = value?.trim();
@@ -214,22 +286,82 @@ function buildCommandJsonNumberDraft(input: ValidationIssueDraftInput): Validati
 }
 
 function buildCommandJsonStringDraft(input: ValidationIssueDraftInput): ValidationIssueDraft {
+  return buildCommandJsonStringVariantDraft(input, "command-json-string");
+}
+
+function buildCommandJsonStringVariantDraft(
+  input: ValidationIssueDraftInput,
+  template: Extract<
+    ValidationIssueTemplateId,
+    | "command-json-string"
+    | "command-json-string-timestamp"
+    | "command-json-string-url"
+    | "command-json-string-enum"
+  >,
+): ValidationIssueDraft {
   const fieldName = requireTrimmedOption("--field-name", input.fieldName);
   const sourcePath = requireTrimmedOption("--source-path", input.sourcePath);
+  const descriptionByTemplate: Record<
+    typeof template,
+    {
+      summary: string;
+      problem: string;
+      frequency: string;
+      consequence: string;
+    }
+  > = {
+    "command-json-string": {
+      summary: "Add one stable top-level string field",
+      problem:
+        "Downstream tooling currently has to inspect the nested source path directly just to read this string value.",
+      frequency:
+        "Whenever downstream tooling wants this string value without unpacking nested workflow metadata.",
+      consequence:
+        "Without the derived field, simple consumers keep reimplementing the same nested null-check logic.",
+    },
+    "command-json-string-timestamp": {
+      summary: "Add one stable top-level timestamp-like string field",
+      problem:
+        "Downstream tooling currently has to inspect the nested source path directly just to read this timestamp-like string.",
+      frequency:
+        "Whenever downstream tooling wants a timestamp-like string without unpacking nested workflow metadata.",
+      consequence:
+        "Without the derived timestamp helper, simple consumers keep reimplementing the same nested timestamp extraction logic.",
+    },
+    "command-json-string-url": {
+      summary: "Add one stable top-level URL string field",
+      problem:
+        "Downstream tooling currently has to inspect the nested source path directly just to read this URL string.",
+      frequency:
+        "Whenever downstream tooling wants a URL string without unpacking nested workflow metadata.",
+      consequence:
+        "Without the derived URL helper, simple consumers keep reimplementing the same nested URL extraction logic.",
+    },
+    "command-json-string-enum": {
+      summary: "Add one stable top-level enum-like string field",
+      problem:
+        "Downstream tooling currently has to inspect the nested source path directly just to read this enum-like string.",
+      frequency:
+        "Whenever downstream tooling wants this enum-like string without unpacking nested workflow metadata.",
+      consequence:
+        "Without the derived enum helper, simple consumers keep reimplementing the same nested enum extraction logic.",
+    },
+  };
+  const details = descriptionByTemplate[template];
   return {
-    template: "command-json-string",
+    template,
     issueClass: "command-layer",
     title: `[Feature]: Expose ${fieldName} in openclaw code run --json output`,
     body: formatValidationIssueBody({
-      template: "command-json-string",
+      template,
       issueClass: "command-layer",
       title: `[Feature]: Expose ${fieldName} in openclaw code run --json output`,
       body: [
         "Summary",
-        `Add one stable top-level string field to \`openclaw code run --json\` named \`${fieldName}\`.`,
+        `${details.summary} to \`openclaw code run --json\` named \`${fieldName}\`.`,
         "",
         "Problem to solve",
-        `Downstream tooling currently has to inspect \`${sourcePath}\` directly just to read this nested string value. That is awkward for simple JSON consumers.`,
+        `${details.problem} That is awkward for simple JSON consumers.`,
         "",
         "Proposed solution",
         `Update \`src/commands/openclawcode.ts\` so the JSON output includes \`${fieldName}: string | null\`.`,
@@ -246,10 +378,10 @@ function buildCommandJsonStringDraft(input: ValidationIssueDraftInput): Validati
         "Low.",
         "",
         "Frequency",
-        "Whenever downstream tooling wants this string value without unpacking nested workflow metadata.",
+        details.frequency,
         "",
         "Consequence",
-        "Without the derived field, simple consumers keep reimplementing the same nested null-check logic.",
+        details.consequence,
       ].join("\n"),
     }),
   };
@@ -318,6 +450,33 @@ function buildWebhookPrecheckHighRiskDraft(input: ValidationIssueDraftInput): Va
 
 export function listValidationIssueTemplates(): readonly ValidationIssueTemplateSummary[] {
   return VALIDATION_ISSUE_TEMPLATES;
+}
+
+export function listValidationPoolMinimumTargets(): readonly ValidationPoolMinimumTarget[] {
+  return VALIDATION_POOL_MINIMUM_TARGETS;
+}
+
+export function listBalancedValidationPoolSeedRequests(): readonly ValidationPoolBalancedSeedRequest[] {
+  return VALIDATION_POOL_BALANCED_SEED_REQUESTS;
+}
+
+export function resolveValidationPoolDeficits(
+  openIssues: ReadonlyArray<Pick<ClassifiedValidationIssue, "issueClass">>,
+): ValidationPoolDeficit[] {
+  return VALIDATION_POOL_MINIMUM_TARGETS.map((target) => {
+    const currentOpenIssues = openIssues.filter(
+      (issue) => issue.issueClass === target.issueClass,
+    ).length;
+    const missingIssues = Math.max(0, target.minimumOpenIssues - currentOpenIssues);
+    return {
+      ...target,
+      currentOpenIssues,
+      missingIssues,
+      defaultSeedRequests: VALIDATION_POOL_BALANCED_SEED_REQUESTS.filter(
+        (request) => request.issueClass === target.issueClass,
+      ),
+    };
+  });
 }
 
 export function classifyValidationIssue(
@@ -396,7 +555,10 @@ export function parseValidationIssue(
   if (
     classified.template === "command-json-boolean" ||
     classified.template === "command-json-number" ||
-    classified.template === "command-json-string"
+    classified.template === "command-json-string" ||
+    classified.template === "command-json-string-timestamp" ||
+    classified.template === "command-json-string-url" ||
+    classified.template === "command-json-string-enum"
   ) {
     return {
       ...classified,
@@ -414,7 +576,10 @@ export function assessValidationIssueImplementation(
   if (
     issue.template !== "command-json-boolean" &&
     issue.template !== "command-json-number" &&
-    issue.template !== "command-json-string"
+    issue.template !== "command-json-string" &&
+    issue.template !== "command-json-string-timestamp" &&
+    issue.template !== "command-json-string-url" &&
+    issue.template !== "command-json-string-enum"
   ) {
     return {
       state: "manual-review",
@@ -488,6 +653,12 @@ export function buildValidationIssueDraft(input: ValidationIssueDraftInput): Val
       return buildCommandJsonNumberDraft(input);
     case "command-json-string":
       return buildCommandJsonStringDraft(input);
+    case "command-json-string-timestamp":
+      return buildCommandJsonStringVariantDraft(input, "command-json-string-timestamp");
+    case "command-json-string-url":
+      return buildCommandJsonStringVariantDraft(input, "command-json-string-url");
+    case "command-json-string-enum":
+      return buildCommandJsonStringVariantDraft(input, "command-json-string-enum");
     case "operator-doc-note":
       return buildOperatorDocNoteDraft(input);
     case "webhook-precheck-high-risk":

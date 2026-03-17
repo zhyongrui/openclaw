@@ -375,6 +375,25 @@ turning the working loop into a cleanly operable product:
   now also been implemented, documented, and auto-closed through the same path
 - validation-pool tooling now also supports `command-json-string`, so the
   replenished command-layer pool continues with issue `#111` for `workspaceRepoRoot`
+- validation-pool tooling now also supports dedicated string-template variants
+  for:
+  - timestamp-like fields
+  - URL fields
+  - enum-like fields
+- validation-pool upkeep now has an explicit minimum-pool policy:
+  - `command-layer = 0`
+  - `operator-docs = 1`
+  - `high-risk-validation = 1`
+- `openclaw code seed-validation-issue --balanced` can now preview or create a
+  balanced minimum pool in one command
+- `openclaw code reconcile-validation-issues --enforce-minimum-pool-size` can
+  now close implemented issues and immediately replenish any missing minimum
+  pool entries
+- the operator-facing maintenance cadence is now documented in
+  `docs/openclawcode/validation-pool-maintenance.md`
+- chat-native intake can now propose multiple scoped draft variants for
+  ambiguous one-line requests, and the operator can pick one with
+  `/occode-intake-choose` before confirming issue creation
 - command-layer issues `#101` and `#102` have now also been implemented,
   documented, and auto-closed through the same path
 - command-layer issue `#103` for `draftPullRequestTitle` has now also been
@@ -2355,3 +2374,6 @@ This closes a large local-code/local-doc gap, but not the external proof gap:
 - live fallback proof is still pending
 - fresh-host external install proof is still pending
 - blueprint-first live proof is still pending
+- the next productization slice after the cleared command-layer queue is now:
+  - fresh-host external install proof
+  - followed by fallback-model live proof
