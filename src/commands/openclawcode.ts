@@ -2,6 +2,10 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  resolveOpenClawCodePluginConfig,
+  type OpenClawCodeChatopsRepoConfig,
+} from "../integrations/openclaw-plugin/index.js";
+import {
   createProjectBlueprint,
   inspectProjectBlueprintClarifications,
   parseProjectBlueprintRoleId,
@@ -327,6 +331,60 @@ async function resolveRepoRef(params: {
     return { owner: params.owner, repo: params.repo };
   }
   return await resolveGitHubRepoFromGit(params.repoRoot);
+}
+
+function normalizeRepoKeyPart(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+async function resolveOperatorRepoConfig(params: {
+  operatorStateDir: string;
+  repoRoot: string;
+  repoRef: {
+    owner: string;
+    repo: string;
+  };
+}): Promise<OpenClawCodeChatopsRepoConfig | null> {
+  const configPath = path.join(params.operatorStateDir, "openclaw.json");
+  const rawConfig = await readFile(configPath, "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  });
+  if (!rawConfig) {
+    return null;
+  }
+
+  const parsed = JSON.parse(rawConfig) as {
+    plugins?: {
+      openclawcode?: Record<string, unknown>;
+      entries?: {
+        openclawcode?: {
+          config?: Record<string, unknown>;
+        };
+      };
+    };
+  };
+  const pluginConfig =
+    parsed.plugins?.entries?.openclawcode?.config ?? parsed.plugins?.openclawcode;
+  const resolved = resolveOpenClawCodePluginConfig(pluginConfig);
+  const normalizedRepoRoot = path.resolve(params.repoRoot);
+
+  return (
+    resolved.repos.find(
+      (entry) =>
+        normalizeRepoKeyPart(entry.owner) === normalizeRepoKeyPart(params.repoRef.owner) &&
+        normalizeRepoKeyPart(entry.repo) === normalizeRepoKeyPart(params.repoRef.repo) &&
+        path.resolve(entry.repoRoot) === normalizedRepoRoot,
+    ) ??
+    resolved.repos.find(
+      (entry) =>
+        normalizeRepoKeyPart(entry.owner) === normalizeRepoKeyPart(params.repoRef.owner) &&
+        normalizeRepoKeyPart(entry.repo) === normalizeRepoKeyPart(params.repoRef.repo),
+    ) ??
+    null
+  );
 }
 
 function logProjectBlueprintSummary(params: {
@@ -1483,12 +1541,19 @@ export async function openclawCodeRunCommand(
     repo: opts.repo,
     repoRoot,
   });
+  const operatorStateDir = resolveOperatorStateDir();
+  const operatorRepoConfig = await resolveOperatorRepoConfig({
+    operatorStateDir,
+    repoRoot,
+    repoRef,
+  });
   const stateDir = path.resolve(opts.stateDir ?? path.join(repoRoot, ".openclawcode"));
   const shellRunner = new HostShellRunner();
   const worktreeManager = new GitWorktreeManager();
   const github = new GitHubRestClient();
   const planner = new HeuristicPlanner();
   const agentRunner = new OpenClawAgentRunner();
+  const testCommands = opts.test?.length ? opts.test : (operatorRepoConfig?.testCommands ?? []);
   const builderTimeoutSeconds = resolvePositiveTimeoutSeconds({
     envName: OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS_ENV,
     fallback: DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS,
@@ -1500,8 +1565,8 @@ export async function openclawCodeRunCommand(
   const builder = new AgentBackedBuilder({
     agentRunner,
     shellRunner,
-    testCommands: opts.test ?? [],
-    agentId: opts.builderAgent,
+    testCommands,
+    agentId: opts.builderAgent ?? operatorRepoConfig?.builderAgent,
     timeoutSeconds: builderTimeoutSeconds,
     collectChangedFiles: async (run) => {
       if (!run.workspace) {
@@ -1512,7 +1577,7 @@ export async function openclawCodeRunCommand(
   });
   const verifier = new AgentBackedVerifier({
     agentRunner,
-    agentId: opts.verifierAgent,
+    agentId: opts.verifierAgent ?? operatorRepoConfig?.verifierAgent,
     timeoutSeconds: verifierTimeoutSeconds,
   });
   const store = new FileSystemWorkflowRunStore(path.join(stateDir, "runs"));

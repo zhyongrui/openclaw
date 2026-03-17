@@ -390,6 +390,61 @@ describe("openclawCodeRunCommand", () => {
     );
   });
 
+  it("falls back to operator repo test commands and role agents when run flags omit them", async () => {
+    const operatorRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-operator-root-"));
+    await writeFile(
+      path.join(operatorRoot, "openclaw.json"),
+      JSON.stringify(
+        {
+          plugins: {
+            entries: {
+              openclawcode: {
+                enabled: true,
+                config: {
+                  repos: [
+                    {
+                      owner: "openclaw",
+                      repo: "openclaw",
+                      repoRoot: "/repo",
+                      baseBranch: "main",
+                      notifyChannel: "telegram",
+                      notifyTarget: "chat:123",
+                      builderAgent: "builder-from-config",
+                      verifierAgent: "verifier-from-config",
+                      testCommands: [
+                        "pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads",
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    vi.stubEnv("OPENCLAW_STATE_DIR", operatorRoot);
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    expect(mocks.builderCtorArgs.at(-1)).toEqual(
+      expect.objectContaining({
+        agentId: "builder-from-config",
+        testCommands: [
+          "pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads",
+        ],
+      }),
+    );
+    expect(mocks.verifierCtorArgs.at(-1)).toEqual(
+      expect.objectContaining({
+        agentId: "verifier-from-config",
+      }),
+    );
+  });
+
   it("lets the operator override builder and verifier timeouts through env vars", async () => {
     vi.stubEnv("OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS", "90");
     vi.stubEnv("OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS", "45");
