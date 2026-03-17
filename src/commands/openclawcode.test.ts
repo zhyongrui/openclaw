@@ -246,12 +246,17 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.suitabilityEvaluatedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(payload.draftPullRequestBranchName).toBe("openclawcode/issue-2");
     expect(payload.draftPullRequestBaseBranch).toBe("main");
+    expect(payload.draftPullRequestHasTitle).toBe(true);
     expect(payload.draftPullRequestTitle).toBe(
       "[Issue #2] Include changed file list in JSON output",
     );
+    expect(payload.draftPullRequestHasBody).toBe(true);
     expect(payload.draftPullRequestBody).toBe("Draft PR body");
+    expect(payload.draftPullRequestHasOpenedAt).toBe(true);
     expect(payload.draftPullRequestOpenedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(payload.draftPullRequestHasNumber).toBe(true);
     expect(payload.draftPullRequestNumber).toBe(42);
+    expect(payload.draftPullRequestHasUrl).toBe(true);
     expect(payload.publishedPullRequestNumber).toBe(42);
     expect(payload.publishedPullRequestHasNumber).toBe(true);
     expect(payload.publishedPullRequestHasUrl).toBe(true);
@@ -420,11 +425,16 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.suitabilityReasonCount).toBe(3);
     expect(payload.draftPullRequestBranchName).toBeNull();
     expect(payload.draftPullRequestBaseBranch).toBeNull();
+    expect(payload.draftPullRequestHasTitle).toBe(false);
     expect(payload.draftPullRequestTitle).toBeNull();
+    expect(payload.draftPullRequestHasBody).toBe(false);
     expect(payload.draftPullRequestBody).toBeNull();
+    expect(payload.draftPullRequestHasOpenedAt).toBe(false);
     expect(payload.draftPullRequestOpenedAt).toBeNull();
+    expect(payload.draftPullRequestHasNumber).toBe(false);
     expect(payload.draftPullRequestNumber).toBeNull();
     expect(payload.publishedPullRequestNumber).toBeNull();
+    expect(payload.draftPullRequestHasUrl).toBe(false);
     expect(payload.draftPullRequestUrl).toBeNull();
     expect(payload.draftPullRequestDisposition).toBeNull();
     expect(payload.draftPullRequestDispositionReason).toBeNull();
@@ -894,12 +904,17 @@ describe("openclawCodeRunCommand", () => {
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.draftPullRequestBranchName).toBe("openclawcode/issue-2");
     expect(payload.draftPullRequestBaseBranch).toBe("main");
+    expect(payload.draftPullRequestHasTitle).toBe(true);
     expect(payload.draftPullRequestTitle).toBe(
       "[Issue #2] Include changed file list in JSON output",
     );
+    expect(payload.draftPullRequestHasBody).toBe(true);
     expect(payload.draftPullRequestBody).toBe("Draft PR body");
+    expect(payload.draftPullRequestHasOpenedAt).toBe(true);
     expect(payload.draftPullRequestOpenedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(payload.draftPullRequestHasNumber).toBe(false);
     expect(payload.draftPullRequestNumber).toBeNull();
+    expect(payload.draftPullRequestHasUrl).toBe(false);
     expect(payload.publishedPullRequestNumber).toBeNull();
     expect(payload.draftPullRequestUrl).toBeNull();
     expect(payload.draftPullRequestDisposition).toBeNull();
@@ -925,7 +940,9 @@ describe("openclawCodeRunCommand", () => {
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.draftPullRequestHasNumber).toBe(false);
     expect(payload.draftPullRequestNumber).toBeNull();
+    expect(payload.draftPullRequestHasUrl).toBe(true);
     expect(payload.draftPullRequestUrl).toBe("https://github.com/openclaw/openclaw/pull/42");
     expect(payload.pullRequestPublished).toBe(true);
     expect(payload.publishedPullRequestNumber).toBeNull();
@@ -958,6 +975,7 @@ describe("openclawCodeRunCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.pullRequestPublished).toBe(true);
+    expect(payload.draftPullRequestHasBody).toBe(false);
     expect(payload.publishedPullRequestBody).toBe("   ");
     expect(payload.publishedPullRequestHasBody).toBe(false);
     expect(payload.publishedPullRequestHasTitle).toBe(true);

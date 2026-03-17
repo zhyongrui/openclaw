@@ -57,11 +57,11 @@ Rules:
 - [x] `draftPullRequestUrl`
 - [x] `draftPullRequestDisposition`
 - [x] `draftPullRequestDispositionReason`
-- [ ] `draftPullRequestHasNumber`
-- [ ] `draftPullRequestHasUrl`
-- [ ] `draftPullRequestHasOpenedAt`
-- [ ] `draftPullRequestHasTitle`
-- [ ] `draftPullRequestHasBody`
+- [x] `draftPullRequestHasNumber`
+- [x] `draftPullRequestHasUrl`
+- [x] `draftPullRequestHasOpenedAt`
+- [x] `draftPullRequestHasTitle`
+- [x] `draftPullRequestHasBody`
 
 ## Issue Metadata Mirrors
 

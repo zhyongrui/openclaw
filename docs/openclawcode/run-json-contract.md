@@ -165,10 +165,15 @@ those nested objects.
 
 - `draftPullRequestBranchName`
 - `draftPullRequestBaseBranch`
+- `draftPullRequestHasTitle`
 - `draftPullRequestTitle`
+- `draftPullRequestHasBody`
 - `draftPullRequestBody`
+- `draftPullRequestHasOpenedAt`
 - `draftPullRequestOpenedAt`
+- `draftPullRequestHasNumber`
 - `draftPullRequestNumber`
+- `draftPullRequestHasUrl`
 - `draftPullRequestUrl`
 - `draftPullRequestDisposition`
 - `draftPullRequestDispositionReason`

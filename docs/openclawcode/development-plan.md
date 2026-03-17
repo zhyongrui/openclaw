@@ -424,6 +424,13 @@ turning the working loop into a cleanly operable product:
   on the refreshed sync branch
 - the next published-PR convenience mirror, `publishedPullRequestHasBody`, has
   now also landed on the refreshed sync branch
+- the draft-PR convenience-signal batch now also lands on the refreshed sync
+  branch:
+  - `draftPullRequestHasNumber`
+  - `draftPullRequestHasUrl`
+  - `draftPullRequestHasOpenedAt`
+  - `draftPullRequestHasTitle`
+  - `draftPullRequestHasBody`
 - the `failureDiagnostics` family is now effectively mirrored at the top level
   for:
   - summary
