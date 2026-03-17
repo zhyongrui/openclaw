@@ -464,6 +464,14 @@ These are the next narrow slices that should be consumed from the current state.
 - [x] implement the verification convenience mirror for `verificationDecisionIsApprove`
 - [x] implement the verification convenience mirror for `verificationDecisionIsRequestChanges`
 - [x] implement the verification convenience mirror for `verificationDecisionIsEscalate`
+- [x] implement the verification convenience mirrors for `verificationFindingsPresent`
+- [x] implement the verification convenience mirrors for `verificationMissingCoveragePresent`
+- [x] implement the verification convenience mirrors for `verificationFollowUpsPresent`
+- [x] implement the suitability convenience mirrors for `suitabilitySummaryPresent`
+- [x] implement the suitability convenience mirrors for `suitabilityReasonsPresent`
+- [x] implement the suitability convenience mirrors for `suitabilityDecisionIsAutoRun`
+- [x] implement the suitability convenience mirrors for `suitabilityDecisionIsNeedsHumanReview`
+- [x] implement the suitability convenience mirrors for `suitabilityDecisionIsEscalate`
 - [ ] keep `run-json-contract.md` aligned with each new top-level field
 - [ ] keep `development-plan.md` and `full-program-roadmap.md` aligned with the latest pool state
 - [ ] decide whether the next productization slice after the current command-layer queue should be:

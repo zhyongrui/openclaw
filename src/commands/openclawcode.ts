@@ -1113,8 +1113,13 @@ function toWorkflowRunJson(run: WorkflowRun) {
     executionStartStageGateReadiness: resolveStageGateReadiness(run, "execution-start"),
     mergePromotionStageGateReadiness: resolveStageGateReadiness(run, "merge-promotion"),
     suitabilityDecision: run.suitability?.decision ?? null,
+    suitabilityDecisionIsAutoRun: run.suitability?.decision === "auto-run",
+    suitabilityDecisionIsNeedsHumanReview: run.suitability?.decision === "needs-human-review",
+    suitabilityDecisionIsEscalate: run.suitability?.decision === "escalate",
     suitabilitySummary: run.suitability?.summary ?? null,
+    suitabilitySummaryPresent: (run.suitability?.summary?.length ?? 0) > 0,
     suitabilityReasons: run.suitability?.reasons ?? null,
+    suitabilityReasonsPresent: (run.suitability?.reasons.length ?? 0) > 0,
     suitabilityReasonCount: run.suitability?.reasons.length ?? null,
     suitabilityClassification: run.suitability?.classification ?? null,
     suitabilityRiskLevel: run.suitability?.riskLevel ?? null,
@@ -1177,7 +1182,11 @@ function toWorkflowRunJson(run: WorkflowRun) {
     verificationSummaryPresent: (run.verificationReport?.summary?.length ?? 0) > 0,
     verificationHasFindings:
       run.verificationReport == null ? false : run.verificationReport.findings.length > 0,
+    verificationFindingsPresent:
+      run.verificationReport == null ? false : run.verificationReport.findings.length > 0,
     verificationHasMissingCoverage:
+      run.verificationReport == null ? false : run.verificationReport.missingCoverage.length > 0,
+    verificationMissingCoveragePresent:
       run.verificationReport == null ? false : run.verificationReport.missingCoverage.length > 0,
     verificationHasSignals:
       run.verificationReport == null
@@ -1186,6 +1195,8 @@ function toWorkflowRunJson(run: WorkflowRun) {
           run.verificationReport.missingCoverage.length > 0 ||
           run.verificationReport.followUps.length > 0,
     verificationHasFollowUps:
+      run.verificationReport == null ? false : run.verificationReport.followUps.length > 0,
+    verificationFollowUpsPresent:
       run.verificationReport == null ? false : run.verificationReport.followUps.length > 0,
     verificationFindingCount: run.verificationReport?.findings.length ?? null,
     verificationMissingCoverageCount: run.verificationReport?.missingCoverage.length ?? null,

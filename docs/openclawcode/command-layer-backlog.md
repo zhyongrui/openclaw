@@ -145,9 +145,9 @@ Rules:
 - [x] `verificationDecisionIsEscalate`
 - [x] `verificationDecisionIsRequestChanges`
 - [x] `verificationDecisionIsApprove`
-- [ ] `verificationFindingsPresent`
-- [ ] `verificationMissingCoveragePresent`
-- [ ] `verificationFollowUpsPresent`
+- [x] `verificationFindingsPresent`
+- [x] `verificationMissingCoveragePresent`
+- [x] `verificationFollowUpsPresent`
 
 ## Suitability Mirrors
 
@@ -158,11 +158,11 @@ Rules:
 - [x] `suitabilityClassification`
 - [x] `suitabilityRiskLevel`
 - [x] `suitabilityEvaluatedAt`
-- [ ] `suitabilitySummaryPresent`
-- [ ] `suitabilityReasonsPresent`
-- [ ] `suitabilityDecisionIsAutoRun`
-- [ ] `suitabilityDecisionIsNeedsHumanReview`
-- [ ] `suitabilityDecisionIsEscalate`
+- [x] `suitabilitySummaryPresent`
+- [x] `suitabilityReasonsPresent`
+- [x] `suitabilityDecisionIsAutoRun`
+- [x] `suitabilityDecisionIsNeedsHumanReview`
+- [x] `suitabilityDecisionIsEscalate`
 
 ## Failure Diagnostic Mirrors
 

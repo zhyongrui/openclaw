@@ -149,8 +149,13 @@ those nested objects.
 ### Suitability Signals
 
 - `suitabilityDecision`
+- `suitabilityDecisionIsAutoRun`
+- `suitabilityDecisionIsNeedsHumanReview`
+- `suitabilityDecisionIsEscalate`
 - `suitabilitySummary`
+- `suitabilitySummaryPresent`
 - `suitabilityReasons`
+- `suitabilityReasonsPresent`
 - `suitabilityReasonCount`
 - `suitabilityClassification`
 - `suitabilityRiskLevel`
@@ -224,9 +229,12 @@ those nested objects.
 - `verificationSummary`
 - `verificationSummaryPresent`
 - `verificationHasFindings`
+- `verificationFindingsPresent`
 - `verificationHasMissingCoverage`
+- `verificationMissingCoveragePresent`
 - `verificationHasSignals`
 - `verificationHasFollowUps`
+- `verificationFollowUpsPresent`
 - `verificationFindingCount`
 - `verificationMissingCoverageCount`
 - `verificationFollowUpCount`

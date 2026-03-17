@@ -459,6 +459,16 @@ turning the working loop into a cleanly operable product:
   - `verificationDecisionIsApprove`
   - `verificationDecisionIsRequestChanges`
   - `verificationDecisionIsEscalate`
+- the remaining verification/suitability decision-and-presence signals now also
+  land on the refreshed sync branch:
+  - `verificationFindingsPresent`
+  - `verificationMissingCoveragePresent`
+  - `verificationFollowUpsPresent`
+  - `suitabilitySummaryPresent`
+  - `suitabilityReasonsPresent`
+  - `suitabilityDecisionIsAutoRun`
+  - `suitabilityDecisionIsNeedsHumanReview`
+  - `suitabilityDecisionIsEscalate`
 - the `failureDiagnostics` family is now effectively mirrored at the top level
   for:
   - summary

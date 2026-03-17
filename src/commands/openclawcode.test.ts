@@ -245,14 +245,19 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.mergePromotionStageGateReadiness).toBe("ready");
     expect(payload.stageGates.gates).toHaveLength(5);
     expect(payload.suitabilityDecision).toBe("auto-run");
+    expect(payload.suitabilityDecisionIsAutoRun).toBe(true);
+    expect(payload.suitabilityDecisionIsNeedsHumanReview).toBe(false);
+    expect(payload.suitabilityDecisionIsEscalate).toBe(false);
     expect(payload.suitabilitySummary).toBe(
       "Suitability accepted for autonomous execution. Issue stays within command-layer scope.",
     );
+    expect(payload.suitabilitySummaryPresent).toBe(true);
     expect(payload.suitabilityReasons).toEqual([
       "Issue stays within command-layer scope.",
       "Planner risk level is medium.",
       "No high-risk issue signals were detected in the issue text or labels.",
     ]);
+    expect(payload.suitabilityReasonsPresent).toBe(true);
     expect(payload.suitabilityReasonCount).toBe(3);
     expect(payload.suitabilityClassification).toBe("command-layer");
     expect(payload.suitabilityRiskLevel).toBe("medium");
@@ -311,9 +316,12 @@ describe("openclawCodeRunCommand", () => {
     );
     expect(payload.verificationSummaryPresent).toBe(true);
     expect(payload.verificationHasFindings).toBe(false);
+    expect(payload.verificationFindingsPresent).toBe(false);
     expect(payload.verificationHasMissingCoverage).toBe(false);
+    expect(payload.verificationMissingCoveragePresent).toBe(false);
     expect(payload.verificationHasSignals).toBe(false);
     expect(payload.verificationHasFollowUps).toBe(false);
+    expect(payload.verificationFollowUpsPresent).toBe(false);
     expect(payload.verificationFindingCount).toBe(0);
     expect(payload.verificationMissingCoverageCount).toBe(0);
     expect(payload.verificationFollowUpCount).toBe(0);
@@ -450,9 +458,13 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.executionStartStageGateReadiness).toBeNull();
     expect(payload.mergePromotionStageGateReadiness).toBeNull();
     expect(payload.suitabilityDecision).toBe("auto-run");
+    expect(payload.suitabilityDecisionIsAutoRun).toBe(true);
+    expect(payload.suitabilityDecisionIsNeedsHumanReview).toBe(false);
+    expect(payload.suitabilityDecisionIsEscalate).toBe(false);
     expect(payload.suitabilitySummary).toBe(
       "Suitability accepted for autonomous execution. Issue stays within command-layer scope.",
     );
+    expect(payload.suitabilitySummaryPresent).toBe(true);
     expect(payload.suitabilityReasonCount).toBe(3);
     expect(payload.draftPullRequestBranchName).toBeNull();
     expect(payload.draftPullRequestBaseBranch).toBeNull();
@@ -491,9 +503,12 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.verificationSummary).toBeNull();
     expect(payload.verificationSummaryPresent).toBe(false);
     expect(payload.verificationHasFindings).toBe(false);
+    expect(payload.verificationFindingsPresent).toBe(false);
     expect(payload.verificationHasMissingCoverage).toBe(false);
+    expect(payload.verificationMissingCoveragePresent).toBe(false);
     expect(payload.verificationHasSignals).toBe(false);
     expect(payload.verificationHasFollowUps).toBe(false);
+    expect(payload.verificationFollowUpsPresent).toBe(false);
     expect(payload.verificationFindingCount).toBeNull();
     expect(payload.verificationMissingCoverageCount).toBeNull();
     expect(payload.verificationFollowUpCount).toBeNull();
@@ -516,7 +531,12 @@ describe("openclawCodeRunCommand", () => {
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.suitabilityDecisionIsAutoRun).toBe(false);
+    expect(payload.suitabilityDecisionIsNeedsHumanReview).toBe(false);
+    expect(payload.suitabilityDecisionIsEscalate).toBe(false);
+    expect(payload.suitabilitySummaryPresent).toBe(false);
     expect(payload.suitabilityReasons).toBeNull();
+    expect(payload.suitabilityReasonsPresent).toBe(false);
     expect(payload.suitabilityReasonCount).toBeNull();
   });
 
@@ -1167,6 +1187,10 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.autoMergeDisposition).toBeNull();
     expect(payload.autoMergeDispositionReason).toBeNull();
     expect(payload.verificationSummary).toBeNull();
+    expect(payload.verificationSummaryPresent).toBe(false);
+    expect(payload.verificationFindingsPresent).toBe(false);
+    expect(payload.verificationMissingCoveragePresent).toBe(false);
+    expect(payload.verificationFollowUpsPresent).toBe(false);
     expect(payload.verificationFindingCount).toBeNull();
     expect(payload.verificationMissingCoverageCount).toBeNull();
     expect(payload.verificationFollowUpCount).toBeNull();
@@ -1206,6 +1230,11 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.autoMergePolicyReason).toBe(
       "Not eligible for auto-merge: suitability did not accept autonomous execution.",
     );
+    expect(payload.suitabilityDecisionIsAutoRun).toBe(false);
+    expect(payload.suitabilityDecisionIsNeedsHumanReview).toBe(true);
+    expect(payload.suitabilityDecisionIsEscalate).toBe(false);
+    expect(payload.suitabilitySummaryPresent).toBe(true);
+    expect(payload.suitabilityReasonsPresent).toBe(true);
   });
 
   it("blocks auto-merge when the scope check fails", async () => {
@@ -1301,9 +1330,12 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.verificationDecisionIsEscalate).toBe(false);
     expect(payload.verificationSummaryPresent).toBe(true);
     expect(payload.verificationHasFindings).toBe(true);
+    expect(payload.verificationFindingsPresent).toBe(true);
     expect(payload.verificationHasMissingCoverage).toBe(true);
+    expect(payload.verificationMissingCoveragePresent).toBe(true);
     expect(payload.verificationHasSignals).toBe(true);
     expect(payload.verificationHasFollowUps).toBe(true);
+    expect(payload.verificationFollowUpsPresent).toBe(true);
     expect(payload.verificationFindingCount).toBe(2);
     expect(payload.verificationMissingCoverageCount).toBe(1);
     expect(payload.verificationFollowUpCount).toBe(2);
@@ -1345,6 +1377,32 @@ describe("openclawCodeRunCommand", () => {
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.verificationSummary).toBe("");
     expect(payload.verificationSummaryPresent).toBe(false);
+  });
+
+  it("reports suitabilityDecisionIsEscalate when suitability escalates before branch mutation", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        stage: "escalated",
+        suitability: {
+          ...createRun().suitability!,
+          decision: "escalate",
+          summary: "Suitability escalated the issue before branch mutation.",
+          reasons: ["Issue references authentication and secret handling."],
+          classification: "workflow-core",
+          riskLevel: "high",
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.suitabilityDecision).toBe("escalate");
+    expect(payload.suitabilityDecisionIsAutoRun).toBe(false);
+    expect(payload.suitabilityDecisionIsNeedsHumanReview).toBe(false);
+    expect(payload.suitabilityDecisionIsEscalate).toBe(true);
+    expect(payload.suitabilitySummaryPresent).toBe(true);
+    expect(payload.suitabilityReasonsPresent).toBe(true);
   });
 
   it("prints historyEntryCount when history is present", async () => {
