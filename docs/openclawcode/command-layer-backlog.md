@@ -28,7 +28,7 @@ Rules:
 - [x] `publishedPullRequestHasNumber`
 - [x] `publishedPullRequestHasUrl`
 - [x] `publishedPullRequestHasOpenedAt`
-- [ ] `publishedPullRequestHasTitle`
+- [x] `publishedPullRequestHasTitle`
 
 ## Published Pull Request Mirrors
 
@@ -42,7 +42,7 @@ Rules:
 - [x] `publishedPullRequestHasNumber`
 - [x] `publishedPullRequestHasUrl`
 - [x] `publishedPullRequestHasOpenedAt`
-- [ ] `publishedPullRequestHasTitle`
+- [x] `publishedPullRequestHasTitle`
 - [ ] `publishedPullRequestHasBody`
 
 ## Draft Pull Request Convenience Signals

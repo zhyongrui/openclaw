@@ -694,6 +694,7 @@ function resolvePublishedPullRequest(run: WorkflowRun): {
   publishedPullRequestHasNumber: boolean;
   publishedPullRequestHasUrl: boolean;
   publishedPullRequestHasOpenedAt: boolean;
+  publishedPullRequestHasTitle: boolean;
   publishedPullRequestTitle: string | null;
   publishedPullRequestBody: string | null;
   publishedPullRequestBranchName: string | null;
@@ -710,6 +711,8 @@ function resolvePublishedPullRequest(run: WorkflowRun): {
     publishedPullRequestHasNumber: published && run.draftPullRequest?.number != null,
     publishedPullRequestHasUrl: published && run.draftPullRequest?.url != null,
     publishedPullRequestHasOpenedAt: published && run.draftPullRequest?.openedAt != null,
+    publishedPullRequestHasTitle:
+      published && (run.draftPullRequest?.title?.trim().length ?? 0) > 0,
     publishedPullRequestTitle: published ? (run.draftPullRequest?.title ?? null) : null,
     publishedPullRequestBody: published ? (run.draftPullRequest?.body ?? null) : null,
     publishedPullRequestBranchName: published ? (run.draftPullRequest?.branchName ?? null) : null,
@@ -1114,6 +1117,7 @@ function toWorkflowRunJson(run: WorkflowRun) {
     publishedPullRequestHasNumber: publishedPullRequest.publishedPullRequestHasNumber,
     publishedPullRequestHasUrl: publishedPullRequest.publishedPullRequestHasUrl,
     publishedPullRequestHasOpenedAt: publishedPullRequest.publishedPullRequestHasOpenedAt,
+    publishedPullRequestHasTitle: publishedPullRequest.publishedPullRequestHasTitle,
     publishedPullRequestBranchName: publishedPullRequest.publishedPullRequestBranchName,
     publishedPullRequestBaseBranch: publishedPullRequest.publishedPullRequestBaseBranch,
     publishedPullRequestUrl: publishedPullRequest.publishedPullRequestUrl,

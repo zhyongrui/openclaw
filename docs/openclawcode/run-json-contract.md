@@ -176,6 +176,7 @@ those nested objects.
 - `publishedPullRequestHasNumber`
 - `publishedPullRequestHasUrl`
 - `publishedPullRequestHasOpenedAt`
+- `publishedPullRequestHasTitle`
 - `publishedPullRequestTitle`
 - `publishedPullRequestBody`
 - `publishedPullRequestBranchName`

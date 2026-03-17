@@ -403,7 +403,8 @@ loop with:
     includes:
     - docs/operator issue `#60`
     - docs/operator issue `#86`
-    - command-layer issue `#129`
+    - command-layer issue `#129` until `publishedPullRequestHasTitle` is
+      reconciled on top of the refreshed sync branch
   - duplicate issue `#59` was detected through the new inventory path and then
     closed
   - command-layer issues `#124`, `#126`, `#127`, and `#128` have now also been

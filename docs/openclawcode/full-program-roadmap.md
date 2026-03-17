@@ -389,7 +389,8 @@ As of 2026-03-14:
     `publishedPullRequestHasOpenedAt` landed
   - current open validation pool is now narrower and more honest:
     - docs/operator issues `#60`, `#86`
-    - command-layer issue `#129` for `publishedPullRequestHasTitle`
+    - command-layer issue `#129` for `publishedPullRequestHasTitle` until the
+      refreshed sync branch is reconciled
 - the remaining startup blocker is now narrower than "openclawcode plugin
   startup":
   - the built openclawcode-only path is healthy
