@@ -23,6 +23,8 @@ export function resolveBundledPluginsDir(
   if (env.OPENCLAW_WATCH_MODE === "1") {
     try {
       const packageRoot = resolveOpenClawPackageRootSync({
+        argv1: opts.argv1 ?? process.argv[1],
+        moduleUrl: opts.moduleUrl ?? import.meta.url,
         cwd: opts.cwd ?? process.cwd(),
       });
       if (packageRoot) {
@@ -36,6 +38,31 @@ export function resolveBundledPluginsDir(
     } catch {
       // ignore
     }
+  }
+
+  try {
+    const packageRoots = [
+      resolveOpenClawPackageRootSync({
+        argv1: opts.argv1 ?? process.argv[1],
+        moduleUrl: opts.moduleUrl ?? import.meta.url,
+        cwd: opts.cwd ?? process.cwd(),
+      }),
+      resolveOpenClawPackageRootSync({
+        moduleUrl: opts.moduleUrl ?? import.meta.url,
+      }),
+    ].filter(
+      (entry, index, all): entry is string => Boolean(entry) && all.indexOf(entry) === index,
+    );
+    for (const packageRoot of packageRoots) {
+      // Local source checkouts stage a runtime-complete bundled plugin tree under
+      // dist-runtime/. Prefer that over release-shaped dist/extensions.
+      const runtimeExtensionsDir = path.join(packageRoot, "dist-runtime", "extensions");
+      if (fs.existsSync(runtimeExtensionsDir)) {
+        return runtimeExtensionsDir;
+      }
+    }
+  } catch {
+    // ignore
   }
 
   // bun --compile: ship a sibling `extensions/` next to the executable.
