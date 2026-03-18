@@ -11,6 +11,14 @@ export type BundledPluginsResolveOptions = {
   execPath?: string;
 };
 
+function isSourceCheckoutRoot(packageRoot: string): boolean {
+  return (
+    fs.existsSync(path.join(packageRoot, ".git")) &&
+    fs.existsSync(path.join(packageRoot, "src")) &&
+    fs.existsSync(path.join(packageRoot, "extensions"))
+  );
+}
+
 export function resolveBundledPluginsDir(
   env: NodeJS.ProcessEnv = process.env,
   opts: BundledPluginsResolveOptions = {},
@@ -20,25 +28,8 @@ export function resolveBundledPluginsDir(
     return resolveUserPath(override, env);
   }
 
-  if (env.OPENCLAW_WATCH_MODE === "1") {
-    try {
-      const packageRoot = resolveOpenClawPackageRootSync({
-        argv1: opts.argv1 ?? process.argv[1],
-        moduleUrl: opts.moduleUrl ?? import.meta.url,
-        cwd: opts.cwd ?? process.cwd(),
-      });
-      if (packageRoot) {
-        // In watch mode, prefer source plugin roots so plugin-local runtime deps
-        // resolve from extensions/<id>/node_modules instead of stripped dist copies.
-        const sourceExtensionsDir = path.join(packageRoot, "extensions");
-        if (fs.existsSync(sourceExtensionsDir)) {
-          return sourceExtensionsDir;
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
+  const preferSourceCheckout =
+    Boolean(env.VITEST) || env.OPENCLAW_WATCH_MODE === "1";
 
   try {
     const packageRoots = [
@@ -54,6 +45,13 @@ export function resolveBundledPluginsDir(
       (entry, index, all): entry is string => Boolean(entry) && all.indexOf(entry) === index,
     );
     for (const packageRoot of packageRoots) {
+      const sourceExtensionsDir = path.join(packageRoot, "extensions");
+      if (
+        (preferSourceCheckout || isSourceCheckoutRoot(packageRoot)) &&
+        fs.existsSync(sourceExtensionsDir)
+      ) {
+        return sourceExtensionsDir;
+      }
       // Local source checkouts stage a runtime-complete bundled plugin tree under
       // dist-runtime/. Prefer that over source extensions only when the paired
       // dist/ tree exists; otherwise wrappers can drift ahead of the last build.
