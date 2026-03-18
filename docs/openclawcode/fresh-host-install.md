@@ -76,6 +76,7 @@ See `single-login-bootstrap-proposal.md` for the target end state.
 - role-routing, discovery, and stage-gate artifact seeding
 - local gateway startup attempt
 - strict setup-check plus built-startup proof
+- exact CLI/chatops handoff commands in the bootstrap summary
 
 On a healthy host with `cloudflared` available, bootstrap can now create its own
 public ingress by starting the managed tunnel automatically.

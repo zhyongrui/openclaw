@@ -204,6 +204,7 @@ And report:
 - repo config path
 - setup-check summary
 - next action
+- exact next commands for CLI proof, chat bind, chat start, or webhook retry
 
 ## Bootstrap State Machine
 

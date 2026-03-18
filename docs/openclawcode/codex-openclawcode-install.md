@@ -109,7 +109,7 @@ The smallest successful machine bootstrap looks like this:
 3. Codex runs `pnpm build`.
 4. The user provides `GH_TOKEN` or `GITHUB_TOKEN`.
 5. Codex runs `openclaw code bootstrap --repo owner/repo --json`.
-6. The user chooses CLI-only or chatops validation.
+6. Codex follows the bootstrap handoff commands for CLI-only or chatops validation.
 
 Bootstrap now tries to start the managed tunnel automatically when it needs a
 public webhook URL. If the machine already has a public URL, Codex should still

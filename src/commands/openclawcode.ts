@@ -466,6 +466,18 @@ type BootstrapNotifyBindingMode =
   | "chat-placeholder"
   | "cli-placeholder";
 
+interface BootstrapHandoffPlan {
+  recommendedProofMode: "cli-only" | "chatops";
+  reason: string;
+  operatorStatusCommand: string;
+  cliRunCommand: string;
+  blueprintCommand: string;
+  gatesCommand: string;
+  chatBindCommand: string | null;
+  chatStartCommand: string | null;
+  webhookRetryCommand: string | null;
+}
+
 function parseBootstrapRepoRef(value: string): { owner: string; repo: string } {
   const trimmed = value.trim();
   const parts = trimmed
@@ -783,6 +795,10 @@ function resolveBootstrapMode(params: {
 }
 
 function shellQuoteEnvValue(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function shellQuoteArg(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
@@ -1182,6 +1198,74 @@ async function discoverBootstrapNotifyBinding(params: {
     new Map(bindings.map((binding) => [normalizePairKey(binding), binding])).values(),
   );
   return uniqueBindings.length === 1 ? uniqueBindings[0] : undefined;
+}
+
+function buildBootstrapWebhookRetryCommand(params: {
+  repoKey: string;
+  mode: "cli-only" | "chatops";
+  notifyChannel: string;
+  notifyTarget: string;
+  notifyBindingMode: BootstrapNotifyBindingMode;
+}): string {
+  const args = ["openclaw code bootstrap", `--repo ${params.repoKey}`];
+  if (params.mode === "chatops") {
+    args.push("--mode chatops");
+    args.push(`--channel ${params.notifyChannel}`);
+    if (params.notifyBindingMode === "auto-discovered") {
+      args.push("--chat-target auto");
+    } else if (params.notifyBindingMode !== "chat-placeholder") {
+      args.push(`--chat-target ${params.notifyTarget}`);
+    }
+  }
+  args.push("--webhook-url <public-url>", "--json");
+  return args.join(" ");
+}
+
+function buildBootstrapHandoffPlan(params: {
+  repoKey: string;
+  repoRef: { owner: string; repo: string };
+  targetRepoRoot: string;
+  mode: "cli-only" | "chatops";
+  notifyBindingMode: BootstrapNotifyBindingMode;
+  notifyChannel: string;
+  notifyTarget: string;
+  webhookAction: "created" | "updated" | "unchanged" | "skipped" | "failed";
+  webhookUrl: string | null;
+}): BootstrapHandoffPlan {
+  const recommendedProofMode =
+    params.mode === "chatops" && params.notifyBindingMode !== "chat-placeholder"
+      ? "chatops"
+      : "cli-only";
+  const reason =
+    recommendedProofMode === "chatops"
+      ? "Chat notifications are already routed to a concrete target."
+      : params.mode === "chatops"
+        ? "ChatOps is configured, but the repo still needs a real conversation bind."
+        : "CLI bootstrap is ready without requiring chat routing.";
+  return {
+    recommendedProofMode,
+    reason,
+    operatorStatusCommand: "openclaw code operator-status-snapshot-show --json",
+    cliRunCommand: `openclaw code run --issue <issue-number> --owner ${params.repoRef.owner} --repo ${params.repoRef.repo} --repo-root ${shellQuoteArg(params.targetRepoRoot)}`,
+    blueprintCommand: `/occode-blueprint ${params.repoKey}`,
+    gatesCommand: `/occode-gates ${params.repoKey}`,
+    chatBindCommand:
+      params.mode === "chatops" && params.notifyBindingMode === "chat-placeholder"
+        ? `/occode-bind ${params.repoKey}`
+        : null,
+    chatStartCommand:
+      params.mode === "chatops" ? `/occode-start ${params.repoKey}#<issue-number>` : null,
+    webhookRetryCommand:
+      params.webhookAction === "skipped" && !params.webhookUrl
+        ? buildBootstrapWebhookRetryCommand({
+            repoKey: params.repoKey,
+            mode: params.mode,
+            notifyChannel: params.notifyChannel,
+            notifyTarget: params.notifyTarget,
+            notifyBindingMode: params.notifyBindingMode,
+          })
+        : null,
+  };
 }
 
 function parseBootstrapSetupCheckPayload(stdout: string): BootstrapSetupCheckPayload | null {
@@ -2834,6 +2918,17 @@ export async function openclawCodeBootstrapCommand(
               (gateway.action === "failed"
                 ? "start-or-restart-live-gateway"
                 : "inspect-setup-check-output"));
+  const handoff = buildBootstrapHandoffPlan({
+    repoKey,
+    repoRef,
+    targetRepoRoot,
+    mode,
+    notifyBindingMode,
+    notifyChannel,
+    notifyTarget,
+    webhookAction: webhook.action,
+    webhookUrl: webhook.webhookUrl,
+  });
 
   const payload = {
     contractVersion: OPENCLAWCODE_BOOTSTRAP_CONTRACT_VERSION,
@@ -2906,6 +3001,7 @@ export async function openclawCodeBootstrapCommand(
       stderr: setupCheck.stderr,
       payload: setupCheck.payload,
     },
+    handoff,
     nextAction,
   };
 
@@ -2938,6 +3034,19 @@ export async function openclawCodeBootstrapCommand(
     `Stage gates: blocked=${stageGates.blockedGateCount} needsHuman=${stageGates.needsHumanDecisionCount}`,
   );
   runtime.log(`Gateway: ${gateway.action}`);
+  runtime.log(`Recommended proof mode: ${handoff.recommendedProofMode} | ${handoff.reason}`);
+  runtime.log(`CLI proof: ${handoff.cliRunCommand}`);
+  runtime.log(`Blueprint inspect: ${handoff.blueprintCommand}`);
+  runtime.log(`Stage gates inspect: ${handoff.gatesCommand}`);
+  if (handoff.chatBindCommand) {
+    runtime.log(`Chat bind: ${handoff.chatBindCommand}`);
+  }
+  if (handoff.chatStartCommand) {
+    runtime.log(`Chat proof: ${handoff.chatStartCommand}`);
+  }
+  if (handoff.webhookRetryCommand) {
+    runtime.log(`Webhook retry: ${handoff.webhookRetryCommand}`);
+  }
   if (setupCheck.payload) {
     runtime.log(
       `Setup-check: ok=${setupCheck.payload.ok} pass=${setupCheck.payload.summary.pass} warn=${setupCheck.payload.summary.warn} fail=${setupCheck.payload.summary.fail}`,
