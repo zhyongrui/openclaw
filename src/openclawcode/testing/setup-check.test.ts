@@ -2040,6 +2040,8 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
     const configFile = path.join(operatorRoot, "openclaw.json");
     const stateFile = path.join(pluginsDir, "chatops-state.json");
     const hookCounterFile = path.join(rootDir, "hook-check-count.txt");
+    const tunnelLogFile = path.join(rootDir, "strict-tunnel.log");
+    const tunnelPidFile = path.join(rootDir, "strict-tunnel.pid");
     const scriptPath = path.resolve("scripts/openclawcode-setup-check.sh");
     const realPythonPath = resolveRealPythonPath();
 
@@ -2148,6 +2150,17 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
       '#!/usr/bin/env bash\nset -euo pipefail\nprintf \'{"accepted":false,"reason":"unconfigured-repo"}\\n202\'\n',
     );
 
+    const tunnelProcess = spawn("sleep", ["30"], {
+      cwd: path.resolve("."),
+      stdio: "ignore",
+    });
+    if (typeof tunnelProcess.pid !== "number") {
+      throw new Error("Failed to start background tunnel placeholder.");
+    }
+    backgroundPids.add(tunnelProcess.pid);
+    await fs.writeFile(tunnelPidFile, `${tunnelProcess.pid}\n`, "utf8");
+    await fs.writeFile(tunnelLogFile, "https://strict-root.trycloudflare.com\n", "utf8");
+
     const result = runSetupCheck(
       scriptPath,
       {
@@ -2158,6 +2171,8 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
         OPENCLAWCODE_SETUP_WEBHOOK_ROUTE: "/plugins/openclawcode/github",
         OPENCLAWCODE_SETUP_RETRY_ATTEMPTS: "2",
         OPENCLAWCODE_SETUP_RETRY_DELAY_SECONDS: "0",
+        OPENCLAWCODE_TUNNEL_LOG_FILE: tunnelLogFile,
+        OPENCLAWCODE_TUNNEL_PID_FILE: tunnelPidFile,
       },
       ["--strict"],
     );
