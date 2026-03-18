@@ -30,22 +30,24 @@ Recommended reading order:
 24. `new-machine-install.md`
 25. `fresh-host-install.md`
 26. `single-login-bootstrap-proposal.md`
-27. `fresh-host-readiness-audit.md`
-28. `upgrade-and-rotation.md`
-29. `release-runbook.md`
-30. `operator-proof-routine.md`
-31. `troubleshooting.md`
-32. `proof-matrix.md`
-33. `sample-operator-config.md`
-34. `sample-automation-integration.md`
-35. `chat-intake-styles.md`
-36. `security-and-retention.md`
-37. `sync-conflict-history.md`
-38. `upstream-sync-policy.md`
-39. `operator-setup.md`
-40. `sync-promotion-runbook.md`
-41. `mvp-runbook.md`
-42. `webhook-operations.md`
+27. `chat-native-autonomous-engineering.md`
+28. `development-plan-chat-native-autonomy.md`
+29. `fresh-host-readiness-audit.md`
+30. `upgrade-and-rotation.md`
+31. `release-runbook.md`
+32. `operator-proof-routine.md`
+33. `troubleshooting.md`
+34. `proof-matrix.md`
+35. `sample-operator-config.md`
+36. `sample-automation-integration.md`
+37. `chat-intake-styles.md`
+38. `security-and-retention.md`
+39. `sync-conflict-history.md`
+40. `upstream-sync-policy.md`
+41. `operator-setup.md`
+42. `sync-promotion-runbook.md`
+43. `mvp-runbook.md`
+44. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
