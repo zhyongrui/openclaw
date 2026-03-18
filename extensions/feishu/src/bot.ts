@@ -1,3 +1,8 @@
+import {
+  ensureConfiguredBindingRouteReady,
+  resolveConfiguredBindingRoute,
+} from "openclaw/plugin-sdk/conversation-runtime";
+import { getSessionBindingService } from "openclaw/plugin-sdk/conversation-runtime";
 import type { ClawdbotConfig, RuntimeEnv } from "openclaw/plugin-sdk/feishu";
 import {
   buildAgentMediaPayload,
@@ -16,11 +21,6 @@ import {
 } from "openclaw/plugin-sdk/feishu";
 import { deriveLastRoutePolicy } from "openclaw/plugin-sdk/routing";
 import { resolveAgentIdFromSessionKey } from "openclaw/plugin-sdk/routing";
-import {
-  ensureConfiguredAcpRouteReady,
-  resolveConfiguredAcpRoute,
-} from "../../../src/acp/persistent-bindings.route.js";
-import { getSessionBindingService } from "../../../src/infra/outbound/session-binding-service.js";
 import { executePluginCommand, matchPluginCommand } from "../../../src/plugins/commands.js";
 import { resolveFeishuAccount } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
@@ -1269,15 +1269,17 @@ export async function handleFeishuMessage(params: {
     const parentConversationId = isGroup ? (parentPeer?.id ?? ctx.chatId) : undefined;
     let configuredBinding = null;
     if (feishuAcpConversationSupported) {
-      const configuredRoute = resolveConfiguredAcpRoute({
+      const configuredRoute = resolveConfiguredBindingRoute({
         cfg: effectiveCfg,
         route,
-        channel: "feishu",
-        accountId: account.accountId,
-        conversationId: currentConversationId,
-        parentConversationId,
+        conversation: {
+          channel: "feishu",
+          accountId: account.accountId,
+          conversationId: currentConversationId,
+          parentConversationId,
+        },
       });
-      configuredBinding = configuredRoute.configuredBinding;
+      configuredBinding = configuredRoute.bindingResolution;
       route = configuredRoute.route;
 
       // Bound Feishu conversations intentionally require an exact live conversation-id match.
@@ -1310,9 +1312,9 @@ export async function handleFeishuMessage(params: {
     }
 
     if (configuredBinding) {
-      const ensured = await ensureConfiguredAcpRouteReady({
+      const ensured = await ensureConfiguredBindingRouteReady({
         cfg: effectiveCfg,
-        configuredBinding,
+        bindingResolution: configuredBinding,
       });
       if (!ensured.ok) {
         const replyTargetMessageId =
