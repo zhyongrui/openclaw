@@ -203,6 +203,7 @@ And report:
 - operator config path
 - repo config path
 - setup-check summary
+- proof readiness booleans
 - next action
 - exact next commands for CLI proof, chat bind, chat start, or webhook retry
 

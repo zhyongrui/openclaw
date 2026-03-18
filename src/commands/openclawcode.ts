@@ -478,6 +478,16 @@ interface BootstrapHandoffPlan {
   webhookRetryCommand: string | null;
 }
 
+interface BootstrapProofReadiness {
+  cliProofReady: boolean;
+  chatProofReady: boolean;
+  webhookReady: boolean;
+  webhookUrlReady: boolean;
+  needsChatBind: boolean;
+  needsPublicWebhookUrl: boolean;
+  recommendedProofMode: "cli-only" | "chatops";
+}
+
 function parseBootstrapRepoRef(value: string): { owner: string; repo: string } {
   const trimmed = value.trim();
   const parts = trimmed
@@ -1265,6 +1275,36 @@ function buildBootstrapHandoffPlan(params: {
             notifyBindingMode: params.notifyBindingMode,
           })
         : null,
+  };
+}
+
+function buildBootstrapProofReadiness(params: {
+  setupCheckPayload: BootstrapSetupCheckPayload | null;
+  mode: "cli-only" | "chatops";
+  notifyBindingMode: BootstrapNotifyBindingMode;
+  webhookAction: "created" | "updated" | "unchanged" | "skipped" | "failed";
+  webhookUrl: string | null;
+  webhookHookId: number | null;
+  recommendedProofMode: "cli-only" | "chatops";
+}): BootstrapProofReadiness {
+  const cliProofReady =
+    params.setupCheckPayload?.readiness.strict === true &&
+    params.setupCheckPayload.readiness.lowRiskProofReady;
+  const needsChatBind =
+    params.mode === "chatops" && params.notifyBindingMode === "chat-placeholder";
+  const webhookUrlReady = params.webhookUrl != null;
+  const webhookReady = params.webhookHookId != null;
+  const needsPublicWebhookUrl =
+    params.webhookAction === "skipped" && params.webhookUrl == null && params.mode === "chatops";
+  const chatProofReady = params.mode === "chatops" && !needsChatBind && cliProofReady;
+  return {
+    cliProofReady,
+    chatProofReady,
+    webhookReady,
+    webhookUrlReady,
+    needsChatBind,
+    needsPublicWebhookUrl,
+    recommendedProofMode: params.recommendedProofMode,
   };
 }
 
@@ -2929,6 +2969,15 @@ export async function openclawCodeBootstrapCommand(
     webhookAction: webhook.action,
     webhookUrl: webhook.webhookUrl,
   });
+  const proofReadiness = buildBootstrapProofReadiness({
+    setupCheckPayload: setupCheck.payload,
+    mode,
+    notifyBindingMode,
+    webhookAction: webhook.action,
+    webhookUrl: webhook.webhookUrl,
+    webhookHookId: webhook.hookId,
+    recommendedProofMode: handoff.recommendedProofMode,
+  });
 
   const payload = {
     contractVersion: OPENCLAWCODE_BOOTSTRAP_CONTRACT_VERSION,
@@ -3001,6 +3050,7 @@ export async function openclawCodeBootstrapCommand(
       stderr: setupCheck.stderr,
       payload: setupCheck.payload,
     },
+    proofReadiness,
     handoff,
     nextAction,
   };
@@ -3034,6 +3084,9 @@ export async function openclawCodeBootstrapCommand(
     `Stage gates: blocked=${stageGates.blockedGateCount} needsHuman=${stageGates.needsHumanDecisionCount}`,
   );
   runtime.log(`Gateway: ${gateway.action}`);
+  runtime.log(
+    `Proof readiness: cli=${proofReadiness.cliProofReady ? "ready" : "blocked"} chat=${proofReadiness.chatProofReady ? "ready" : "blocked"} webhook=${proofReadiness.webhookReady ? "ready" : "blocked"}`,
+  );
   runtime.log(`Recommended proof mode: ${handoff.recommendedProofMode} | ${handoff.reason}`);
   runtime.log(`CLI proof: ${handoff.cliRunCommand}`);
   runtime.log(`Blueprint inspect: ${handoff.blueprintCommand}`);

@@ -97,6 +97,7 @@ When finished, report:
 - whether build passed
 - whether bootstrap completed
 - the bootstrap JSON summary
+- the proof-readiness booleans from the bootstrap JSON
 - the exact next commands for binding or running against the new target repo
 ```
 

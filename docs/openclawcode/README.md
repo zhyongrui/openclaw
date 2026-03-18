@@ -99,6 +99,7 @@ loop with:
   - GitHub webhook create/reuse when bootstrap can discover a public URL
   - unique saved chat-target reuse through `--chat-target auto`
   - bootstrap repo binding persistence
+  - machine-readable proof-readiness booleans in bootstrap JSON
   - exact CLI/chatops handoff commands in the bootstrap summary
   - blueprint / role-routing / discovery / stage-gate seeding
   - gateway startup attempt

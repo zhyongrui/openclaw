@@ -3929,6 +3929,12 @@ describe("openclawCodeBootstrapCommand", () => {
     expect(payload.stageGates.executionStartReadiness).toBe("ready");
     expect(payload.gateway.action).toBe("skipped");
     expect(payload.setupCheck.payload.readiness.nextAction).toBe("ready-for-low-risk-proof");
+    expect(payload.proofReadiness.cliProofReady).toBe(true);
+    expect(payload.proofReadiness.chatProofReady).toBe(false);
+    expect(payload.proofReadiness.webhookReady).toBe(false);
+    expect(payload.proofReadiness.webhookUrlReady).toBe(false);
+    expect(payload.proofReadiness.needsChatBind).toBe(false);
+    expect(payload.proofReadiness.needsPublicWebhookUrl).toBe(false);
     expect(payload.handoff.recommendedProofMode).toBe("cli-only");
     expect(payload.handoff.cliRunCommand).toContain("openclaw code run --issue <issue-number>");
     expect(payload.handoff.chatBindCommand).toBeNull();
@@ -4074,6 +4080,12 @@ describe("openclawCodeBootstrapCommand", () => {
     expect(payload.config.builderAgent).toBe("builder-existing");
     expect(payload.config.verifierAgent).toBe("verifier-existing");
     expect(payload.credentials.githubTokenSource).toBe("GITHUB_TOKEN");
+    expect(payload.proofReadiness.cliProofReady).toBe(false);
+    expect(payload.proofReadiness.chatProofReady).toBe(false);
+    expect(payload.proofReadiness.webhookReady).toBe(false);
+    expect(payload.proofReadiness.webhookUrlReady).toBe(false);
+    expect(payload.proofReadiness.needsChatBind).toBe(false);
+    expect(payload.proofReadiness.needsPublicWebhookUrl).toBe(true);
     expect(payload.handoff.recommendedProofMode).toBe("chatops");
     expect(payload.handoff.chatBindCommand).toBeNull();
     expect(payload.handoff.chatStartCommand).toBe("/occode-start acme/demo#<issue-number>");
@@ -4168,6 +4180,12 @@ describe("openclawCodeBootstrapCommand", () => {
     expect(payload.notify.bindingMode).toBe("auto-discovered");
     expect(payload.notify.notifyChannel).toBe("feishu");
     expect(payload.notify.notifyTarget).toBe("user:solo-chat");
+    expect(payload.proofReadiness.cliProofReady).toBe(true);
+    expect(payload.proofReadiness.chatProofReady).toBe(true);
+    expect(payload.proofReadiness.webhookReady).toBe(false);
+    expect(payload.proofReadiness.webhookUrlReady).toBe(false);
+    expect(payload.proofReadiness.needsChatBind).toBe(false);
+    expect(payload.proofReadiness.needsPublicWebhookUrl).toBe(true);
     expect(payload.handoff.recommendedProofMode).toBe("chatops");
     expect(payload.handoff.chatBindCommand).toBeNull();
     expect(payload.handoff.chatStartCommand).toBe("/occode-start acme/demo#<issue-number>");
@@ -4263,6 +4281,12 @@ describe("openclawCodeBootstrapCommand", () => {
 
     const payload = JSON.parse(runtime.log.mock.calls.at(-1)?.[0] ?? "null");
     expect(payload.notify.bindingMode).toBe("chat-placeholder");
+    expect(payload.proofReadiness.cliProofReady).toBe(true);
+    expect(payload.proofReadiness.chatProofReady).toBe(false);
+    expect(payload.proofReadiness.webhookReady).toBe(false);
+    expect(payload.proofReadiness.webhookUrlReady).toBe(false);
+    expect(payload.proofReadiness.needsChatBind).toBe(true);
+    expect(payload.proofReadiness.needsPublicWebhookUrl).toBe(true);
     expect(payload.handoff.recommendedProofMode).toBe("cli-only");
     expect(payload.handoff.chatBindCommand).toBe("/occode-bind acme/demo");
     expect(payload.handoff.chatStartCommand).toBe("/occode-start acme/demo#<issue-number>");
@@ -4365,6 +4389,9 @@ describe("openclawCodeBootstrapCommand", () => {
       "https://bootstrap.example.test/plugins/openclawcode/github",
     );
     expect(payload.webhook.webhookUrlSource).toBe("explicit");
+    expect(payload.proofReadiness.webhookReady).toBe(true);
+    expect(payload.proofReadiness.webhookUrlReady).toBe(true);
+    expect(payload.proofReadiness.needsPublicWebhookUrl).toBe(false);
     expect(payload.handoff.webhookRetryCommand).toBeNull();
 
     const envFile = await readFile(path.join(operatorRoot, "openclawcode.env"), "utf8");
@@ -4453,6 +4480,9 @@ describe("openclawCodeBootstrapCommand", () => {
     expect(payload.tunnel.url).toBe("https://bootstrap.example.test/plugins/openclawcode/github");
     expect(payload.webhook.action).toBe("created");
     expect(payload.webhook.webhookUrlSource).toBe("tunnel-log");
+    expect(payload.proofReadiness.webhookReady).toBe(true);
+    expect(payload.proofReadiness.webhookUrlReady).toBe(true);
+    expect(payload.proofReadiness.needsPublicWebhookUrl).toBe(false);
     expect(payload.handoff.webhookRetryCommand).toBeNull();
     expect(mocks.ensureRepoWebhook).toHaveBeenCalledWith({
       owner: "acme",
