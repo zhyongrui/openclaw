@@ -4080,6 +4080,106 @@ describe("openclawCodeBootstrapCommand", () => {
     expect(repoEntry.testCommands).toEqual(["npm test"]);
   });
 
+  it("reuses a unique saved binding when chat-target auto is requested", async () => {
+    const operatorRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-bootstrap-auto-target-operator-"),
+    );
+    const targetRepoRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-bootstrap-auto-target-target-"),
+    );
+    await writeFile(
+      path.join(targetRepoRoot, "package.json"),
+      JSON.stringify({ name: "demo", scripts: { test: "vitest run" } }, null, 2),
+      "utf8",
+    );
+    await writeFile(path.join(targetRepoRoot, "pnpm-lock.yaml"), "lockfileVersion: 9.0\n", "utf8");
+    await OpenClawCodeChatopsStore.fromStateDir(operatorRoot).setRepoBinding({
+      repoKey: "acme/existing",
+      notifyChannel: "feishu",
+      notifyTarget: "user:solo-chat",
+    });
+    vi.stubEnv("GH_TOKEN", "ghs_bootstrap_token");
+
+    const setupCheckSpy = vi
+      .spyOn(openclawCodeBootstrapInternals, "runSetupCheck")
+      .mockReturnValue({
+        payload: {
+          ok: true,
+          strict: true,
+          repoRoot: "/operator/repo",
+          operatorRoot,
+          readiness: {
+            basic: true,
+            strict: true,
+            lowRiskProofReady: true,
+            fallbackProofReady: false,
+            promotionReady: true,
+            gatewayReachable: false,
+            routeProbeReady: true,
+            routeProbeSkipped: false,
+            builtStartupProofRequested: false,
+            builtStartupProofReady: false,
+            nextAction: "ready-for-low-risk-proof",
+          },
+          summary: {
+            pass: 9,
+            warn: 0,
+            fail: 0,
+          },
+          checks: [],
+        },
+        stderr: "",
+        status: 0,
+      });
+    const webhookUrlSpy = vi
+      .spyOn(openclawCodeBootstrapInternals, "resolveWebhookUrl")
+      .mockResolvedValue({ url: null, source: null });
+
+    await openclawCodeBootstrapCommand(
+      {
+        repo: "acme/demo",
+        repoRoot: targetRepoRoot,
+        stateDir: operatorRoot,
+        mode: "chatops",
+        channel: "feishu",
+        chatTarget: "auto",
+        startGateway: false,
+        probeBuiltStartup: false,
+        json: true,
+      },
+      runtime,
+    );
+
+    setupCheckSpy.mockRestore();
+    webhookUrlSpy.mockRestore();
+
+    const payload = JSON.parse(runtime.log.mock.calls.at(-1)?.[0] ?? "null");
+    expect(payload.mode).toBe("chatops");
+    expect(payload.notify.bindingMode).toBe("auto-discovered");
+    expect(payload.notify.notifyChannel).toBe("feishu");
+    expect(payload.notify.notifyTarget).toBe("user:solo-chat");
+    expect(payload.webhook.action).toBe("skipped");
+    expect(payload.nextAction).toBe("configure-public-webhook-url");
+
+    const config = JSON.parse(await readFile(path.join(operatorRoot, "openclaw.json"), "utf8"));
+    const repoEntry = config.plugins.entries.openclawcode.config.repos[0];
+    expect(repoEntry.notifyChannel).toBe("feishu");
+    expect(repoEntry.notifyTarget).toBe("user:solo-chat");
+
+    const chatopsState = JSON.parse(
+      await readFile(
+        path.join(operatorRoot, "plugins", "openclawcode", "chatops-state.json"),
+        "utf8",
+      ),
+    );
+    expect(chatopsState.repoBindingsByRepo["acme/demo"]).toEqual(
+      expect.objectContaining({
+        notifyChannel: "feishu",
+        notifyTarget: "user:solo-chat",
+      }),
+    );
+  });
+
   it("fails fast when GitHub credentials are missing", async () => {
     const targetRepoRoot = await mkdtemp(
       path.join(os.tmpdir(), "openclawcode-bootstrap-no-token-"),

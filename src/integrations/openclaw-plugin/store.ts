@@ -944,6 +944,12 @@ export class OpenClawCodeChatopsStore {
     return state.repoBindingsByRepo[repoKey];
   }
 
+  async listRepoBindings(): Promise<OpenClawCodeRepoNotificationBinding[]> {
+    await this.flushMutations();
+    const state = await this.loadState();
+    return Object.values(state.repoBindingsByRepo);
+  }
+
   async getGitHubDelivery(
     deliveryId: string,
   ): Promise<OpenClawCodeGitHubDeliveryRecord | undefined> {

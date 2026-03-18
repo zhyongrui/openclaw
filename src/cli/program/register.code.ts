@@ -176,7 +176,10 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .option("--state-dir <dir>", "Operator state directory")
     .option("--mode <mode>", "Bootstrap mode (auto, cli-only, chatops)", "auto")
     .option("--channel <channel>", "Chat channel to bind immediately, such as feishu")
-    .option("--chat-target <target>", "Chat target identifier to persist for notifications")
+    .option(
+      "--chat-target <target>",
+      "Chat target identifier to persist for notifications, or 'auto' to reuse a unique saved binding",
+    )
     .option(
       "--webhook-url <url>",
       "Explicit public webhook base URL or full route URL; when omitted bootstrap tries to discover a running tunnel URL",

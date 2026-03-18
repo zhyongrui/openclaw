@@ -64,6 +64,8 @@ The implemented MVP already does these pieces automatically:
   creation or reuse succeeds
 - materialize the bundled plugin repo entry inside `openclaw.json`
 - persist a bootstrap repo binding in `chatops-state.json`
+- reuse one unique saved chat target when bootstrap is explicitly asked to
+  discover it
 - seed `PROJECT-BLUEPRINT.md`, role-routing, discovery, and stage-gate artifacts
 - try to start the local gateway
 - run strict setup-check plus built-startup proof by default
@@ -74,8 +76,8 @@ What is still manual or only partially automated:
 - provider credentials still come from the surrounding OpenClaw/operator login
 - runtime repo binding
   - `/occode-bind` exists and works
-  - bootstrap can seed a placeholder or explicit binding, but cannot yet
-    discover the active chat target on its own
+  - bootstrap can now reuse one unique saved binding target when asked
+  - bootstrap still cannot discover the live active conversation on its own
 - bootstrap still depends on host-level tunnel prerequisites such as
   `cloudflared`
 

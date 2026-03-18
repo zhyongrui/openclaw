@@ -9,6 +9,7 @@ import {
   OpenClawCodeChatopsStore,
   resolveOpenClawCodePluginConfig,
   type OpenClawCodeChatopsRepoConfig,
+  type OpenClawCodeRepoNotificationBinding,
 } from "../integrations/openclaw-plugin/index.js";
 import {
   createProjectBlueprint,
@@ -457,6 +458,13 @@ interface BootstrapTunnelResult {
   url: string | null;
   error: string | null;
 }
+
+type BootstrapNotifyBindingMode =
+  | "explicit"
+  | "existing-config"
+  | "auto-discovered"
+  | "chat-placeholder"
+  | "cli-placeholder";
 
 function parseBootstrapRepoRef(value: string): { owner: string; repo: string } {
   const trimmed = value.trim();
@@ -1137,6 +1145,43 @@ async function ensureBootstrapRepoBinding(params: {
   return {
     action: current ? "updated" : "created",
   };
+}
+
+async function discoverBootstrapNotifyBinding(params: {
+  operatorStateDir: string;
+  requestedChannel?: string;
+}): Promise<OpenClawCodeRepoNotificationBinding | undefined> {
+  const store = OpenClawCodeChatopsStore.fromStateDir(params.operatorStateDir);
+  const bindings = await store.listRepoBindings();
+  if (bindings.length === 0) {
+    return undefined;
+  }
+
+  const normalizePairKey = (binding: OpenClawCodeRepoNotificationBinding): string =>
+    `${binding.notifyChannel}\u0000${binding.notifyTarget}`;
+  const trimmedRequestedChannel = params.requestedChannel?.trim();
+
+  if (trimmedRequestedChannel) {
+    const matchingChannelBindings = bindings.filter(
+      (binding) => binding.notifyChannel === trimmedRequestedChannel,
+    );
+    const uniqueTargetBindings = Array.from(
+      new Map(
+        matchingChannelBindings
+          .filter((binding) => binding.notifyTarget.trim().length > 0)
+          .map((binding) => [binding.notifyTarget, binding]),
+      ).values(),
+    );
+    if (uniqueTargetBindings.length === 1) {
+      return uniqueTargetBindings[0];
+    }
+    return undefined;
+  }
+
+  const uniqueBindings = Array.from(
+    new Map(bindings.map((binding) => [normalizePairKey(binding), binding])).values(),
+  );
+  return uniqueBindings.length === 1 ? uniqueBindings[0] : undefined;
 }
 
 function parseBootstrapSetupCheckPayload(stdout: string): BootstrapSetupCheckPayload | null {
@@ -2587,27 +2632,55 @@ export async function openclawCodeBootstrapCommand(
   });
   targetRepoRoot = path.resolve(targetRepoRoot);
 
+  const explicitChannel = opts.channel?.trim();
+  const explicitChatTarget = opts.chatTarget?.trim();
+  const chatTargetAutoRequested = explicitChatTarget === "auto";
+  const concreteChatTarget = chatTargetAutoRequested ? undefined : explicitChatTarget;
+  const shouldDiscoverNotifyBinding =
+    chatTargetAutoRequested ||
+    Boolean(explicitChannel) ||
+    opts.mode === "chatops" ||
+    Boolean(existingOperatorRepoConfig?.notifyChannel);
+  const discoveredNotifyBinding =
+    !shouldDiscoverNotifyBinding || concreteChatTarget || existingOperatorRepoConfig?.notifyTarget
+      ? undefined
+      : await discoverBootstrapNotifyBinding({
+          operatorStateDir,
+          requestedChannel: explicitChannel || existingOperatorRepoConfig?.notifyChannel,
+        });
   const mode = resolveBootstrapMode({
     requestedMode: opts.mode,
-    channel: opts.channel,
-    chatTarget: opts.chatTarget,
+    channel:
+      explicitChannel ||
+      existingOperatorRepoConfig?.notifyChannel ||
+      discoveredNotifyBinding?.notifyChannel,
+    chatTarget:
+      concreteChatTarget ||
+      existingOperatorRepoConfig?.notifyTarget ||
+      discoveredNotifyBinding?.notifyTarget,
   });
   const defaultNotifyTarget =
     mode === "chatops" ? `bind-pending:${repoKey}` : `cli-only:${repoKey}`;
   const notifyChannel =
-    opts.channel?.trim() ||
+    explicitChannel ||
     existingOperatorRepoConfig?.notifyChannel ||
+    discoveredNotifyBinding?.notifyChannel ||
     DEFAULT_OPENCLAWCODE_BOOTSTRAP_NOTIFY_CHANNEL;
   const notifyTarget =
-    opts.chatTarget?.trim() || existingOperatorRepoConfig?.notifyTarget || defaultNotifyTarget;
-  const notifyBindingMode =
-    opts.channel?.trim() && opts.chatTarget?.trim()
+    concreteChatTarget ||
+    existingOperatorRepoConfig?.notifyTarget ||
+    discoveredNotifyBinding?.notifyTarget ||
+    defaultNotifyTarget;
+  const notifyBindingMode: BootstrapNotifyBindingMode =
+    explicitChannel && concreteChatTarget
       ? "explicit"
       : existingOperatorRepoConfig?.notifyChannel && existingOperatorRepoConfig?.notifyTarget
         ? "existing-config"
-        : mode === "chatops"
-          ? "chat-placeholder"
-          : "cli-placeholder";
+        : discoveredNotifyBinding
+          ? "auto-discovered"
+          : mode === "chatops"
+            ? "chat-placeholder"
+            : "cli-placeholder";
 
   const testCommandsResult = opts.test?.length
     ? {

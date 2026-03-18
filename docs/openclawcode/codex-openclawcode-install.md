@@ -166,8 +166,12 @@ Use this when you want the real operator flow.
 1. run bootstrap for the target repo, ideally with explicit chat target values:
 
 ```bash
-openclaw code bootstrap --repo <owner>/<repo> --mode chatops --channel feishu --chat-target <target> --json
+openclaw code bootstrap --repo <owner>/<repo> --mode chatops --channel feishu --chat-target auto --json
 ```
+
+Use `--chat-target <target>` when you know the exact destination. Use
+`--chat-target auto` when the operator state already has one unambiguous saved
+binding and you want bootstrap to reuse it.
 
 If you want to force a known public ingress instead of the managed tunnel,
 append `--webhook-url <public-url>`.
