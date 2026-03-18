@@ -187,6 +187,10 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .option("--test <command>", "Test command to persist in repo config", collectOption, [])
     .option("--no-configure-webhook", "Skip GitHub webhook create/reuse during bootstrap")
     .option("--no-start-gateway", "Do not try to start the local gateway after writing config")
+    .option(
+      "--no-start-tunnel",
+      "Do not try to start the managed webhook tunnel when bootstrap cannot discover a public URL",
+    )
     .option("--no-probe-built-startup", "Skip the isolated built-startup proof during setup-check")
     .option("--json", "Output JSON", false)
     .action(async (opts) => {
@@ -206,6 +210,7 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             test: (opts.test as string[] | undefined) ?? [],
             configureWebhook: Boolean(opts.configureWebhook),
             startGateway: Boolean(opts.startGateway),
+            startTunnel: Boolean(opts.startTunnel),
             probeBuiltStartup: Boolean(opts.probeBuiltStartup),
             json: Boolean(opts.json),
           },

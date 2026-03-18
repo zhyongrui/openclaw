@@ -62,9 +62,12 @@ See `single-login-bootstrap-proposal.md` for the target end state.
 - target repo clone or attach
 - operator env persistence under `~/.openclaw/openclawcode.env`
 - bundled plugin repo config materialization in `openclaw.json`
+- managed tunnel startup when bootstrap needs a public webhook URL and gateway
+  startup is enabled
 - GitHub webhook create/reuse when bootstrap can resolve a public URL from:
   - `--webhook-url`
   - `OPENCLAWCODE_BOOTSTRAP_WEBHOOK_URL`
+  - an auto-started managed tunnel
   - a running tunnel log
 - placeholder or explicit repo binding persistence in `chatops-state.json`
 - `PROJECT-BLUEPRINT.md` scaffold creation in the target repo when missing
@@ -72,7 +75,16 @@ See `single-login-bootstrap-proposal.md` for the target end state.
 - local gateway startup attempt
 - strict setup-check plus built-startup proof
 
-It still does not create public ingress by itself on a truly fresh host.
+On a healthy host with `cloudflared` available, bootstrap can now create its own
+public ingress by starting the managed tunnel automatically.
+
+Bootstrap still does not solve every ingress case by itself:
+
+- if `cloudflared` is missing
+- if the tunnel cannot get a public URL
+- if you want to override the public URL explicitly
+
+In those cases bootstrap reports the exact next action.
 
 If bootstrap cannot discover a public URL yet, the simplest explicit form is:
 
@@ -80,6 +92,15 @@ If bootstrap cannot discover a public URL yet, the simplest explicit form is:
 openclaw code bootstrap \
   --repo owner/repo \
   --webhook-url https://example.trycloudflare.com \
+  --json
+```
+
+If you want bootstrap to skip managed tunnel startup entirely, use:
+
+```bash
+openclaw code bootstrap \
+  --repo owner/repo \
+  --no-start-tunnel \
   --json
 ```
 

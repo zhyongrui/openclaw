@@ -56,7 +56,7 @@ login plus one repo choice, see `single-login-bootstrap-proposal.md`.
 
 ## Current Status
 
-As of 2026-03-17, the repository includes a working `openclawcode` issue-driven
+As of 2026-03-18, the repository includes a working `openclawcode` issue-driven
 loop with:
 
 - workflow state, persistence, and isolated worktree management
@@ -95,6 +95,7 @@ loop with:
   repo bootstrap, including:
   - target repo clone/attach
   - operator env/config materialization
+  - managed tunnel startup when bootstrap needs a public webhook URL
   - GitHub webhook create/reuse when bootstrap can discover a public URL
   - bootstrap repo binding persistence
   - blueprint / role-routing / discovery / stage-gate seeding

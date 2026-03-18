@@ -55,8 +55,9 @@ ownership, or policy decisions:
 2. decide the final operator state directory if the default is not acceptable
 3. provide Feishu credentials if chatops must be tested
 4. choose the new target repository and ensure the machine can clone it
-5. provide a public webhook URL only if bootstrap cannot discover one from a
-   running tunnel
+5. provide a public webhook URL only if bootstrap cannot:
+   - auto-start the managed tunnel
+   - or discover one from an existing tunnel
 6. decide whether the first run should be:
    - CLI-only
    - chatops with `/occode-bind`
@@ -76,6 +77,7 @@ Requirements:
 - run pnpm build
 - then run:
   - openclaw code bootstrap --repo owner/repo --json
+- let bootstrap start the managed tunnel automatically when it needs a public webhook URL
 
 Important repository constraint:
 - this is the forked OpenClaw checkout that contains openclawcode
@@ -86,6 +88,7 @@ Do not invent secrets. Stop only when you need:
 - GH_TOKEN or GITHUB_TOKEN
 - Feishu credentials
 - the final target repository path
+- an explicit public webhook URL because bootstrap could not obtain one
 
 When finished, report:
 - node version
@@ -108,7 +111,9 @@ The smallest successful machine bootstrap looks like this:
 5. Codex runs `openclaw code bootstrap --repo owner/repo --json`.
 6. The user chooses CLI-only or chatops validation.
 
-If the machine already has a public tunnel URL, Codex should prefer:
+Bootstrap now tries to start the managed tunnel automatically when it needs a
+public webhook URL. If the machine already has a public URL, Codex should still
+prefer the explicit form:
 
 ```bash
 openclaw code bootstrap \
@@ -161,8 +166,11 @@ Use this when you want the real operator flow.
 1. run bootstrap for the target repo, ideally with explicit chat target values:
 
 ```bash
-openclaw code bootstrap --repo <owner>/<repo> --mode chatops --channel feishu --chat-target <target> --webhook-url <public-url> --json
+openclaw code bootstrap --repo <owner>/<repo> --mode chatops --channel feishu --chat-target <target> --json
 ```
+
+If you want to force a known public ingress instead of the managed tunnel,
+append `--webhook-url <public-url>`.
 
 2. bring up the local gateway if bootstrap reported that it could not start it
 3. connect the real chat surface

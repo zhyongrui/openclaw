@@ -120,6 +120,7 @@ export interface OpenClawCodeBootstrapOpts {
   test?: string[];
   configureWebhook?: boolean;
   startGateway?: boolean;
+  startTunnel?: boolean;
   probeBuiltStartup?: boolean;
   json?: boolean;
 }
@@ -449,6 +450,12 @@ interface BootstrapSetupCheckPayload {
     status: string;
     message: string;
   }>;
+}
+
+interface BootstrapTunnelResult {
+  action: "started" | "already-running" | "failed" | "skipped";
+  url: string | null;
+  error: string | null;
 }
 
 function parseBootstrapRepoRef(value: string): { owner: string; repo: string } {
@@ -1226,9 +1233,69 @@ async function startBootstrapGateway(params: {
   return { action: "failed" };
 }
 
+async function startBootstrapTunnel(params: {
+  operatorRepoRoot: string;
+  operatorStateDir: string;
+}): Promise<BootstrapTunnelResult> {
+  const scriptPath = path.join(
+    params.operatorRepoRoot,
+    "scripts",
+    "openclawcode-webhook-tunnel.sh",
+  );
+  const result = childProcess.spawnSync("bash", [scriptPath, "start-tunnel"], {
+    cwd: params.operatorRepoRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      OPENCLAW_STATE_DIR: params.operatorStateDir,
+      OPENCLAWCODE_TUNNEL_OPERATOR_ROOT: params.operatorStateDir,
+    },
+  });
+  if (result.status !== 0) {
+    const error =
+      result.stderr.trim() || result.stdout.trim() || "Failed to start the managed webhook tunnel.";
+    return {
+      action: "failed",
+      url: null,
+      error,
+    };
+  }
+
+  const stdout = result.stdout
+    .split(/\r?\n/g)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const candidateUrl = stdout.at(-1);
+  if (candidateUrl) {
+    return {
+      action: "started",
+      url: normalizeBootstrapWebhookUrl(candidateUrl),
+      error: null,
+    };
+  }
+
+  const resolved = await resolveBootstrapWebhookUrl({
+    operatorStateDir: params.operatorStateDir,
+  });
+  if (resolved.url) {
+    return {
+      action: "already-running",
+      url: resolved.url,
+      error: null,
+    };
+  }
+
+  return {
+    action: "failed",
+    url: null,
+    error: "Managed tunnel command exited successfully, but no public URL was discovered.",
+  };
+}
+
 export const openclawCodeBootstrapInternals = {
   runSetupCheck: runBootstrapSetupCheck,
   startGateway: startBootstrapGateway,
+  startTunnel: startBootstrapTunnel,
   resolveWebhookUrl: resolveBootstrapWebhookUrl,
   ensureWebhook: ensureBootstrapWebhook,
 };
@@ -2580,39 +2647,6 @@ export async function openclawCodeBootstrapCommand(
     repoKey,
     token,
   });
-  const github = new GitHubRestClient(token);
-  const webhookUrl = await openclawCodeBootstrapInternals.resolveWebhookUrl({
-    explicitWebhookUrl: opts.webhookUrl,
-    operatorStateDir,
-  });
-  const webhook =
-    opts.configureWebhook === false
-      ? {
-          action: "skipped" as const,
-          hookId: null,
-          webhookUrl: webhookUrl.url,
-          webhookUrlSource: webhookUrl.source,
-          events: DEFAULT_OPENCLAWCODE_BOOTSTRAP_HOOK_EVENTS.split(",").map((entry) =>
-            entry.trim(),
-          ),
-          error: null,
-        }
-      : await openclawCodeBootstrapInternals.ensureWebhook({
-          github,
-          repoRef,
-          webhookUrl: webhookUrl.url,
-          webhookUrlSource: webhookUrl.source,
-          secret: envFile.values.OPENCLAWCODE_GITHUB_WEBHOOK_SECRET,
-        });
-  const envFileAfterWebhook =
-    webhook.hookId != null
-      ? await writeBootstrapEnvFile({
-          envFilePath,
-          repoKey,
-          token,
-          hookId: webhook.hookId,
-        })
-      : envFile;
   const config = await writeBootstrapOperatorConfig({
     configPath,
     repoRef,
@@ -2652,6 +2686,63 @@ export async function openclawCodeBootstrapCommand(
           operatorStateDir,
           extraEnv: envFile.values,
         });
+  const resolvedWebhookUrl = await openclawCodeBootstrapInternals.resolveWebhookUrl({
+    explicitWebhookUrl: opts.webhookUrl,
+    operatorStateDir,
+  });
+  const tunnel =
+    opts.configureWebhook === false || opts.startGateway === false || opts.startTunnel === false
+      ? ({
+          action: "skipped",
+          url: null,
+          error: null,
+        } satisfies BootstrapTunnelResult)
+      : resolvedWebhookUrl.url
+        ? ({
+            action: "skipped",
+            url: null,
+            error: null,
+          } satisfies BootstrapTunnelResult)
+        : await openclawCodeBootstrapInternals.startTunnel({
+            operatorRepoRoot,
+            operatorStateDir,
+          });
+  const webhookUrl =
+    tunnel.url != null
+      ? {
+          url: tunnel.url,
+          source: "tunnel-log" as const,
+        }
+      : resolvedWebhookUrl;
+  const github = new GitHubRestClient(token);
+  const webhook =
+    opts.configureWebhook === false
+      ? {
+          action: "skipped" as const,
+          hookId: null,
+          webhookUrl: webhookUrl.url,
+          webhookUrlSource: webhookUrl.source,
+          events: DEFAULT_OPENCLAWCODE_BOOTSTRAP_HOOK_EVENTS.split(",").map((entry) =>
+            entry.trim(),
+          ),
+          error: null,
+        }
+      : await openclawCodeBootstrapInternals.ensureWebhook({
+          github,
+          repoRef,
+          webhookUrl: webhookUrl.url,
+          webhookUrlSource: webhookUrl.source,
+          secret: envFile.values.OPENCLAWCODE_GITHUB_WEBHOOK_SECRET,
+        });
+  const envFileAfterWebhook =
+    webhook.hookId != null
+      ? await writeBootstrapEnvFile({
+          envFilePath,
+          repoKey,
+          token,
+          hookId: webhook.hookId,
+        })
+      : envFile;
   const setupCheck = openclawCodeBootstrapInternals.runSetupCheck({
     operatorRepoRoot,
     operatorStateDir,
@@ -2662,12 +2753,14 @@ export async function openclawCodeBootstrapCommand(
       ? "connect-chat-and-run-occode-bind"
       : webhook.action === "failed"
         ? "review-github-webhook-permissions"
-        : webhook.action === "skipped" && mode === "chatops"
-          ? "configure-public-webhook-url"
-          : (setupCheck.payload?.readiness.nextAction ??
-            (gateway.action === "failed"
-              ? "start-or-restart-live-gateway"
-              : "inspect-setup-check-output"));
+        : tunnel.action === "failed"
+          ? "start-or-restart-webhook-tunnel"
+          : webhook.action === "skipped" && mode === "chatops"
+            ? "configure-public-webhook-url"
+            : (setupCheck.payload?.readiness.nextAction ??
+              (gateway.action === "failed"
+                ? "start-or-restart-live-gateway"
+                : "inspect-setup-check-output"));
 
   const payload = {
     contractVersion: OPENCLAWCODE_BOOTSTRAP_CONTRACT_VERSION,
@@ -2708,6 +2801,7 @@ export async function openclawCodeBootstrapCommand(
       testCommands: testCommandsResult.commands,
       testCommandSource: testCommandsResult.source,
     },
+    tunnel,
     webhook,
     binding,
     blueprint: {
@@ -2757,6 +2851,9 @@ export async function openclawCodeBootstrapCommand(
   runtime.log(`Env file: ${envFilePath}`);
   runtime.log(`Config file: ${configPath}`);
   runtime.log(`Repo entry: ${config.repoEntryAction}`);
+  runtime.log(
+    `Tunnel: ${tunnel.action}${tunnel.url ? ` (${tunnel.url})` : ""}${tunnel.error ? ` | ${tunnel.error}` : ""}`,
+  );
   runtime.log(
     `Webhook: ${webhook.action}${webhook.webhookUrl ? ` (${webhook.webhookUrl})` : ""}${webhook.error ? ` | ${webhook.error}` : ""}`,
   );

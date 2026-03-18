@@ -40,6 +40,7 @@ Usage: ${SCRIPT_NAME} <command>
 
 Commands:
   start       Start a trycloudflare tunnel and sync the GitHub webhook URL.
+  start-tunnel Start the managed tunnel and print the public URL without syncing GitHub.
   run         Run the tunnel in the foreground. Use this in a dedicated terminal.
   stop        Stop the managed tunnel process, if one is running.
   restart     Restart the managed tunnel process and sync the GitHub webhook URL.
@@ -343,6 +344,11 @@ case "$command" in
     wait_for_public_url >/dev/null
     sync_github_hook
     status
+    ;;
+  start-tunnel)
+    ensure_command "$CLOUDFLARED_BIN"
+    start_tunnel
+    wait_for_public_url
     ;;
   run)
     run_tunnel_foreground
