@@ -28,6 +28,7 @@ const resolveGatewayInstallToken = vi.hoisted(() =>
   })),
 );
 const isSystemdUserServiceAvailable = vi.hoisted(() => vi.fn(async () => true));
+const runOnboardingOpenClawCode = vi.hoisted(() => vi.fn(async () => {}));
 
 vi.mock("../commands/onboard-helpers.js", () => ({
   detectBrowserOpenSupport: vi.fn(async () => ({ ok: false })),
@@ -100,6 +101,10 @@ vi.mock("./setup.completion.js", () => ({
   setupWizardShellCompletion,
 }));
 
+vi.mock("./setup.code.js", () => ({
+  runOnboardingOpenClawCode,
+}));
+
 import { finalizeSetupWizard } from "./setup.finalize.js";
 
 function createRuntime(): RuntimeEnv {
@@ -119,6 +124,7 @@ function expectFirstOnboardingInstallPlanCallOmitsToken() {
 
 describe("finalizeSetupWizard", () => {
   beforeEach(() => {
+    runOnboardingOpenClawCode.mockReset();
     runTui.mockClear();
     probeGatewayReachable.mockClear();
     setupWizardShellCompletion.mockClear();
@@ -306,5 +312,47 @@ describe("finalizeSetupWizard", () => {
     expect(gatewayServiceUninstall).not.toHaveBeenCalled();
     expect(progressUpdate).toHaveBeenCalledWith("Restarting Gateway service…");
     expect(progressStop).toHaveBeenCalledWith("Gateway service restart scheduled.");
+  });
+
+  it("runs the openclaw code onboarding step before the final what-now note", async () => {
+    const note = vi.fn(async () => {});
+    const prompter = buildWizardPrompter({
+      note,
+      select: vi.fn(async () => "later") as never,
+      confirm: vi.fn(async () => false),
+    });
+
+    await finalizeSetupWizard({
+      flow: "quickstart",
+      opts: {
+        acceptRisk: true,
+        authChoice: "skip",
+        installDaemon: false,
+        skipHealth: true,
+        skipUi: true,
+      },
+      baseConfig: {},
+      nextConfig: {},
+      workspaceDir: "/tmp",
+      settings: {
+        port: 18789,
+        bind: "loopback",
+        authMode: "token",
+        gatewayToken: undefined,
+        tailscaleMode: "off",
+        tailscaleResetOnExit: false,
+      },
+      prompter,
+      runtime: createRuntime(),
+    });
+
+    const noteCalls = note.mock.calls as unknown as Array<[string, string?]>;
+    const whatNowIndex = noteCalls.findIndex((call) => call[1] === "What now");
+    expect(runOnboardingOpenClawCode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompter,
+      }),
+    );
+    expect(whatNowIndex).toBeGreaterThanOrEqual(0);
   });
 });
