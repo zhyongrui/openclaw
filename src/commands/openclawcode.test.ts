@@ -15,6 +15,7 @@ import {
   openclawCodeBlueprintInitCommand,
   openclawCodeBootstrapInternals,
   openclawCodePolicyShowCommand,
+  openclawCodeRepoPlanCommand,
   openclawCodeOperatorStatusSnapshotShowCommand,
   openclawCodeBlueprintSetSectionCommand,
   openclawCodeBlueprintSetProviderRoleCommand,
@@ -50,6 +51,9 @@ const mocks = vi.hoisted(() => {
     listIssues: vi.fn(),
     closeIssue: vi.fn(),
     ensureRepoWebhook: vi.fn(),
+    fetchAuthenticatedViewer: vi.fn(),
+    listAccessibleRepositories: vi.fn(),
+    createRepository: vi.fn(),
     builderCtorArgs: [] as unknown[],
     verifierCtorArgs: [] as unknown[],
   };
@@ -62,6 +66,9 @@ vi.mock("../openclawcode/index.js", async (importOriginal) => {
     listIssues = mocks.listIssues;
     closeIssue = mocks.closeIssue;
     ensureRepoWebhook = mocks.ensureRepoWebhook;
+    fetchAuthenticatedViewer = mocks.fetchAuthenticatedViewer;
+    listAccessibleRepositories = mocks.listAccessibleRepositories;
+    createRepository = mocks.createRepository;
   }
   return {
     ...actual,
@@ -101,6 +108,17 @@ describe("openclawCodeRunCommand", () => {
       body: "Seeded validation issue body",
       labels: [],
       url: "https://github.com/openclaw/openclaw/issues/99",
+    });
+    mocks.fetchAuthenticatedViewer.mockResolvedValue({ login: "acme" });
+    mocks.listAccessibleRepositories.mockResolvedValue([]);
+    mocks.createRepository.mockResolvedValue({
+      owner: "acme",
+      repo: "new-project",
+      description: "Created by tests",
+      private: true,
+      defaultBranch: "main",
+      url: "https://github.com/acme/new-project",
+      updatedAt: "2026-03-18T00:00:00Z",
     });
     mocks.listIssues.mockResolvedValue([
       {
@@ -4309,7 +4327,7 @@ describe("openclawCodeBootstrapCommand", () => {
         runtime,
       ),
     ).rejects.toThrow(
-      "Bootstrap requires GH_TOKEN or GITHUB_TOKEN in the environment so the target repo can be inspected and configured.",
+      "Bootstrap requires GH_TOKEN, GITHUB_TOKEN, or an authenticated `gh auth token` session so the target repo can be inspected and configured.",
     );
   });
 
@@ -4494,6 +4512,88 @@ describe("openclawCodeBootstrapCommand", () => {
 
     const envFile = await readFile(path.join(operatorRoot, "openclawcode.env"), "utf8");
     expect(envFile).toContain("export OPENCLAWCODE_GITHUB_HOOK_ID='123456'");
+  });
+});
+
+describe("openclawCodeRepoPlanCommand", () => {
+  const runtime = createTestRuntime();
+
+  beforeEach(() => {
+    vi.stubEnv("GH_TOKEN", "ghs_repo_plan_token");
+    delete process.env.GITHUB_TOKEN;
+  });
+
+  it("lists recent accessible repositories for the existing-repo flow", async () => {
+    mocks.listAccessibleRepositories.mockResolvedValue([
+      {
+        owner: "acme",
+        repo: "igallery",
+        description: "Shared gallery",
+        private: true,
+        defaultBranch: "main",
+        url: "https://github.com/acme/igallery",
+        updatedAt: "2026-03-18T09:00:00Z",
+      },
+      {
+        owner: "acme",
+        repo: "photo-vault",
+        description: "Private photo app",
+        private: false,
+        defaultBranch: "main",
+        url: "https://github.com/acme/photo-vault",
+        updatedAt: "2026-03-17T09:00:00Z",
+      },
+    ]);
+
+    await openclawCodeRepoPlanCommand(
+      {
+        owner: "acme",
+        existing: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(String(runtime.log.mock.calls.at(-1)?.[0] ?? "{}"));
+    expect(payload.mode).toBe("existing");
+    expect(payload.credentials.githubTokenSource).toBe("GH_TOKEN");
+    expect(payload.repositories).toHaveLength(2);
+    expect(payload.nextAction).toContain("openclaw code bootstrap --repo acme/igallery --json");
+  });
+
+  it("creates a chosen repository for the new-project flow", async () => {
+    mocks.createRepository.mockResolvedValue({
+      owner: "acme",
+      repo: "igallery-app",
+      description: "Shared image gallery",
+      private: false,
+      defaultBranch: "main",
+      url: "https://github.com/acme/igallery-app",
+      updatedAt: "2026-03-18T10:00:00Z",
+    });
+
+    await openclawCodeRepoPlanCommand(
+      {
+        owner: "acme",
+        project: "Shared image gallery for family albums",
+        repo: "igallery-app",
+        create: true,
+        visibility: "public",
+        json: true,
+      },
+      runtime,
+    );
+
+    expect(mocks.createRepository).toHaveBeenCalledWith({
+      owner: "acme",
+      name: "igallery-app",
+      description: "Shared image gallery for family albums",
+      private: false,
+    });
+    const payload = JSON.parse(String(runtime.log.mock.calls.at(-1)?.[0] ?? "{}"));
+    expect(payload.mode).toBe("new");
+    expect(payload.createdRepository.repo).toBe("igallery-app");
+    expect(payload.nextAction).toBe("openclaw code bootstrap --repo acme/igallery-app --json");
   });
 });
 

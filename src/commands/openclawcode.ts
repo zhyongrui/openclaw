@@ -126,6 +126,18 @@ export interface OpenClawCodeBootstrapOpts {
   json?: boolean;
 }
 
+export interface OpenClawCodeRepoPlanOpts {
+  owner?: string;
+  project?: string;
+  repo?: string;
+  existing?: boolean;
+  create?: boolean;
+  visibility?: "public" | "private";
+  description?: string;
+  limit?: number;
+  json?: boolean;
+}
+
 export interface OpenClawCodeSeedValidationIssueOpts {
   template?: ValidationIssueTemplateId;
   owner?: string;
@@ -488,6 +500,11 @@ interface BootstrapProofReadiness {
   recommendedProofMode: "cli-only" | "chatops";
 }
 
+interface ResolvedGitHubToken {
+  token: string;
+  source: "GH_TOKEN" | "GITHUB_TOKEN" | "gh-auth-token";
+}
+
 function parseBootstrapRepoRef(value: string): { owner: string; repo: string } {
   const trimmed = value.trim();
   const parts = trimmed
@@ -531,6 +548,71 @@ function buildGitHubRepoUrl(repoRef: { owner: string; repo: string }): string {
 function buildGitHubExtraHeader(token: string): string {
   const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
   return `AUTHORIZATION: basic ${basic}`;
+}
+
+function resolveGitHubTokenFromEnvOrGhCli(): ResolvedGitHubToken | null {
+  const ghToken = process.env.GH_TOKEN?.trim();
+  if (ghToken) {
+    return { token: ghToken, source: "GH_TOKEN" };
+  }
+  const githubToken = process.env.GITHUB_TOKEN?.trim();
+  if (githubToken) {
+    return { token: githubToken, source: "GITHUB_TOKEN" };
+  }
+  const result = childProcess.spawnSync("gh", ["auth", "token"], {
+    encoding: "utf8",
+  });
+  if (result.status === 0) {
+    const token = result.stdout.trim();
+    if (token) {
+      return { token, source: "gh-auth-token" };
+    }
+  }
+  return null;
+}
+
+function slugifyRepoNamePart(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function buildRepoNameSuggestions(projectText: string): string[] {
+  const stopWords = new Set([
+    "a",
+    "an",
+    "and",
+    "app",
+    "application",
+    "build",
+    "for",
+    "in",
+    "of",
+    "platform",
+    "project",
+    "service",
+    "system",
+    "the",
+    "to",
+    "tool",
+  ]);
+  const rawWords = projectText
+    .split(/[^A-Za-z0-9]+/)
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  const words = rawWords.filter((entry) => !stopWords.has(entry));
+  const seedWords = (words.length > 0 ? words : rawWords).slice(0, 4);
+  const base = slugifyRepoNamePart(seedWords.join("-")) || "new-project";
+  const suggestions = [base];
+  const suffixes = ["app", "web", "service", "workspace"];
+  for (const suffix of suffixes) {
+    if (!base.endsWith(`-${suffix}`) && base !== suffix) {
+      suggestions.push(`${base}-${suffix}`);
+    }
+  }
+  return [...new Set(suggestions)].slice(0, 5);
 }
 
 function runGitCommand(params: {
@@ -1468,6 +1550,155 @@ export const openclawCodeBootstrapInternals = {
   resolveWebhookUrl: resolveBootstrapWebhookUrl,
   ensureWebhook: ensureBootstrapWebhook,
 };
+
+function parseRepoVisibility(value: string | undefined): "public" | "private" {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized || normalized === "private") {
+    return "private";
+  }
+  if (normalized === "public") {
+    return "public";
+  }
+  throw new Error(`Unsupported visibility: ${value}. Expected public or private.`);
+}
+
+export async function openclawCodeRepoPlanCommand(
+  opts: OpenClawCodeRepoPlanOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const resolvedToken = resolveGitHubTokenFromEnvOrGhCli();
+  if (!resolvedToken) {
+    throw new Error(
+      "Repo planning requires GH_TOKEN, GITHUB_TOKEN, or an authenticated `gh auth token` session.",
+    );
+  }
+
+  const github = new GitHubRestClient(resolvedToken.token);
+  const owner = opts.owner?.trim() || (await github.fetchAuthenticatedViewer()).login;
+  const requestedLimit =
+    typeof opts.limit === "number" && Number.isFinite(opts.limit) ? opts.limit : 5;
+  const limit = Math.max(1, Math.min(requestedLimit, 20));
+  const explicitRepo = opts.repo ? slugifyRepoNamePart(opts.repo) : undefined;
+  const visibility = parseRepoVisibility(opts.visibility);
+
+  if (opts.existing) {
+    const repositories = await github.listAccessibleRepositories({
+      owner,
+      limit,
+    });
+    const payload = {
+      owner,
+      mode: "existing",
+      credentials: {
+        githubTokenSource: resolvedToken.source,
+      },
+      repositories,
+      nextAction:
+        repositories[0] != null
+          ? `Choose one repo, then run: openclaw code bootstrap --repo ${repositories[0].owner}/${repositories[0].repo} --json`
+          : `No accessible repos were found for ${owner}. Pass --project to generate new-repo suggestions, or specify --repo owner/name to bootstrap directly.`,
+    };
+    if (opts.json) {
+      runtime.log(JSON.stringify(payload, null, 2));
+      return;
+    }
+    runtime.log(`Owner: ${owner}`);
+    runtime.log("Mode: existing");
+    runtime.log(`GitHub token source: ${resolvedToken.source}`);
+    runtime.log(`Accessible repos: ${repositories.length}`);
+    for (const repo of repositories) {
+      runtime.log(
+        `- ${repo.owner}/${repo.repo} | ${repo.private ? "private" : "public"} | updated ${repo.updatedAt ?? "unknown"}`,
+      );
+    }
+    runtime.log(`Next action: ${payload.nextAction}`);
+    return;
+  }
+
+  const project = opts.project?.trim();
+  const suggestions = explicitRepo
+    ? [explicitRepo]
+    : buildRepoNameSuggestions(project ?? "new project");
+  let createdRepository:
+    | {
+        owner: string;
+        repo: string;
+        url: string;
+        visibility: "public" | "private";
+      }
+    | undefined;
+  if (opts.create) {
+    if (!explicitRepo) {
+      throw new Error(
+        "Pass --repo <name> together with --create so the chosen repository name is explicit.",
+      );
+    }
+    const created = await github.createRepository({
+      owner,
+      name: explicitRepo,
+      description: opts.description ?? project,
+      private: visibility !== "public",
+    });
+    createdRepository = {
+      owner: created.owner,
+      repo: created.repo,
+      url: created.url,
+      visibility: created.private ? "private" : "public",
+    };
+  }
+
+  const createCommand = explicitRepo
+    ? [
+        "openclaw code repo-plan",
+        `--owner ${owner}`,
+        `--repo ${explicitRepo}`,
+        "--create",
+        `--visibility ${visibility}`,
+        project ? `--project ${JSON.stringify(project)}` : null,
+        opts.description ? `--description ${JSON.stringify(opts.description)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : null;
+  const payload = {
+    owner,
+    mode: "new",
+    credentials: {
+      githubTokenSource: resolvedToken.source,
+    },
+    project: project ?? null,
+    suggestions,
+    selectedRepo: explicitRepo ? `${owner}/${explicitRepo}` : null,
+    createdRepository,
+    nextAction: createdRepository
+      ? `openclaw code bootstrap --repo ${createdRepository.owner}/${createdRepository.repo} --json`
+      : createCommand ??
+        "Choose one suggested name or provide your own with --repo <name>, then rerun with --create when ready.",
+  };
+
+  if (opts.json) {
+    runtime.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  runtime.log(`Owner: ${owner}`);
+  runtime.log("Mode: new");
+  runtime.log(`GitHub token source: ${resolvedToken.source}`);
+  if (project) {
+    runtime.log(`Project: ${project}`);
+  }
+  runtime.log("Suggested repository names:");
+  for (const suggestion of suggestions) {
+    runtime.log(`- ${suggestion}`);
+  }
+  if (createdRepository) {
+    runtime.log(
+      `Created repo: ${createdRepository.owner}/${createdRepository.repo} (${createdRepository.visibility})`,
+    );
+    runtime.log(createdRepository.url);
+  }
+  runtime.log(`Next action: ${payload.nextAction}`);
+}
 
 function logProjectBlueprintSummary(params: {
   summary: Awaited<ReturnType<typeof readProjectBlueprint>>;
@@ -2726,12 +2957,13 @@ export async function openclawCodeBootstrapCommand(
   const repoKey = `${repoRef.owner}/${repoRef.repo}`;
   const operatorRepoRoot = resolveOpenClawCodeOperatorRepoRoot();
   const operatorStateDir = resolveOperatorStateDir(opts.stateDir);
-  const token = process.env.GH_TOKEN?.trim() || process.env.GITHUB_TOKEN?.trim();
-  if (!token) {
+  const resolvedToken = resolveGitHubTokenFromEnvOrGhCli();
+  if (!resolvedToken) {
     throw new Error(
-      "Bootstrap requires GH_TOKEN or GITHUB_TOKEN in the environment so the target repo can be inspected and configured.",
+      "Bootstrap requires GH_TOKEN, GITHUB_TOKEN, or an authenticated `gh auth token` session so the target repo can be inspected and configured.",
     );
   }
+  const token = resolvedToken.token;
 
   const initialRepoRoot = await resolveBootstrapRepoRoot({
     requestedRepoRoot: opts.repoRoot,
@@ -3005,7 +3237,7 @@ export async function openclawCodeBootstrapCommand(
       bindingMode: notifyBindingMode,
     },
     credentials: {
-      githubTokenSource: process.env.GH_TOKEN?.trim() ? "GH_TOKEN" : "GITHUB_TOKEN",
+      githubTokenSource: resolvedToken.source,
       envFileCreated: envFileAfterWebhook.created,
       envUpdatedKeys: envFileAfterWebhook.updatedKeys,
       webhookSecretGenerated: envFileAfterWebhook.webhookSecretGenerated,

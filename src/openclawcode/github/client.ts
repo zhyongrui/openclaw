@@ -89,6 +89,30 @@ export interface EnsureRepoWebhookResult extends GitHubRepoWebhook {
   action: "created" | "updated" | "unchanged";
 }
 
+export interface GitHubAuthenticatedViewer {
+  login: string;
+}
+
+export interface GitHubRepositorySummary extends RepoRef {
+  description?: string;
+  private: boolean;
+  defaultBranch?: string;
+  url: string;
+  updatedAt?: string;
+}
+
+export interface ListAccessibleRepositoriesRequest {
+  owner?: string;
+  limit?: number;
+}
+
+export interface CreateRepositoryRequest {
+  owner?: string;
+  name: string;
+  description?: string;
+  private?: boolean;
+}
+
 export interface GitHubIssueClient {
   fetchIssue(ref: IssueStateRef): Promise<IssueRef>;
   createIssue(request: CreateIssueRequest): Promise<CreatedIssueRef>;
@@ -106,6 +130,11 @@ export interface GitHubIssueClient {
   mergePullRequest(request: MergePullRequestRequest): Promise<void>;
   closeIssue(request: CloseIssueRequest): Promise<void>;
   ensureRepoWebhook(request: EnsureRepoWebhookRequest): Promise<EnsureRepoWebhookResult>;
+  fetchAuthenticatedViewer(): Promise<GitHubAuthenticatedViewer>;
+  listAccessibleRepositories(
+    request?: ListAccessibleRepositoriesRequest,
+  ): Promise<GitHubRepositorySummary[]>;
+  createRepository(request: CreateRepositoryRequest): Promise<GitHubRepositorySummary>;
 }
 
 type GitHubIssueResponse = {
@@ -140,6 +169,22 @@ type GitHubWebhookResponse = {
   events?: string[] | null;
   config?: {
     url?: string | null;
+  } | null;
+};
+
+type GitHubViewerResponse = {
+  login: string;
+};
+
+type GitHubRepositoryResponse = {
+  name: string;
+  private?: boolean | null;
+  html_url?: string | null;
+  description?: string | null;
+  default_branch?: string | null;
+  updated_at?: string | null;
+  owner?: {
+    login?: string | null;
   } | null;
 };
 
@@ -508,6 +553,85 @@ export class GitHubRestClient implements GitHubIssueClient {
       events: [...(updated.events ?? normalizedEvents)].toSorted((left, right) =>
         left.localeCompare(right),
       ),
+    };
+  }
+
+  async fetchAuthenticatedViewer(): Promise<GitHubAuthenticatedViewer> {
+    const viewer = await this.request<GitHubViewerResponse>("/user");
+    if (!viewer.login?.trim()) {
+      throw new Error("GitHub API request failed: authenticated viewer login missing.");
+    }
+    return {
+      login: viewer.login.trim(),
+    };
+  }
+
+  async listAccessibleRepositories(
+    request?: ListAccessibleRepositoriesRequest,
+  ): Promise<GitHubRepositorySummary[]> {
+    const limit = Math.max(1, Math.min(request?.limit ?? 5, 100));
+    const repositories = await this.request<GitHubRepositoryResponse[]>(
+      `/user/repos?sort=updated&per_page=${limit * 3}&affiliation=owner,collaborator,organization_member`,
+    );
+    const ownerFilter = request?.owner?.trim().toLowerCase();
+    return repositories
+      .map((repo) => {
+        const owner = repo.owner?.login?.trim();
+        const name = repo.name?.trim();
+        if (!owner || !name) {
+          return null;
+        }
+        return {
+          owner,
+          repo: name,
+          description: repo.description ?? undefined,
+          private: repo.private !== false,
+          defaultBranch:
+            typeof repo.default_branch === "string" ? repo.default_branch : undefined,
+          url: repo.html_url?.trim() || `https://github.com/${owner}/${name}`,
+          updatedAt: typeof repo.updated_at === "string" ? repo.updated_at : undefined,
+        } satisfies GitHubRepositorySummary;
+      })
+      .filter((repo): repo is GitHubRepositorySummary => repo != null)
+      .filter((repo) => !ownerFilter || repo.owner.toLowerCase() === ownerFilter)
+      .slice(0, limit);
+  }
+
+  async createRepository(request: CreateRepositoryRequest): Promise<GitHubRepositorySummary> {
+    if (!this.token) {
+      throw new Error(
+        "GitHub token missing. Set GITHUB_TOKEN or GH_TOKEN to create repositories.",
+      );
+    }
+    const owner = request.owner?.trim();
+    const name = request.name.trim();
+    if (!name) {
+      throw new Error("Repository name cannot be empty.");
+    }
+
+    const viewer = await this.fetchAuthenticatedViewer();
+    const path =
+      owner && owner.toLowerCase() !== viewer.login.toLowerCase()
+        ? `/orgs/${owner}/repos`
+        : "/user/repos";
+    const created = await this.request<GitHubRepositoryResponse>(path, {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        description: request.description?.trim() || undefined,
+        private: request.private !== false,
+      }),
+    });
+    const resolvedOwner = created.owner?.login?.trim() || owner || viewer.login;
+    return {
+      owner: resolvedOwner,
+      repo: created.name,
+      description: created.description ?? undefined,
+      private: created.private !== false,
+      defaultBranch:
+        typeof created.default_branch === "string" ? created.default_branch : undefined,
+      url: created.html_url?.trim() || `https://github.com/${resolvedOwner}/${created.name}`,
+      updatedAt: typeof created.updated_at === "string" ? created.updated_at : undefined,
     };
   }
 }

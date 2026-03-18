@@ -22,6 +22,7 @@ import {
   openclawCodeRoleRoutingRefreshCommand,
   openclawCodeRoleRoutingShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
+  openclawCodeRepoPlanCommand,
   openclawCodeRollbackReceiptRecordCommand,
   openclawCodeRollbackReceiptShowCommand,
   openclawCodeRollbackSuggestionRefreshCommand,
@@ -53,6 +54,14 @@ export function registerCodeCommands(program: Command) {
         `
 ${theme.heading("Examples:")}
 ${formatHelpExamples([
+  [
+    'openclaw code repo-plan --project "Shared image gallery for iOS and web"',
+    "Suggest a few GitHub repo names for a new project before bootstrap.",
+  ],
+  [
+    "openclaw code repo-plan --existing --limit 5 --json",
+    "List a few recent accessible repos when the user wants to point openclawcode at an existing repository.",
+  ],
   [
     "openclaw code bootstrap --repo owner/repo --json",
     "Clone or attach a target repo, persist operator config, seed blueprint artifacts, and run readiness checks.",
@@ -164,6 +173,39 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     )
     .action(() => {
       code.help({ error: true });
+    });
+
+  code
+    .command("repo-plan")
+    .description(
+      "Suggest or create a GitHub repository for a new project, or list recent existing repos before bootstrap",
+    )
+    .option("--owner <owner>", "GitHub owner to use; defaults to the authenticated viewer")
+    .option("--project <text>", "Project description used to derive new repo name suggestions")
+    .option("--repo <name>", "Explicit repository name to suggest or create")
+    .option("--existing", "List recent accessible repositories instead of generating new names", false)
+    .option("--create", "Create the selected repository on GitHub", false)
+    .option("--visibility <visibility>", "Repository visibility (public, private)", "private")
+    .option("--description <text>", "Repository description to use when creating a repo")
+    .option("--limit <n>", "Number of suggestions or existing repos to show", "5")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeRepoPlanCommand(
+          {
+            owner: opts.owner as string | undefined,
+            project: opts.project as string | undefined,
+            repo: opts.repo as string | undefined,
+            existing: Boolean(opts.existing),
+            create: Boolean(opts.create),
+            visibility: opts.visibility as "public" | "private",
+            description: opts.description as string | undefined,
+            limit: Number.parseInt(opts.limit as string, 10),
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
     });
 
   code
