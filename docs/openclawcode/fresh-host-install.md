@@ -62,13 +62,26 @@ See `single-login-bootstrap-proposal.md` for the target end state.
 - target repo clone or attach
 - operator env persistence under `~/.openclaw/openclawcode.env`
 - bundled plugin repo config materialization in `openclaw.json`
+- GitHub webhook create/reuse when bootstrap can resolve a public URL from:
+  - `--webhook-url`
+  - `OPENCLAWCODE_BOOTSTRAP_WEBHOOK_URL`
+  - a running tunnel log
 - placeholder or explicit repo binding persistence in `chatops-state.json`
 - `PROJECT-BLUEPRINT.md` scaffold creation in the target repo when missing
 - role-routing, discovery, and stage-gate artifact seeding
 - local gateway startup attempt
 - strict setup-check plus built-startup proof
 
-It still does not create or reuse the GitHub webhook automatically.
+It still does not create public ingress by itself on a truly fresh host.
+
+If bootstrap cannot discover a public URL yet, the simplest explicit form is:
+
+```bash
+openclaw code bootstrap \
+  --repo owner/repo \
+  --webhook-url https://example.trycloudflare.com \
+  --json
+```
 
 ## Expected Healthy Outputs
 

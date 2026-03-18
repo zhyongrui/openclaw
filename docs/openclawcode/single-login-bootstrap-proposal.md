@@ -57,6 +57,9 @@ The implemented MVP already does these pieces automatically:
 - clone or attach the target repo
 - persist `GH_TOKEN`, repo key, and a generated webhook secret into
   `~/.openclaw/openclawcode.env`
+- create or reuse the GitHub webhook when bootstrap can resolve a public URL
+- persist `OPENCLAWCODE_GITHUB_HOOK_ID` back into the env file after webhook
+  creation or reuse succeeds
 - materialize the bundled plugin repo entry inside `openclaw.json`
 - persist a bootstrap repo binding in `chatops-state.json`
 - seed `PROJECT-BLUEPRINT.md`, role-routing, discovery, and stage-gate artifacts
@@ -66,16 +69,19 @@ The implemented MVP already does these pieces automatically:
 
 What is still manual or only partially automated:
 
-- `docs/openclawcode/operator-setup.md`
-  - explicit `OPENCLAWCODE_GITHUB_HOOK_ID`
 - provider credentials still come from the surrounding OpenClaw/operator login
 - `scripts/openclawcode-webhook-tunnel.sh`
-  - rewrites an existing webhook
-  - does not create the webhook for the operator
+  - still focuses on tunnel lifecycle and existing-hook sync
+  - bootstrap does not yet start the tunnel on its own
 - runtime repo binding
   - `/occode-bind` exists and works
   - bootstrap can seed a placeholder or explicit binding, but cannot yet
     discover the active chat target on its own
+
+So the remaining webhook gap is narrower now:
+
+- bootstrap can create or reuse the GitHub webhook once a public URL is known
+- bootstrap still cannot conjure public ingress on a truly fresh host
 
 So the desired experience is now partially productized as one command, but it
 still stops short of the full single-login end state.

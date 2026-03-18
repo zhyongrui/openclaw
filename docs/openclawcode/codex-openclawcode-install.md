@@ -55,7 +55,8 @@ ownership, or policy decisions:
 2. decide the final operator state directory if the default is not acceptable
 3. provide Feishu credentials if chatops must be tested
 4. choose the new target repository and ensure the machine can clone it
-5. create or approve any GitHub webhook that should point at the fresh host
+5. provide a public webhook URL only if bootstrap cannot discover one from a
+   running tunnel
 6. decide whether the first run should be:
    - CLI-only
    - chatops with `/occode-bind`
@@ -107,6 +108,15 @@ The smallest successful machine bootstrap looks like this:
 5. Codex runs `openclaw code bootstrap --repo owner/repo --json`.
 6. The user chooses CLI-only or chatops validation.
 
+If the machine already has a public tunnel URL, Codex should prefer:
+
+```bash
+openclaw code bootstrap \
+  --repo owner/repo \
+  --webhook-url https://example.trycloudflare.com \
+  --json
+```
+
 ## Lowest-Touch User Goal
 
 The desired product outcome is even smaller than today's install flow:
@@ -151,7 +161,7 @@ Use this when you want the real operator flow.
 1. run bootstrap for the target repo, ideally with explicit chat target values:
 
 ```bash
-openclaw code bootstrap --repo <owner>/<repo> --mode chatops --channel feishu --chat-target <target> --json
+openclaw code bootstrap --repo <owner>/<repo> --mode chatops --channel feishu --chat-target <target> --webhook-url <public-url> --json
 ```
 
 2. bring up the local gateway if bootstrap reported that it could not start it

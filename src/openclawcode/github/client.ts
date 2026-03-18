@@ -72,6 +72,23 @@ export interface ReadyForReviewRequest extends RepoRef {
   pullNumber: number;
 }
 
+export interface GitHubRepoWebhook {
+  id: number;
+  active: boolean;
+  webhookUrl: string | null;
+  events: string[];
+}
+
+export interface EnsureRepoWebhookRequest extends RepoRef {
+  webhookUrl: string;
+  secret: string;
+  events: string[];
+}
+
+export interface EnsureRepoWebhookResult extends GitHubRepoWebhook {
+  action: "created" | "updated" | "unchanged";
+}
+
 export interface GitHubIssueClient {
   fetchIssue(ref: IssueStateRef): Promise<IssueRef>;
   createIssue(request: CreateIssueRequest): Promise<CreatedIssueRef>;
@@ -88,6 +105,7 @@ export interface GitHubIssueClient {
   markPullRequestReadyForReview(request: ReadyForReviewRequest): Promise<void>;
   mergePullRequest(request: MergePullRequestRequest): Promise<void>;
   closeIssue(request: CloseIssueRequest): Promise<void>;
+  ensureRepoWebhook(request: EnsureRepoWebhookRequest): Promise<EnsureRepoWebhookResult>;
 }
 
 type GitHubIssueResponse = {
@@ -114,6 +132,15 @@ type GitHubPullRequestResponse = {
 type GitHubPullRequestReviewResponse = {
   state?: string | null;
   submitted_at?: string | null;
+};
+
+type GitHubWebhookResponse = {
+  id: number;
+  active?: boolean | null;
+  events?: string[] | null;
+  config?: {
+    url?: string | null;
+  } | null;
 };
 
 function resolveToken(env: NodeJS.ProcessEnv): string | undefined {
@@ -395,5 +422,92 @@ export class GitHubRestClient implements GitHubIssueClient {
         state: "closed",
       }),
     });
+  }
+
+  async ensureRepoWebhook(request: EnsureRepoWebhookRequest): Promise<EnsureRepoWebhookResult> {
+    if (!this.token) {
+      throw new Error(
+        "GitHub token missing. Set GITHUB_TOKEN or GH_TOKEN to create or update webhooks.",
+      );
+    }
+
+    const normalizedTargetUrl = request.webhookUrl.trim();
+    const normalizedEvents = [
+      ...new Set(request.events.map((entry) => entry.trim()).filter(Boolean)),
+    ].toSorted((left, right) => left.localeCompare(right));
+    const hooks = await this.request<GitHubWebhookResponse[]>(
+      `/repos/${request.owner}/${request.repo}/hooks`,
+    );
+    const existing = hooks.find((hook) => hook.config?.url?.trim() === normalizedTargetUrl);
+    const payload = {
+      active: true,
+      events: normalizedEvents,
+      config: {
+        url: normalizedTargetUrl,
+        content_type: "json",
+        insecure_ssl: "0",
+        secret: request.secret,
+      },
+    };
+
+    if (!existing) {
+      const created = await this.request<GitHubWebhookResponse>(
+        `/repos/${request.owner}/${request.repo}/hooks`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: "web",
+            ...payload,
+          }),
+        },
+      );
+      return {
+        action: "created",
+        id: created.id,
+        active: created.active !== false,
+        webhookUrl: created.config?.url?.trim() || normalizedTargetUrl,
+        events: [...(created.events ?? normalizedEvents)].toSorted((left, right) =>
+          left.localeCompare(right),
+        ),
+      };
+    }
+
+    const existingEvents = [...(existing.events ?? [])]
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    const sortedExistingEvents = [...new Set(existingEvents)].toSorted((left, right) =>
+      left.localeCompare(right),
+    );
+    const existingActive = existing.active !== false;
+    const alreadyAligned =
+      existingActive &&
+      sortedExistingEvents.length === normalizedEvents.length &&
+      sortedExistingEvents.every((entry, index) => entry === normalizedEvents[index]);
+    if (alreadyAligned) {
+      return {
+        action: "unchanged",
+        id: existing.id,
+        active: true,
+        webhookUrl: normalizedTargetUrl,
+        events: normalizedEvents,
+      };
+    }
+
+    const updated = await this.request<GitHubWebhookResponse>(
+      `/repos/${request.owner}/${request.repo}/hooks/${existing.id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
+    return {
+      action: "updated",
+      id: updated.id,
+      active: updated.active !== false,
+      webhookUrl: updated.config?.url?.trim() || normalizedTargetUrl,
+      events: [...(updated.events ?? normalizedEvents)].toSorted((left, right) =>
+        left.localeCompare(right),
+      ),
+    };
   }
 }

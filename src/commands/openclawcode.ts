@@ -113,10 +113,12 @@ export interface OpenClawCodeBootstrapOpts {
   mode?: OpenClawCodeBootstrapMode;
   channel?: string;
   chatTarget?: string;
+  webhookUrl?: string;
   baseBranch?: string;
   builderAgent?: string;
   verifierAgent?: string;
   test?: string[];
+  configureWebhook?: boolean;
   startGateway?: boolean;
   probeBuiltStartup?: boolean;
   json?: boolean;
@@ -417,6 +419,8 @@ const DEFAULT_OPENCLAWCODE_BOOTSTRAP_BUILDER_AGENT = "main";
 const DEFAULT_OPENCLAWCODE_BOOTSTRAP_VERIFIER_AGENT = "main";
 const DEFAULT_OPENCLAWCODE_BOOTSTRAP_HOOK_EVENTS = "issues,pull_request,pull_request_review";
 const DEFAULT_OPENCLAWCODE_BOOTSTRAP_GATEWAY_PORT = 18789;
+const DEFAULT_OPENCLAWCODE_BOOTSTRAP_WEBHOOK_ROUTE = "/plugins/openclawcode/github";
+const DEFAULT_OPENCLAWCODE_BOOTSTRAP_TUNNEL_LOG_FILE = "/tmp/openclawcode-webhook-tunnel.log";
 
 interface BootstrapSetupCheckPayload {
   ok: boolean;
@@ -791,6 +795,7 @@ async function writeBootstrapEnvFile(params: {
   envFilePath: string;
   repoKey: string;
   token: string;
+  hookId?: number | null;
 }): Promise<{
   created: boolean;
   updatedKeys: string[];
@@ -813,6 +818,9 @@ async function writeBootstrapEnvFile(params: {
     ["OPENCLAWCODE_GITHUB_REPO", params.repoKey],
     ["OPENCLAWCODE_GITHUB_HOOK_EVENTS", DEFAULT_OPENCLAWCODE_BOOTSTRAP_HOOK_EVENTS],
   ]);
+  if (params.hookId != null) {
+    desiredValues.set("OPENCLAWCODE_GITHUB_HOOK_ID", String(params.hookId));
+  }
 
   const updatedKeys: string[] = [];
   const nextLines = [...lines];
@@ -839,6 +847,142 @@ async function writeBootstrapEnvFile(params: {
     webhookSecretGenerated: !existingWebhookSecret,
     values: Object.fromEntries(desiredValues),
   };
+}
+
+function normalizeBootstrapWebhookUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) {
+    throw new Error("Bootstrap webhook URL cannot be empty.");
+  }
+  const parsed = new URL(trimmed);
+  if (!/^https?:$/i.test(parsed.protocol)) {
+    throw new Error(`Bootstrap webhook URL must be http or https. Received: ${trimmed}`);
+  }
+  if (
+    parsed.pathname === "/" ||
+    parsed.pathname === "" ||
+    parsed.pathname === "/index.html" ||
+    parsed.pathname.endsWith(".trycloudflare.com")
+  ) {
+    parsed.pathname = DEFAULT_OPENCLAWCODE_BOOTSTRAP_WEBHOOK_ROUTE;
+    parsed.search = "";
+    parsed.hash = "";
+  }
+  if (parsed.pathname === DEFAULT_OPENCLAWCODE_BOOTSTRAP_WEBHOOK_ROUTE) {
+    parsed.search = "";
+    parsed.hash = "";
+  }
+  return parsed.toString().replace(/\/$/, "");
+}
+
+async function resolveBootstrapWebhookUrl(params: {
+  explicitWebhookUrl?: string;
+  operatorStateDir: string;
+}): Promise<{
+  url: string | null;
+  source: "explicit" | "env" | "tunnel-log" | null;
+}> {
+  const explicit = params.explicitWebhookUrl?.trim();
+  if (explicit) {
+    return {
+      url: normalizeBootstrapWebhookUrl(explicit),
+      source: "explicit",
+    };
+  }
+
+  const envValue = process.env.OPENCLAWCODE_BOOTSTRAP_WEBHOOK_URL?.trim();
+  if (envValue) {
+    return {
+      url: normalizeBootstrapWebhookUrl(envValue),
+      source: "env",
+    };
+  }
+
+  const operatorTunnelLog = path.join(params.operatorStateDir, "openclawcode-webhook-tunnel.log");
+  for (const logFile of [
+    process.env.OPENCLAWCODE_TUNNEL_LOG_FILE?.trim(),
+    operatorTunnelLog,
+    DEFAULT_OPENCLAWCODE_BOOTSTRAP_TUNNEL_LOG_FILE,
+  ]) {
+    if (!logFile) {
+      continue;
+    }
+    const raw = await readFile(logFile, "utf8").catch(() => null);
+    if (!raw) {
+      continue;
+    }
+    const matches = [...raw.matchAll(/https:\/\/[a-z0-9.-]+\.trycloudflare\.com/gi)];
+    const baseUrl = matches.at(-1)?.[0]?.trim();
+    if (!baseUrl) {
+      continue;
+    }
+    return {
+      url: normalizeBootstrapWebhookUrl(baseUrl),
+      source: "tunnel-log",
+    };
+  }
+
+  return {
+    url: null,
+    source: null,
+  };
+}
+
+async function ensureBootstrapWebhook(params: {
+  github: GitHubRestClient;
+  repoRef: {
+    owner: string;
+    repo: string;
+  };
+  webhookUrl: string | null;
+  webhookUrlSource: "explicit" | "env" | "tunnel-log" | null;
+  secret: string;
+}): Promise<{
+  action: "created" | "updated" | "unchanged" | "skipped" | "failed";
+  hookId: number | null;
+  webhookUrl: string | null;
+  webhookUrlSource: "explicit" | "env" | "tunnel-log" | null;
+  events: string[];
+  error: string | null;
+}> {
+  const events = DEFAULT_OPENCLAWCODE_BOOTSTRAP_HOOK_EVENTS.split(",").map((entry) => entry.trim());
+  if (!params.webhookUrl) {
+    return {
+      action: "skipped",
+      hookId: null,
+      webhookUrl: null,
+      webhookUrlSource: params.webhookUrlSource,
+      events,
+      error: null,
+    };
+  }
+
+  try {
+    const result = await params.github.ensureRepoWebhook({
+      owner: params.repoRef.owner,
+      repo: params.repoRef.repo,
+      webhookUrl: params.webhookUrl,
+      secret: params.secret,
+      events,
+    });
+    return {
+      action: result.action,
+      hookId: result.id,
+      webhookUrl: result.webhookUrl,
+      webhookUrlSource: params.webhookUrlSource,
+      events: result.events,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      action: "failed",
+      hookId: null,
+      webhookUrl: params.webhookUrl,
+      webhookUrlSource: params.webhookUrlSource,
+      events,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function writeBootstrapOperatorConfig(params: {
@@ -1085,6 +1229,8 @@ async function startBootstrapGateway(params: {
 export const openclawCodeBootstrapInternals = {
   runSetupCheck: runBootstrapSetupCheck,
   startGateway: startBootstrapGateway,
+  resolveWebhookUrl: resolveBootstrapWebhookUrl,
+  ensureWebhook: ensureBootstrapWebhook,
 };
 
 function logProjectBlueprintSummary(params: {
@@ -2434,6 +2580,39 @@ export async function openclawCodeBootstrapCommand(
     repoKey,
     token,
   });
+  const github = new GitHubRestClient(token);
+  const webhookUrl = await openclawCodeBootstrapInternals.resolveWebhookUrl({
+    explicitWebhookUrl: opts.webhookUrl,
+    operatorStateDir,
+  });
+  const webhook =
+    opts.configureWebhook === false
+      ? {
+          action: "skipped" as const,
+          hookId: null,
+          webhookUrl: webhookUrl.url,
+          webhookUrlSource: webhookUrl.source,
+          events: DEFAULT_OPENCLAWCODE_BOOTSTRAP_HOOK_EVENTS.split(",").map((entry) =>
+            entry.trim(),
+          ),
+          error: null,
+        }
+      : await openclawCodeBootstrapInternals.ensureWebhook({
+          github,
+          repoRef,
+          webhookUrl: webhookUrl.url,
+          webhookUrlSource: webhookUrl.source,
+          secret: envFile.values.OPENCLAWCODE_GITHUB_WEBHOOK_SECRET,
+        });
+  const envFileAfterWebhook =
+    webhook.hookId != null
+      ? await writeBootstrapEnvFile({
+          envFilePath,
+          repoKey,
+          token,
+          hookId: webhook.hookId,
+        })
+      : envFile;
   const config = await writeBootstrapOperatorConfig({
     configPath,
     repoRef,
@@ -2481,10 +2660,14 @@ export async function openclawCodeBootstrapCommand(
   const nextAction =
     notifyBindingMode === "chat-placeholder"
       ? "connect-chat-and-run-occode-bind"
-      : (setupCheck.payload?.readiness.nextAction ??
-        (gateway.action === "failed"
-          ? "start-or-restart-live-gateway"
-          : "inspect-setup-check-output"));
+      : webhook.action === "failed"
+        ? "review-github-webhook-permissions"
+        : webhook.action === "skipped" && mode === "chatops"
+          ? "configure-public-webhook-url"
+          : (setupCheck.payload?.readiness.nextAction ??
+            (gateway.action === "failed"
+              ? "start-or-restart-live-gateway"
+              : "inspect-setup-check-output"));
 
   const payload = {
     contractVersion: OPENCLAWCODE_BOOTSTRAP_CONTRACT_VERSION,
@@ -2513,9 +2696,9 @@ export async function openclawCodeBootstrapCommand(
     },
     credentials: {
       githubTokenSource: process.env.GH_TOKEN?.trim() ? "GH_TOKEN" : "GITHUB_TOKEN",
-      envFileCreated: envFile.created,
-      envUpdatedKeys: envFile.updatedKeys,
-      webhookSecretGenerated: envFile.webhookSecretGenerated,
+      envFileCreated: envFileAfterWebhook.created,
+      envUpdatedKeys: envFileAfterWebhook.updatedKeys,
+      webhookSecretGenerated: envFileAfterWebhook.webhookSecretGenerated,
     },
     config: {
       configCreated: config.created,
@@ -2525,6 +2708,7 @@ export async function openclawCodeBootstrapCommand(
       testCommands: testCommandsResult.commands,
       testCommandSource: testCommandsResult.source,
     },
+    webhook,
     binding,
     blueprint: {
       action: blueprintAction,
@@ -2573,6 +2757,9 @@ export async function openclawCodeBootstrapCommand(
   runtime.log(`Env file: ${envFilePath}`);
   runtime.log(`Config file: ${configPath}`);
   runtime.log(`Repo entry: ${config.repoEntryAction}`);
+  runtime.log(
+    `Webhook: ${webhook.action}${webhook.webhookUrl ? ` (${webhook.webhookUrl})` : ""}${webhook.error ? ` | ${webhook.error}` : ""}`,
+  );
   runtime.log(`Repo binding: ${binding.action}`);
   runtime.log(`Blueprint: ${blueprintAction} (${blueprint.status ?? "unknown"})`);
   runtime.log(`Role routing unresolved roles: ${roleRouting.unresolvedRoleCount}`);

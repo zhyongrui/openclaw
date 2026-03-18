@@ -49,6 +49,7 @@ const mocks = vi.hoisted(() => {
     createIssue: vi.fn(),
     listIssues: vi.fn(),
     closeIssue: vi.fn(),
+    ensureRepoWebhook: vi.fn(),
     builderCtorArgs: [] as unknown[],
     verifierCtorArgs: [] as unknown[],
   };
@@ -60,6 +61,7 @@ vi.mock("../openclawcode/index.js", async (importOriginal) => {
     createIssue = mocks.createIssue;
     listIssues = mocks.listIssues;
     closeIssue = mocks.closeIssue;
+    ensureRepoWebhook = mocks.ensureRepoWebhook;
   }
   return {
     ...actual,
@@ -152,6 +154,13 @@ describe("openclawCodeRunCommand", () => {
       },
     ]);
     mocks.closeIssue.mockResolvedValue(undefined);
+    mocks.ensureRepoWebhook.mockResolvedValue({
+      action: "created",
+      id: 123456,
+      active: true,
+      webhookUrl: "https://bootstrap.example.test/plugins/openclawcode/github",
+      events: ["issues", "pull_request", "pull_request_review"],
+    });
     mocks.builderCtorArgs.length = 0;
     mocks.verifierCtorArgs.length = 0;
     vi.unstubAllEnvs();
@@ -353,7 +362,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.verificationFindingsPresent).toBe(false);
     expect(payload.verificationHasMissingCoverage).toBe(false);
     expect(payload.verificationMissingCoveragePresent).toBe(false);
-    expect(payload.verificationHasSignals).toBe(false);
+    expect(payload.verificationHasSignals).toBe(true);
     expect(payload.verificationHasFollowUps).toBe(false);
     expect(payload.verificationFollowUpsPresent).toBe(false);
     expect(payload.verificationFindingCount).toBe(0);
@@ -3823,6 +3832,10 @@ describe("openclawCodeBootstrapCommand", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    vi.stubEnv(
+      "OPENCLAWCODE_TUNNEL_LOG_FILE",
+      path.join(os.tmpdir(), "openclawcode-bootstrap-missing-tunnel.log"),
+    );
     mocks.resolveGitHubRepoFromGit.mockResolvedValue({ owner: "acme", repo: "demo" });
   });
 
@@ -3877,6 +3890,9 @@ describe("openclawCodeBootstrapCommand", () => {
         stderr: "",
         status: 0,
       });
+    const webhookUrlSpy = vi
+      .spyOn(openclawCodeBootstrapInternals, "resolveWebhookUrl")
+      .mockResolvedValue({ url: null, source: null });
 
     await openclawCodeBootstrapCommand(
       {
@@ -3892,6 +3908,7 @@ describe("openclawCodeBootstrapCommand", () => {
     );
 
     setupCheckSpy.mockRestore();
+    webhookUrlSpy.mockRestore();
 
     const payload = JSON.parse(runtime.log.mock.calls.at(-1)?.[0] ?? "null");
     expect(payload.contractVersion).toBe(1);
@@ -3905,6 +3922,8 @@ describe("openclawCodeBootstrapCommand", () => {
     expect(payload.config.repoEntryAction).toBe("created");
     expect(payload.config.testCommands).toEqual(["pnpm test"]);
     expect(payload.config.testCommandSource).toBe("package-manager");
+    expect(payload.webhook.action).toBe("skipped");
+    expect(payload.webhook.hookId).toBeNull();
     expect(payload.binding.action).toBe("created");
     expect(payload.blueprint.action).toBe("created");
     expect(payload.stageGates.executionStartReadiness).toBe("ready");
@@ -3916,6 +3935,7 @@ describe("openclawCodeBootstrapCommand", () => {
     expect(envFile).toContain("export GH_TOKEN='ghs_bootstrap_token'");
     expect(envFile).toContain("export OPENCLAWCODE_GITHUB_REPO='acme/demo'");
     expect(envFile).toContain("export OPENCLAWCODE_GITHUB_WEBHOOK_SECRET=");
+    expect(envFile).not.toContain("OPENCLAWCODE_GITHUB_HOOK_ID");
 
     const config = JSON.parse(await readFile(path.join(operatorRoot, "openclaw.json"), "utf8"));
     const repoEntry = config.plugins.entries.openclawcode.config.repos[0];
@@ -4019,6 +4039,9 @@ describe("openclawCodeBootstrapCommand", () => {
         stderr: "",
         status: 1,
       });
+    const webhookUrlSpy = vi
+      .spyOn(openclawCodeBootstrapInternals, "resolveWebhookUrl")
+      .mockResolvedValue({ url: null, source: null });
 
     await openclawCodeBootstrapCommand(
       {
@@ -4035,6 +4058,7 @@ describe("openclawCodeBootstrapCommand", () => {
     );
 
     setupCheckSpy.mockRestore();
+    webhookUrlSpy.mockRestore();
 
     const payload = JSON.parse(runtime.log.mock.calls.at(-1)?.[0] ?? "null");
     expect(payload.repo.repoRootSelection).toBe("existing-operator-config");
@@ -4046,7 +4070,8 @@ describe("openclawCodeBootstrapCommand", () => {
     expect(payload.config.builderAgent).toBe("builder-existing");
     expect(payload.config.verifierAgent).toBe("verifier-existing");
     expect(payload.credentials.githubTokenSource).toBe("GITHUB_TOKEN");
-    expect(payload.nextAction).toBe("start-or-restart-live-gateway");
+    expect(payload.nextAction).toBe("configure-public-webhook-url");
+    expect(payload.webhook.action).toBe("skipped");
 
     const config = JSON.parse(await readFile(path.join(operatorRoot, "openclaw.json"), "utf8"));
     const repoEntry = config.plugins.entries.openclawcode.config.repos[0];
@@ -4073,6 +4098,87 @@ describe("openclawCodeBootstrapCommand", () => {
     ).rejects.toThrow(
       "Bootstrap requires GH_TOKEN or GITHUB_TOKEN in the environment so the target repo can be inspected and configured.",
     );
+  });
+
+  it("creates or reuses a GitHub webhook when a public URL is available", async () => {
+    const operatorRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-bootstrap-webhook-operator-"),
+    );
+    const targetRepoRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-bootstrap-webhook-target-"),
+    );
+    await writeFile(
+      path.join(targetRepoRoot, "package.json"),
+      JSON.stringify({ name: "demo", scripts: { test: "vitest run" } }, null, 2),
+      "utf8",
+    );
+    await writeFile(path.join(targetRepoRoot, "pnpm-lock.yaml"), "lockfileVersion: 9.0\n", "utf8");
+    vi.stubEnv("GH_TOKEN", "ghs_bootstrap_token");
+
+    const setupCheckSpy = vi
+      .spyOn(openclawCodeBootstrapInternals, "runSetupCheck")
+      .mockReturnValue({
+        payload: {
+          ok: true,
+          strict: true,
+          repoRoot: "/operator/repo",
+          operatorRoot,
+          readiness: {
+            basic: true,
+            strict: true,
+            lowRiskProofReady: true,
+            fallbackProofReady: false,
+            promotionReady: true,
+            gatewayReachable: true,
+            routeProbeReady: true,
+            routeProbeSkipped: false,
+            builtStartupProofRequested: false,
+            builtStartupProofReady: false,
+            nextAction: "ready-for-low-risk-proof",
+          },
+          summary: {
+            pass: 10,
+            warn: 0,
+            fail: 0,
+          },
+          checks: [],
+        },
+        stderr: "",
+        status: 0,
+      });
+
+    await openclawCodeBootstrapCommand(
+      {
+        repo: "acme/demo",
+        repoRoot: targetRepoRoot,
+        stateDir: operatorRoot,
+        startGateway: false,
+        probeBuiltStartup: false,
+        webhookUrl: "https://bootstrap.example.test",
+        json: true,
+      },
+      runtime,
+    );
+
+    setupCheckSpy.mockRestore();
+
+    const payload = JSON.parse(runtime.log.mock.calls.at(-1)?.[0] ?? "null");
+    expect(mocks.ensureRepoWebhook).toHaveBeenCalledWith({
+      owner: "acme",
+      repo: "demo",
+      webhookUrl: "https://bootstrap.example.test/plugins/openclawcode/github",
+      secret: expect.any(String),
+      events: ["issues", "pull_request", "pull_request_review"],
+    });
+    expect(payload.webhook.action).toBe("created");
+    expect(payload.webhook.hookId).toBe(123456);
+    expect(payload.webhook.webhookUrl).toBe(
+      "https://bootstrap.example.test/plugins/openclawcode/github",
+    );
+    expect(payload.webhook.webhookUrlSource).toBe("explicit");
+
+    const envFile = await readFile(path.join(operatorRoot, "openclawcode.env"), "utf8");
+    expect(envFile).toContain("export OPENCLAWCODE_GITHUB_HOOK_ID='123456'");
   });
 });
 

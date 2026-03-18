@@ -177,10 +177,15 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .option("--mode <mode>", "Bootstrap mode (auto, cli-only, chatops)", "auto")
     .option("--channel <channel>", "Chat channel to bind immediately, such as feishu")
     .option("--chat-target <target>", "Chat target identifier to persist for notifications")
+    .option(
+      "--webhook-url <url>",
+      "Explicit public webhook base URL or full route URL; when omitted bootstrap tries to discover a running tunnel URL",
+    )
     .option("--base-branch <branch>", "Base branch for issue work")
     .option("--builder-agent <id>", "Builder agent id to persist in repo config")
     .option("--verifier-agent <id>", "Verifier agent id to persist in repo config")
     .option("--test <command>", "Test command to persist in repo config", collectOption, [])
+    .option("--no-configure-webhook", "Skip GitHub webhook create/reuse during bootstrap")
     .option("--no-start-gateway", "Do not try to start the local gateway after writing config")
     .option("--no-probe-built-startup", "Skip the isolated built-startup proof during setup-check")
     .option("--json", "Output JSON", false)
@@ -194,10 +199,12 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             mode: opts.mode as "auto" | "cli-only" | "chatops",
             channel: opts.channel as string | undefined,
             chatTarget: opts.chatTarget as string | undefined,
+            webhookUrl: opts.webhookUrl as string | undefined,
             baseBranch: opts.baseBranch as string | undefined,
             builderAgent: opts.builderAgent as string | undefined,
             verifierAgent: opts.verifierAgent as string | undefined,
             test: (opts.test as string[] | undefined) ?? [],
+            configureWebhook: Boolean(opts.configureWebhook),
             startGateway: Boolean(opts.startGateway),
             probeBuiltStartup: Boolean(opts.probeBuiltStartup),
             json: Boolean(opts.json),

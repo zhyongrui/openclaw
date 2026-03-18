@@ -95,6 +95,7 @@ loop with:
   repo bootstrap, including:
   - target repo clone/attach
   - operator env/config materialization
+  - GitHub webhook create/reuse when bootstrap can discover a public URL
   - bootstrap repo binding persistence
   - blueprint / role-routing / discovery / stage-gate seeding
   - gateway startup attempt
