@@ -97,6 +97,7 @@ describe("resolveBundledPluginsDir", () => {
     const repoRoot = makeTempDir("openclaw-bundled-dir-watch-");
     fs.mkdirSync(path.join(repoRoot, "extensions"), { recursive: true });
     fs.mkdirSync(path.join(repoRoot, "dist-runtime", "extensions"), { recursive: true });
+
     fs.mkdirSync(path.join(repoRoot, "dist", "extensions"), { recursive: true });
     fs.writeFileSync(
       path.join(repoRoot, "package.json"),
@@ -114,6 +115,27 @@ describe("resolveBundledPluginsDir", () => {
         }) ?? "",
       ),
     ).toBe(fs.realpathSync(path.join(repoRoot, "extensions")));
+  });
+
+  it("falls back to built dist/extensions in installed package roots", () => {
+    const repoRoot = makeTempDir("openclaw-bundled-dir-dist-");
+    fs.mkdirSync(path.join(repoRoot, "dist", "extensions"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repoRoot, "package.json"),
+      `${JSON.stringify({ name: "openclaw" }, null, 2)}\n`,
+      "utf8",
+    );
+
+    expect(
+      fs.realpathSync(
+        resolveBundledPluginsDir(process.env, {
+          cwd: repoRoot,
+          moduleUrl: pathToFileURL(path.join(repoRoot, "dist", "plugins", "bundled-dir.js")).href,
+        }) ?? "",
+      ),
+    ).toBe(
+      fs.realpathSync(path.join(repoRoot, "dist", "extensions")),
+    );
   });
 
   it("prefers source extensions under vitest to avoid stale staged plugins", () => {

@@ -29,6 +29,15 @@ const resolveGatewayInstallToken = vi.hoisted(() =>
 );
 const isSystemdUserServiceAvailable = vi.hoisted(() => vi.fn(async () => true));
 const runOnboardingOpenClawCode = vi.hoisted(() => vi.fn(async () => {}));
+const resolveSetupSecretInputString = vi.hoisted(() =>
+  vi.fn<() => Promise<string | undefined>>(async () => undefined),
+);
+const readSystemdUserLingerStatus = vi.hoisted(() =>
+  vi.fn(async () => ({
+    linger: "yes" as const,
+    user: "test-user",
+  })),
+);
 
 vi.mock("../commands/onboard-helpers.js", () => ({
   detectBrowserOpenSupport: vi.fn(async () => ({ ok: false })),
@@ -64,26 +73,41 @@ vi.mock("../commands/health.js", () => ({
   healthCommand: vi.fn(async () => {}),
 }));
 
-vi.mock("../daemon/service.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../daemon/service.js")>();
-  return {
-    ...actual,
-    resolveGatewayService: vi.fn(() => ({
-      isLoaded: gatewayServiceIsLoaded,
-      restart: gatewayServiceRestart,
-      uninstall: gatewayServiceUninstall,
-      install: gatewayServiceInstall,
-    })),
-  };
-});
+vi.mock("../commands/onboard-search.js", () => ({
+  SEARCH_PROVIDER_OPTIONS: [],
+  hasExistingKey: vi.fn(() => false),
+  hasKeyInEnv: vi.fn(() => false),
+  resolveExistingKey: vi.fn(() => undefined),
+}));
 
-vi.mock("../daemon/systemd.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../daemon/systemd.js")>();
-  return {
-    ...actual,
-    isSystemdUserServiceAvailable,
-  };
-});
+vi.mock("../daemon/service.js", () => ({
+  describeGatewayServiceRestart: vi.fn((serviceNoun: string, result: { outcome: string }) =>
+    result.outcome === "scheduled"
+      ? {
+          scheduled: true,
+          daemonActionResult: "scheduled",
+          message: `restart scheduled, ${serviceNoun.toLowerCase()} will restart momentarily`,
+          progressMessage: `${serviceNoun} service restart scheduled.`,
+        }
+      : {
+          scheduled: false,
+          daemonActionResult: "restarted",
+          message: `${serviceNoun} service restarted.`,
+          progressMessage: `${serviceNoun} service restarted.`,
+        },
+  ),
+  resolveGatewayService: vi.fn(() => ({
+    isLoaded: gatewayServiceIsLoaded,
+    restart: gatewayServiceRestart,
+    uninstall: gatewayServiceUninstall,
+    install: gatewayServiceInstall,
+  })),
+}));
+
+vi.mock("../daemon/systemd.js", () => ({
+  isSystemdUserServiceAvailable,
+  readSystemdUserLingerStatus,
+}));
 
 vi.mock("../infra/control-ui-assets.js", () => ({
   ensureControlUiAssetsBuilt: vi.fn(async () => ({ ok: true })),
@@ -95,6 +119,10 @@ vi.mock("../terminal/restore.js", () => ({
 
 vi.mock("../tui/tui.js", () => ({
   runTui,
+}));
+
+vi.mock("./setup.secret-input.js", () => ({
+  resolveSetupSecretInputString,
 }));
 
 vi.mock("./setup.completion.js", () => ({
@@ -138,11 +166,14 @@ describe("finalizeSetupWizard", () => {
     resolveGatewayInstallToken.mockClear();
     isSystemdUserServiceAvailable.mockReset();
     isSystemdUserServiceAvailable.mockResolvedValue(true);
+    resolveSetupSecretInputString.mockReset();
+    resolveSetupSecretInputString.mockResolvedValue(undefined);
   });
 
   it("resolves gateway password SecretRef for probe and TUI", async () => {
     const previous = process.env.OPENCLAW_GATEWAY_PASSWORD;
     process.env.OPENCLAW_GATEWAY_PASSWORD = "resolved-gateway-password"; // pragma: allowlist secret
+    resolveSetupSecretInputString.mockResolvedValueOnce("resolved-gateway-password");
     const select = vi.fn(async (params: { message: string }) => {
       if (params.message === "How do you want to hatch your bot?") {
         return "tui";
