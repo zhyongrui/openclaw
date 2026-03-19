@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
+import { formatCliCommand } from "../../src/cli/command-format.js";
 import { readRequestBodyWithLimit } from "../../src/infra/http-body.js";
 import {
   OpenClawCodeChatopsStore,
@@ -34,6 +35,12 @@ import {
   type OpenClawCodeIssueStatusSnapshot,
   type OpenClawCodeDeferredRuntimeReroute,
 } from "../../src/integrations/openclaw-plugin/index.js";
+import {
+  inspectOnboardingGitHubCliDeviceLogin,
+  resolveOnboardingGitHubToken,
+  startOnboardingGitHubCliDeviceLogin,
+  type OnboardingGitHubCliDeviceLoginStatus,
+} from "../../src/wizard/setup.code.js";
 import {
   inspectProjectBlueprintClarifications,
   parseProjectBlueprintSectionName,
@@ -179,6 +186,145 @@ function trimToSingleLine(value: string | undefined): string | undefined {
     .map((line) => line.trim())
     .find(Boolean);
   return singleLine && singleLine.length > 0 ? singleLine : undefined;
+}
+
+function buildChatSetupAwaitingGitHubAuthMessage(params: {
+  verificationUri: string;
+  userCode: string;
+  repoKey?: string;
+}): string {
+  return [
+    "OpenClaw Code setup is waiting for GitHub approval.",
+    `Open: ${params.verificationUri}`,
+    `Code: ${params.userCode}`,
+    params.repoKey ? `Selected repo: ${params.repoKey}` : undefined,
+    "The host-side GitHub login flow is already running.",
+    "Finish approval in your browser, then send /occode-setup-status here.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildChatSetupReadyMessage(params: {
+  source: "GH_TOKEN" | "GITHUB_TOKEN" | "gh-auth-token";
+  repoKey?: string;
+}): string {
+  return [
+    "OpenClaw Code setup has GitHub auth ready.",
+    `Source: ${params.source}`,
+    params.repoKey ? `Selected repo: ${params.repoKey}` : undefined,
+    params.repoKey
+      ? `Next: ${formatCliCommand(`openclaw code bootstrap --repo ${params.repoKey} --mode auto`)}`
+      : "Next: send /occode-setup owner/repo to pin the repo for this chat.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildChatSetupFailedMessage(params: {
+  reason: string;
+  repoKey?: string;
+  logTail?: string;
+}): string {
+  return [
+    "OpenClaw Code setup is not authenticated yet.",
+    `Reason: ${params.reason}`,
+    params.repoKey ? `Selected repo: ${params.repoKey}` : undefined,
+    params.logTail ? `Recent gh output:\n${params.logTail}` : undefined,
+    "Start a fresh device login with /occode-setup.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function syncChatSetupSession(params: {
+  store: OpenClawCodeChatopsStore;
+  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+}): Promise<{
+  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+  status?: OnboardingGitHubCliDeviceLoginStatus;
+}> {
+  const resolvedToken = resolveOnboardingGitHubToken();
+  if (resolvedToken) {
+    const updated = {
+      ...params.session,
+      stage: "github-authenticated" as const,
+      githubAuthSource: resolvedToken.source,
+      githubDeviceAuth: params.session.githubDeviceAuth
+        ? {
+            ...params.session.githubDeviceAuth,
+            completedAt:
+              params.session.githubDeviceAuth.completedAt ?? new Date().toISOString(),
+          }
+        : undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    await params.store.upsertSetupSession(updated);
+    return {
+      session: updated,
+    };
+  }
+
+  if (!params.session.githubDeviceAuth) {
+    return {
+      session: params.session,
+    };
+  }
+
+  const status = await inspectOnboardingGitHubCliDeviceLogin(params.session.githubDeviceAuth);
+  if (status.state === "authorized") {
+    const updated = {
+      ...params.session,
+      stage: "github-authenticated" as const,
+      githubAuthSource: status.source,
+      githubDeviceAuth: {
+        ...params.session.githubDeviceAuth,
+        userCode: status.userCode ?? params.session.githubDeviceAuth.userCode,
+        verificationUri: status.verificationUri ?? params.session.githubDeviceAuth.verificationUri,
+        completedAt: status.completedAt,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    await params.store.upsertSetupSession(updated);
+    return {
+      session: updated,
+      status,
+    };
+  }
+
+  if (status.state === "failed") {
+    const updated = {
+      ...params.session,
+      githubDeviceAuth: {
+        ...params.session.githubDeviceAuth,
+        userCode: status.userCode ?? params.session.githubDeviceAuth.userCode,
+        verificationUri: status.verificationUri ?? params.session.githubDeviceAuth.verificationUri,
+        failureReason: status.reason,
+        completedAt: status.completedAt ?? params.session.githubDeviceAuth.completedAt,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    await params.store.upsertSetupSession(updated);
+    return {
+      session: updated,
+      status,
+    };
+  }
+
+  const updated = {
+    ...params.session,
+    githubDeviceAuth: {
+      ...params.session.githubDeviceAuth,
+      userCode: status.userCode,
+      verificationUri: status.verificationUri,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+  await params.store.upsertSetupSession(updated);
+  return {
+    session: updated,
+    status,
+  };
 }
 
 function hasGitHubApiCredential(): boolean {
@@ -4372,6 +4518,191 @@ export default {
         return (await store.removeRepoBinding(repoKey))
           ? { text: `Removed notification binding for ${repoKey}.` }
           : { text: `No saved notification binding found for ${repoKey}.` };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-setup",
+      description: "Start or resume chat-native openclawcode setup for this chat.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const notifyTarget = resolveCommandNotifyTarget(ctx);
+        if (!notifyTarget) {
+          return {
+            text: "This setup flow needs a concrete chat target. Start it from a direct or bound chat.",
+          };
+        }
+
+        const trimmedArgs = ctx.args?.trim() ?? "";
+        const selectedRepo =
+          trimmedArgs.length > 0
+            ? parseChatopsRepoReference(trimmedArgs, {
+                owner: defaultRepo?.owner,
+                repo: defaultRepo?.repo,
+              })
+            : defaultRepo
+              ? { owner: defaultRepo.owner, repo: defaultRepo.repo }
+              : null;
+        if (trimmedArgs.length > 0 && !selectedRepo) {
+          return {
+            text:
+              "Usage: /occode-setup owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-setup",
+          };
+        }
+
+        const existing = await store.getSetupSession({
+          notifyChannel: ctx.channel,
+          notifyTarget,
+        });
+        const synced = existing
+          ? await syncChatSetupSession({
+              store,
+              session: existing,
+            })
+          : undefined;
+        const repoKey = selectedRepo ? formatRepoKey(selectedRepo) : synced?.session.repoKey;
+        if (synced?.session.stage === "github-authenticated" && synced.session.githubAuthSource) {
+          if (repoKey !== synced.session.repoKey) {
+            await store.upsertSetupSession({
+              ...synced.session,
+              repoKey,
+              updatedAt: new Date().toISOString(),
+            });
+          }
+          return {
+            text: buildChatSetupReadyMessage({
+              source: synced.session.githubAuthSource,
+              repoKey,
+            }),
+          };
+        }
+        if (synced?.status?.state === "pending") {
+          await store.upsertSetupSession({
+            ...synced.session,
+            repoKey,
+            updatedAt: new Date().toISOString(),
+          });
+          return {
+            text: buildChatSetupAwaitingGitHubAuthMessage({
+              verificationUri: synced.status.verificationUri,
+              userCode: synced.status.userCode,
+              repoKey,
+            }),
+          };
+        }
+
+        const readyToken = resolveOnboardingGitHubToken();
+        if (readyToken) {
+          const now = new Date().toISOString();
+          await store.upsertSetupSession({
+            notifyChannel: ctx.channel,
+            notifyTarget,
+            repoKey,
+            stage: "github-authenticated",
+            githubAuthSource: readyToken.source,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+          });
+          return {
+            text: buildChatSetupReadyMessage({
+              source: readyToken.source,
+              repoKey,
+            }),
+          };
+        }
+
+        const started = await startOnboardingGitHubCliDeviceLogin({
+          stateDir: api.runtime.state.resolveStateDir(),
+        });
+        const now = new Date().toISOString();
+        await store.upsertSetupSession({
+          notifyChannel: ctx.channel,
+          notifyTarget,
+          repoKey,
+          stage: "awaiting-github-device-auth",
+          githubDeviceAuth: {
+            pid: started.pid,
+            logPath: started.logPath,
+            userCode: started.userCode,
+            verificationUri: started.verificationUri,
+            startedAt: started.startedAt,
+          },
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        });
+        return {
+          text: buildChatSetupAwaitingGitHubAuthMessage({
+            verificationUri: started.verificationUri,
+            userCode: started.userCode,
+            repoKey,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-setup-status",
+      description: "Show the current chat-native openclawcode setup state for this chat.",
+      acceptsArgs: false,
+      handler: async (ctx) => {
+        const notifyTarget = resolveCommandNotifyTarget(ctx);
+        if (!notifyTarget) {
+          return {
+            text:
+              "This setup flow needs a concrete chat target. Start it from a direct or bound chat.",
+          };
+        }
+        const existing = await store.getSetupSession({
+          notifyChannel: ctx.channel,
+          notifyTarget,
+        });
+        const readyToken = resolveOnboardingGitHubToken();
+        if (!existing && readyToken) {
+          return {
+            text: buildChatSetupReadyMessage({
+              source: readyToken.source,
+            }),
+          };
+        }
+        if (!existing) {
+          return {
+            text: "No active openclawcode setup session for this chat. Start with /occode-setup.",
+          };
+        }
+        const synced = await syncChatSetupSession({
+          store,
+          session: existing,
+        });
+        if (synced.session.stage === "github-authenticated" && synced.session.githubAuthSource) {
+          return {
+            text: buildChatSetupReadyMessage({
+              source: synced.session.githubAuthSource,
+              repoKey: synced.session.repoKey,
+            }),
+          };
+        }
+        if (synced.status?.state === "pending") {
+          return {
+            text: buildChatSetupAwaitingGitHubAuthMessage({
+              verificationUri: synced.status.verificationUri,
+              userCode: synced.status.userCode,
+              repoKey: synced.session.repoKey,
+            }),
+          };
+        }
+        return {
+          text: buildChatSetupFailedMessage({
+            reason:
+              synced.status?.state === "failed"
+                ? synced.status.reason
+                : "GitHub auth is still missing.",
+            repoKey: synced.session.repoKey,
+            logTail: synced.status?.logTail,
+          }),
+        };
       },
     });
 

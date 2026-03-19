@@ -32,22 +32,23 @@ Recommended reading order:
 26. `single-login-bootstrap-proposal.md`
 27. `chat-native-autonomous-engineering.md`
 28. `development-plan-chat-native-autonomy.md`
-29. `fresh-host-readiness-audit.md`
-30. `upgrade-and-rotation.md`
-31. `release-runbook.md`
-32. `operator-proof-routine.md`
-33. `troubleshooting.md`
-34. `proof-matrix.md`
-35. `sample-operator-config.md`
-36. `sample-automation-integration.md`
-37. `chat-intake-styles.md`
-38. `security-and-retention.md`
-39. `sync-conflict-history.md`
-40. `upstream-sync-policy.md`
-41. `operator-setup.md`
-42. `sync-promotion-runbook.md`
-43. `mvp-runbook.md`
-44. `webhook-operations.md`
+29. `chat-setup-onboarding.md`
+30. `fresh-host-readiness-audit.md`
+31. `upgrade-and-rotation.md`
+32. `release-runbook.md`
+33. `operator-proof-routine.md`
+34. `troubleshooting.md`
+35. `proof-matrix.md`
+36. `sample-operator-config.md`
+37. `sample-automation-integration.md`
+38. `chat-intake-styles.md`
+39. `security-and-retention.md`
+40. `sync-conflict-history.md`
+41. `upstream-sync-policy.md`
+42. `operator-setup.md`
+43. `sync-promotion-runbook.md`
+44. `mvp-runbook.md`
+45. `webhook-operations.md`
 
 Development logs live in `dev-log/`.
 
@@ -57,9 +58,12 @@ For a fresh-machine bootstrap driven by Codex itself, see
 For the product direction that should reduce fresh-host setup to one GitHub
 login plus one repo choice, see `single-login-bootstrap-proposal.md`.
 
+For the chat-native version of the first setup step, see
+`chat-setup-onboarding.md`.
+
 ## Current Status
 
-As of 2026-03-18, the repository includes a working `openclawcode` issue-driven
+As of 2026-03-19, the repository includes a working `openclawcode` issue-driven
 loop with:
 
 - workflow state, persistence, and isolated worktree management
@@ -91,6 +95,8 @@ loop with:
   - `/occode-sync`
   - `/occode-bind`
   - `/occode-unbind`
+  - `/occode-setup`
+  - `/occode-setup-status`
 - a local builder/verifier runtime adapter built on top of OpenClaw's embedded
   agent entrypoint
 - an `openclaw code run ...` CLI path for issue-driven execution

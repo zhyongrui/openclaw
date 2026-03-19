@@ -493,6 +493,74 @@ describe("OpenClawCodeChatopsStore", () => {
     }
   });
 
+  it("persists one setup session per chat target", async () => {
+    const fixture = await createStore();
+
+    try {
+      const createdAt = "2026-03-19T02:00:00.000Z";
+      expect(
+        await fixture.store.upsertSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+          repoKey: "zhyongrui/openclawcode",
+          stage: "awaiting-github-device-auth",
+          githubDeviceAuth: {
+            pid: 321,
+            logPath: "/tmp/gh-auth-login.log",
+            userCode: "ABCD-EFGH",
+            verificationUri: "https://github.com/login/device",
+            startedAt: createdAt,
+          },
+          createdAt,
+          updatedAt: createdAt,
+        }),
+      ).toBe("added");
+
+      expect(
+        await fixture.store.upsertSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+          repoKey: "zhyongrui/openclawcode",
+          stage: "github-authenticated",
+          githubAuthSource: "gh-auth-token",
+          githubDeviceAuth: {
+            pid: 321,
+            logPath: "/tmp/gh-auth-login.log",
+            userCode: "ABCD-EFGH",
+            verificationUri: "https://github.com/login/device",
+            startedAt: createdAt,
+            completedAt: "2026-03-19T02:03:00.000Z",
+          },
+          createdAt: "2026-03-19T02:03:00.000Z",
+          updatedAt: "2026-03-19T02:03:00.000Z",
+        }),
+      ).toBe("updated");
+
+      const saved = await fixture.store.getSetupSession({
+        notifyChannel: "feishu",
+        notifyTarget: "user:setup-chat",
+      });
+      expect(saved).toMatchObject({
+        repoKey: "zhyongrui/openclawcode",
+        stage: "github-authenticated",
+        githubAuthSource: "gh-auth-token",
+        createdAt,
+      });
+
+      expect(
+        await fixture.store.removeSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+        }),
+      ).toBe(true);
+      expect(await fixture.store.snapshot()).toMatchObject({
+        setupSessions: [],
+      });
+    } finally {
+      await fs.rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
   it("persists and clears manual takeover records per issue", async () => {
     const fixture = await createStore();
 

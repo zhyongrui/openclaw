@@ -1,8 +1,14 @@
+import * as fs from "node:fs";
+import fsPromises from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createWizardPrompter as buildWizardPrompter } from "../../test/helpers/wizard-prompter.js";
 import {
+  inspectOnboardingGitHubCliDeviceLogin,
   onboardingOpenClawCodeDeps,
   runOnboardingOpenClawCode,
+  startOnboardingGitHubCliDeviceLogin,
   type ResolvedOnboardingGitHubToken,
 } from "./setup.code.js";
 
@@ -45,6 +51,20 @@ describe("runOnboardingOpenClawCode", () => {
         }),
       );
     });
+    onboardingOpenClawCodeDeps.mkdir = vi.fn(
+      async (target, options) => await fsPromises.mkdir(target, options),
+    );
+    onboardingOpenClawCodeDeps.openTextFile = vi.fn(
+      async (target, flags) => await fsPromises.open(target, flags),
+    );
+    onboardingOpenClawCodeDeps.readTextFile = vi.fn(
+      async (target) => await fsPromises.readFile(target, "utf8"),
+    );
+    onboardingOpenClawCodeDeps.sleep = vi.fn(async () => {});
+    onboardingOpenClawCodeDeps.isGitHubCliProcessRunning = vi.fn(() => true);
+    onboardingOpenClawCodeDeps.spawnGitHubCliCommand = vi.fn(() => {
+      throw new Error("spawnGitHubCliCommand not stubbed");
+    }) as never;
   });
 
   it("shows gh auth guidance when GitHub auth is missing", async () => {
@@ -158,5 +178,110 @@ describe("runOnboardingOpenClawCode", () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it("starts gh auth login, captures the device code, and primes the browser prompt", async () => {
+    const stateDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "openclawcode-gh-auth-"));
+    const stdinWrite = vi.fn();
+    const stdinEnd = vi.fn();
+    const unref = vi.fn();
+    onboardingOpenClawCodeDeps.spawnGitHubCliCommand = vi.fn((_args, options) => {
+      const stdoutFd = options.stdio?.[1];
+      if (typeof stdoutFd !== "number") {
+        throw new Error("stdout fd missing");
+      }
+      fs.writeFileSync(
+        stdoutFd,
+        [
+          "First copy your one-time code: ABCD-EFGH",
+          "Press Enter to open https://github.com/login/device in your browser...",
+        ].join("\n"),
+        "utf8",
+      );
+      return {
+        pid: 321,
+        stdin: {
+          write: stdinWrite,
+          end: stdinEnd,
+        },
+        unref,
+      } as never;
+    }) as never;
+
+    try {
+      const started = await startOnboardingGitHubCliDeviceLogin({
+        stateDir,
+      });
+
+      expect(started).toMatchObject({
+        pid: 321,
+        userCode: "ABCD-EFGH",
+        verificationUri: "https://github.com/login/device",
+      });
+      expect(onboardingOpenClawCodeDeps.spawnGitHubCliCommand).toHaveBeenCalledWith(
+        expect.arrayContaining(["auth", "login", "--web"]),
+        expect.objectContaining({
+          detached: true,
+        }),
+      );
+      expect(stdinWrite).toHaveBeenCalledWith("\n");
+      expect(stdinEnd).toHaveBeenCalled();
+      expect(unref).toHaveBeenCalled();
+    } finally {
+      await fsPromises.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports pending and authorized GitHub device login states", async () => {
+    const rootDir = await fsPromises.mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-gh-auth-state-"),
+    );
+    const logPath = path.join(rootDir, "gh-auth.log");
+    await fsPromises.writeFile(
+      logPath,
+      [
+        "First copy your one-time code: WXYZ-1234",
+        "Press Enter to open https://github.com/login/device in your browser...",
+      ].join("\n"),
+      "utf8",
+    );
+    onboardingOpenClawCodeDeps.resolveGitHubToken = vi.fn(() => null);
+    onboardingOpenClawCodeDeps.isGitHubCliProcessRunning = vi.fn(() => true);
+
+    try {
+      expect(
+        await inspectOnboardingGitHubCliDeviceLogin({
+          pid: 999,
+          logPath,
+          startedAt: "2026-03-19T02:10:00.000Z",
+        }),
+      ).toMatchObject({
+        state: "pending",
+        userCode: "WXYZ-1234",
+        verificationUri: "https://github.com/login/device",
+      });
+
+      onboardingOpenClawCodeDeps.resolveGitHubToken = vi.fn(
+        () =>
+          ({
+            token: "gho_test",
+            source: "gh-auth-token",
+          }) satisfies ResolvedOnboardingGitHubToken,
+      );
+
+      expect(
+        await inspectOnboardingGitHubCliDeviceLogin({
+          pid: 999,
+          logPath,
+          startedAt: "2026-03-19T02:10:00.000Z",
+        }),
+      ).toMatchObject({
+        state: "authorized",
+        source: "gh-auth-token",
+        userCode: "WXYZ-1234",
+      });
+    } finally {
+      await fsPromises.rm(rootDir, { recursive: true, force: true });
+    }
   });
 });

@@ -41,6 +41,29 @@ export interface OpenClawCodePendingIntakeDraft {
   updatedAt: string;
 }
 
+export type OpenClawCodeSetupSessionStage =
+  | "awaiting-github-device-auth"
+  | "github-authenticated";
+
+export interface OpenClawCodeSetupSession {
+  notifyChannel: string;
+  notifyTarget: string;
+  repoKey?: string;
+  stage: OpenClawCodeSetupSessionStage;
+  githubAuthSource?: "GH_TOKEN" | "GITHUB_TOKEN" | "gh-auth-token";
+  githubDeviceAuth?: {
+    pid?: number;
+    logPath: string;
+    userCode?: string;
+    verificationUri?: string;
+    startedAt: string;
+    completedAt?: string;
+    failureReason?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface OpenClawCodeManualTakeover {
   issueKey: string;
   runId: string;
@@ -152,6 +175,7 @@ export interface OpenClawCodeQueueState {
   version: 1;
   pendingApprovals: OpenClawCodePendingApproval[];
   pendingIntakeDrafts: OpenClawCodePendingIntakeDraft[];
+  setupSessions: OpenClawCodeSetupSession[];
   manualTakeovers: OpenClawCodeManualTakeover[];
   deferredRuntimeReroutes: OpenClawCodeDeferredRuntimeReroute[];
   queue: OpenClawCodeQueuedRun[];
@@ -175,6 +199,7 @@ function cloneDefaultState(): OpenClawCodeQueueState {
     version: 1,
     pendingApprovals: [],
     pendingIntakeDrafts: [],
+    setupSessions: [],
     manualTakeovers: [],
     deferredRuntimeReroutes: [],
     queue: [],
@@ -244,6 +269,70 @@ function normalizePendingIntakeDraft(raw: unknown): OpenClawCodePendingIntakeDra
           (value): value is string => typeof value === "string",
         )
       : [],
+    createdAt: candidate.createdAt,
+    updatedAt: candidate.updatedAt,
+  };
+}
+
+function normalizeSetupSession(raw: unknown): OpenClawCodeSetupSession | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const candidate = raw as Partial<OpenClawCodeSetupSession>;
+  if (
+    typeof candidate.notifyChannel !== "string" ||
+    typeof candidate.notifyTarget !== "string" ||
+    typeof candidate.stage !== "string" ||
+    typeof candidate.createdAt !== "string" ||
+    typeof candidate.updatedAt !== "string"
+  ) {
+    return undefined;
+  }
+  if (
+    candidate.stage !== "awaiting-github-device-auth" &&
+    candidate.stage !== "github-authenticated"
+  ) {
+    return undefined;
+  }
+  const githubDeviceAuth =
+    candidate.githubDeviceAuth && typeof candidate.githubDeviceAuth === "object"
+      ? candidate.githubDeviceAuth
+      : undefined;
+  return {
+    notifyChannel: candidate.notifyChannel,
+    notifyTarget: candidate.notifyTarget,
+    repoKey: typeof candidate.repoKey === "string" ? candidate.repoKey : undefined,
+    stage: candidate.stage,
+    githubAuthSource:
+      candidate.githubAuthSource === "GH_TOKEN" ||
+      candidate.githubAuthSource === "GITHUB_TOKEN" ||
+      candidate.githubAuthSource === "gh-auth-token"
+        ? candidate.githubAuthSource
+        : undefined,
+    githubDeviceAuth:
+      githubDeviceAuth &&
+      typeof githubDeviceAuth.logPath === "string" &&
+      typeof githubDeviceAuth.startedAt === "string"
+        ? {
+            pid: typeof githubDeviceAuth.pid === "number" ? githubDeviceAuth.pid : undefined,
+            logPath: githubDeviceAuth.logPath,
+            userCode:
+              typeof githubDeviceAuth.userCode === "string" ? githubDeviceAuth.userCode : undefined,
+            verificationUri:
+              typeof githubDeviceAuth.verificationUri === "string"
+                ? githubDeviceAuth.verificationUri
+                : undefined,
+            startedAt: githubDeviceAuth.startedAt,
+            completedAt:
+              typeof githubDeviceAuth.completedAt === "string"
+                ? githubDeviceAuth.completedAt
+                : undefined,
+            failureReason:
+              typeof githubDeviceAuth.failureReason === "string"
+                ? githubDeviceAuth.failureReason
+                : undefined,
+          }
+        : undefined,
     createdAt: candidate.createdAt,
     updatedAt: candidate.updatedAt,
   };
@@ -790,6 +879,12 @@ function normalizeState(raw: unknown): OpenClawCodeQueueState {
           return draft ? [draft] : [];
         })
       : [],
+    setupSessions: Array.isArray(candidate.setupSessions)
+      ? candidate.setupSessions.flatMap((value) => {
+          const session = normalizeSetupSession(value);
+          return session ? [session] : [];
+        })
+      : [],
     manualTakeovers: Array.isArray(candidate.manualTakeovers)
       ? candidate.manualTakeovers.flatMap((value) => {
           const takeover = normalizeManualTakeover(value);
@@ -898,6 +993,18 @@ export class OpenClawCodeChatopsStore {
         entry.repoKey === params.repoKey &&
         entry.notifyChannel === params.notifyChannel &&
         entry.notifyTarget === params.notifyTarget,
+    );
+  }
+
+  async getSetupSession(params: {
+    notifyChannel: string;
+    notifyTarget: string;
+  }): Promise<OpenClawCodeSetupSession | undefined> {
+    await this.flushMutations();
+    const state = await this.loadState();
+    return state.setupSessions.find(
+      (entry) =>
+        entry.notifyChannel === params.notifyChannel && entry.notifyTarget === params.notifyTarget,
     );
   }
 
@@ -1207,6 +1314,27 @@ export class OpenClawCodeChatopsStore {
     });
   }
 
+  async upsertSetupSession(session: OpenClawCodeSetupSession): Promise<"added" | "updated"> {
+    return await this.mutateState((state) => {
+      const existingIndex = state.setupSessions.findIndex(
+        (entry) =>
+          entry.notifyChannel === session.notifyChannel &&
+          entry.notifyTarget === session.notifyTarget,
+      );
+      if (existingIndex >= 0) {
+        const existing = state.setupSessions[existingIndex];
+        state.setupSessions[existingIndex] = {
+          ...existing,
+          ...session,
+          createdAt: existing?.createdAt ?? session.createdAt,
+        };
+        return "updated";
+      }
+      state.setupSessions.push(session);
+      return "added";
+    });
+  }
+
   async removePendingIntakeDraft(params: {
     repoKey: string;
     notifyChannel: string;
@@ -1223,6 +1351,24 @@ export class OpenClawCodeChatopsStore {
         return false;
       }
       state.pendingIntakeDrafts.splice(index, 1);
+      return true;
+    });
+  }
+
+  async removeSetupSession(params: {
+    notifyChannel: string;
+    notifyTarget: string;
+  }): Promise<boolean> {
+    return await this.mutateState((state) => {
+      const index = state.setupSessions.findIndex(
+        (entry) =>
+          entry.notifyChannel === params.notifyChannel &&
+          entry.notifyTarget === params.notifyTarget,
+      );
+      if (index < 0) {
+        return false;
+      }
+      state.setupSessions.splice(index, 1);
       return true;
     });
   }

@@ -1,4 +1,6 @@
 import * as childProcess from "node:child_process";
+import * as fs from "node:fs/promises";
+import path from "node:path";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { OpenClawCodeBootstrapOpts } from "../commands/openclawcode.js";
 import type {
@@ -20,6 +22,50 @@ export type ResolvedOnboardingGitHubToken = {
   source: "GH_TOKEN" | "GITHUB_TOKEN" | "gh-auth-token";
 };
 
+export type OnboardingGitHubCliDeviceLoginSession = {
+  pid?: number;
+  logPath: string;
+  userCode?: string;
+  verificationUri?: string;
+  startedAt: string;
+  completedAt?: string;
+  failureReason?: string;
+};
+
+export type OnboardingGitHubCliDeviceLoginStartResult = Required<
+  Pick<OnboardingGitHubCliDeviceLoginSession, "pid" | "logPath" | "userCode" | "verificationUri">
+> &
+  Pick<OnboardingGitHubCliDeviceLoginSession, "startedAt">;
+
+export type OnboardingGitHubCliDeviceLoginStatus =
+  | {
+      state: "pending";
+      running: boolean;
+      userCode: string;
+      verificationUri: string;
+      startedAt: string;
+      logTail?: string;
+    }
+  | {
+      state: "authorized";
+      running: boolean;
+      source: ResolvedOnboardingGitHubToken["source"];
+      userCode?: string;
+      verificationUri?: string;
+      startedAt: string;
+      completedAt: string;
+    }
+  | {
+      state: "failed";
+      running: boolean;
+      reason: string;
+      userCode?: string;
+      verificationUri?: string;
+      startedAt: string;
+      completedAt?: string;
+      logTail?: string;
+    };
+
 type OnboardingBootstrapSummary = {
   repo?: {
     owner?: string;
@@ -40,6 +86,75 @@ type OnboardingBootstrapSummary = {
 };
 
 type OpenClawCodeOnboardingChoice = "new" | "existing" | "skip";
+
+const DEFAULT_GITHUB_DEVICE_VERIFICATION_URI = "https://github.com/login/device";
+const GITHUB_DEVICE_CODE_PATTERN = /one-time code:\s*([A-Z0-9-]+)/i;
+const GITHUB_DEVICE_URI_PATTERN = /(https:\/\/github\.com\/login\/device)/i;
+
+function extractGitHubCliDeviceLoginDetails(output: string): {
+  userCode?: string;
+  verificationUri?: string;
+} {
+  const userCode = output.match(GITHUB_DEVICE_CODE_PATTERN)?.[1]?.trim();
+  const verificationUri =
+    output.match(GITHUB_DEVICE_URI_PATTERN)?.[1]?.trim() ??
+    (userCode ? DEFAULT_GITHUB_DEVICE_VERIFICATION_URI : undefined);
+  return {
+    userCode,
+    verificationUri,
+  };
+}
+
+function tailMultilineText(value: string, maxLines = 6): string | undefined {
+  const lines = value
+    .split(/\r?\n/g)
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+  if (lines.length === 0) {
+    return undefined;
+  }
+  return lines.slice(-maxLines).join("\n");
+}
+
+function isProcessRunning(pid: number | undefined): boolean {
+  if (!Number.isInteger(pid) || !pid || pid <= 0) {
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === "EPERM";
+  }
+}
+
+async function waitForGitHubCliDeviceChallenge(
+  logPath: string,
+  timeoutMs = 5_000,
+): Promise<{ userCode: string; verificationUri: string }> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const output = await onboardingOpenClawCodeDeps.readTextFile(logPath).catch(() => "");
+    const challenge = extractGitHubCliDeviceLoginDetails(output);
+    if (challenge.userCode) {
+      return {
+        userCode: challenge.userCode,
+        verificationUri: challenge.verificationUri ?? DEFAULT_GITHUB_DEVICE_VERIFICATION_URI,
+      };
+    }
+    await onboardingOpenClawCodeDeps.sleep(150);
+  }
+  const output = await onboardingOpenClawCodeDeps.readTextFile(logPath).catch(() => "");
+  throw new Error(
+    [
+      "gh auth login started but no GitHub device-flow code was captured.",
+      tailMultilineText(output) ? `Last output:\n${tailMultilineText(output)}` : undefined,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  );
+}
 
 export function resolveOnboardingGitHubToken(): ResolvedOnboardingGitHubToken | null {
   const ghToken = process.env.GH_TOKEN?.trim();
@@ -73,6 +188,98 @@ export function resolveOnboardingGitHubAuthState(): OnboardingGitHubAuthState {
   return {
     available: true,
     source: resolved.source,
+  };
+}
+
+export async function startOnboardingGitHubCliDeviceLogin(params: {
+  stateDir: string;
+}): Promise<OnboardingGitHubCliDeviceLoginStartResult> {
+  const logDir = path.join(params.stateDir, "plugins", "openclawcode", "setup");
+  await onboardingOpenClawCodeDeps.mkdir(logDir, { recursive: true });
+  const logPath = path.join(
+    logDir,
+    `gh-auth-login-${Date.now()}-${Math.random().toString(16).slice(2)}.log`,
+  );
+  const logFile = await onboardingOpenClawCodeDeps.openTextFile(logPath, "a");
+  try {
+    const child = onboardingOpenClawCodeDeps.spawnGitHubCliCommand(
+      [
+        "auth",
+        "login",
+        "--hostname",
+        "github.com",
+        "--git-protocol",
+        "https",
+        "--web",
+        "--skip-ssh-key",
+      ],
+      {
+        detached: true,
+        stdio: ["pipe", logFile.fd, logFile.fd],
+      },
+    );
+    child.stdin?.write("\n");
+    child.stdin?.end();
+    child.unref?.();
+    const pid = child.pid;
+    if (!Number.isInteger(pid) || !pid) {
+      throw new Error("gh auth login started without a valid process id.");
+    }
+    const challenge = await waitForGitHubCliDeviceChallenge(logPath);
+    return {
+      pid,
+      logPath,
+      userCode: challenge.userCode,
+      verificationUri: challenge.verificationUri,
+      startedAt: new Date().toISOString(),
+    };
+  } finally {
+    await logFile.close();
+  }
+}
+
+export async function inspectOnboardingGitHubCliDeviceLogin(
+  session: OnboardingGitHubCliDeviceLoginSession,
+): Promise<OnboardingGitHubCliDeviceLoginStatus> {
+  const resolvedToken = onboardingOpenClawCodeDeps.resolveGitHubToken();
+  const output = await onboardingOpenClawCodeDeps.readTextFile(session.logPath).catch(() => "");
+  const details = extractGitHubCliDeviceLoginDetails(output);
+  const userCode = details.userCode ?? session.userCode;
+  const verificationUri =
+    details.verificationUri ?? session.verificationUri ?? DEFAULT_GITHUB_DEVICE_VERIFICATION_URI;
+  const running = onboardingOpenClawCodeDeps.isGitHubCliProcessRunning(session.pid);
+  if (resolvedToken) {
+    return {
+      state: "authorized",
+      running,
+      source: resolvedToken.source,
+      userCode,
+      verificationUri,
+      startedAt: session.startedAt,
+      completedAt: session.completedAt ?? new Date().toISOString(),
+    };
+  }
+  if (running && userCode) {
+    return {
+      state: "pending",
+      running,
+      userCode,
+      verificationUri,
+      startedAt: session.startedAt,
+      logTail: tailMultilineText(output),
+    };
+  }
+  return {
+    state: "failed",
+    running,
+    reason:
+      session.failureReason ??
+      "GitHub device approval did not complete. Start a fresh session with /occode-setup.",
+    userCode,
+    verificationUri: userCode ? verificationUri : undefined,
+    startedAt: session.startedAt,
+    completedAt: session.completedAt,
+    logTail: tailMultilineText(output),
   };
 }
 
@@ -171,6 +378,17 @@ export const onboardingOpenClawCodeDeps = {
     const { openclawCodeBootstrapCommand } = await import("../commands/openclawcode.js");
     await openclawCodeBootstrapCommand(opts, runtime);
   },
+  mkdir: async (target: string, options?: Parameters<typeof fs.mkdir>[1]) =>
+    await fs.mkdir(target, options),
+  openTextFile: async (target: string, flags: Parameters<typeof fs.open>[1]) =>
+    await fs.open(target, flags),
+  readTextFile: async (target: string) => await fs.readFile(target, "utf8"),
+  spawnGitHubCliCommand: (
+    args: string[],
+    options: childProcess.SpawnOptions,
+  ): childProcess.ChildProcess => childProcess.spawn("gh", args, options),
+  sleep: async (ms: number) => await new Promise((resolve) => setTimeout(resolve, ms)),
+  isGitHubCliProcessRunning: isProcessRunning,
 };
 
 async function runBootstrapWithCapturedJson(params: {

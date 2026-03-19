@@ -22,6 +22,9 @@ import plugin from "./index.js";
 const mocked = vi.hoisted(() => ({
   readRequestBodyWithLimit: vi.fn(),
   runMessageAction: vi.fn(),
+  resolveOnboardingGitHubToken: vi.fn(() => null),
+  startOnboardingGitHubCliDeviceLogin: vi.fn(),
+  inspectOnboardingGitHubCliDeviceLogin: vi.fn(),
 }));
 
 vi.mock("../../src/infra/http-body.js", () => ({
@@ -31,6 +34,16 @@ vi.mock("../../src/infra/http-body.js", () => ({
 vi.mock("../../src/infra/outbound/message-action-runner.js", () => ({
   runMessageAction: mocked.runMessageAction,
 }));
+
+vi.mock("../../src/wizard/setup.code.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/wizard/setup.code.js")>();
+  return {
+    ...actual,
+    resolveOnboardingGitHubToken: mocked.resolveOnboardingGitHubToken,
+    startOnboardingGitHubCliDeviceLogin: mocked.startOnboardingGitHubCliDeviceLogin,
+    inspectOnboardingGitHubCliDeviceLogin: mocked.inspectOnboardingGitHubCliDeviceLogin,
+  };
+});
 
 function createApi(params: {
   stateDir: string;
@@ -525,6 +538,10 @@ describe("openclawcode extension", () => {
     mocked.readRequestBodyWithLimit.mockReset();
     mocked.runMessageAction.mockReset();
     mocked.runMessageAction.mockResolvedValue({ kind: "send" });
+    mocked.resolveOnboardingGitHubToken.mockReset();
+    mocked.resolveOnboardingGitHubToken.mockReturnValue(null);
+    mocked.startOnboardingGitHubCliDeviceLogin.mockReset();
+    mocked.inspectOnboardingGitHubCliDeviceLogin.mockReset();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
@@ -3053,6 +3070,142 @@ describe("openclawcode extension", () => {
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("starts chat-native setup by launching GitHub device auth and persisting the session", async () => {
+    const fixture = await registerPluginFixture();
+    mocked.startOnboardingGitHubCliDeviceLogin.mockResolvedValue({
+      pid: 321,
+      logPath: "/tmp/gh-auth.log",
+      userCode: "ABCD-EFGH",
+      verificationUri: "https://github.com/login/device",
+      startedAt: "2026-03-19T02:30:00.000Z",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-setup")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup",
+        args: "",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("OpenClaw Code setup is waiting for GitHub approval.");
+      expect(result?.text).toContain("https://github.com/login/device");
+      expect(result?.text).toContain("ABCD-EFGH");
+      expect(result?.text).toContain("/occode-setup-status");
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+        }),
+      ).toMatchObject({
+        repoKey: "zhyongrui/openclawcode",
+        stage: "awaiting-github-device-auth",
+        githubDeviceAuth: {
+          pid: 321,
+          userCode: "ABCD-EFGH",
+        },
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("reports authenticated setup status and preserves the selected repo", async () => {
+    const fixture = await registerPluginFixture();
+    mocked.resolveOnboardingGitHubToken.mockReturnValue({
+      token: "gho_test",
+      source: "gh-auth-token",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-setup")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup zhyongrui/iGallery",
+        args: "zhyongrui/iGallery",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("OpenClaw Code setup has GitHub auth ready.");
+      expect(result?.text).toContain("Source: gh-auth-token");
+      expect(result?.text).toContain("Selected repo: zhyongrui/iGallery");
+      expect(result?.text).toContain(
+        "openclaw code bootstrap --repo zhyongrui/iGallery --mode auto",
+      );
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+        }),
+      ).toMatchObject({
+        repoKey: "zhyongrui/iGallery",
+        stage: "github-authenticated",
+        githubAuthSource: "gh-auth-token",
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("promotes a pending setup session to authenticated through /occode-setup-status", async () => {
+    const fixture = await registerPluginFixture();
+    await fixture.store.upsertSetupSession({
+      notifyChannel: "feishu",
+      notifyTarget: "user:setup-chat",
+      repoKey: "zhyongrui/openclawcode",
+      stage: "awaiting-github-device-auth",
+      githubDeviceAuth: {
+        pid: 321,
+        logPath: "/tmp/gh-auth.log",
+        userCode: "ABCD-EFGH",
+        verificationUri: "https://github.com/login/device",
+        startedAt: "2026-03-19T02:35:00.000Z",
+      },
+      createdAt: "2026-03-19T02:35:00.000Z",
+      updatedAt: "2026-03-19T02:35:00.000Z",
+    });
+    mocked.inspectOnboardingGitHubCliDeviceLogin.mockResolvedValue({
+      state: "authorized",
+      running: false,
+      source: "gh-auth-token",
+      userCode: "ABCD-EFGH",
+      verificationUri: "https://github.com/login/device",
+      startedAt: "2026-03-19T02:35:00.000Z",
+      completedAt: "2026-03-19T02:36:00.000Z",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-setup-status")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup-status",
+        args: "",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("OpenClaw Code setup has GitHub auth ready.");
+      expect(result?.text).toContain("Selected repo: zhyongrui/openclawcode");
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+        }),
+      ).toMatchObject({
+        stage: "github-authenticated",
+        githubAuthSource: "gh-auth-token",
+        githubDeviceAuth: {
+          completedAt: "2026-03-19T02:36:00.000Z",
+        },
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
     }
   });
 
