@@ -502,7 +502,9 @@ describe("OpenClawCodeChatopsStore", () => {
         await fixture.store.upsertSetupSession({
           notifyChannel: "feishu",
           notifyTarget: "user:setup-chat",
+          projectMode: "new-project",
           repoKey: "zhyongrui/openclawcode",
+          pendingRepoName: "openclawcode",
           stage: "awaiting-github-device-auth",
           githubDeviceAuth: {
             pid: 321,
@@ -520,6 +522,7 @@ describe("OpenClawCodeChatopsStore", () => {
         await fixture.store.upsertSetupSession({
           notifyChannel: "feishu",
           notifyTarget: "user:setup-chat",
+          projectMode: "existing-repo",
           repoKey: "zhyongrui/openclawcode",
           stage: "github-authenticated",
           githubAuthSource: "gh-auth-token",
@@ -541,6 +544,7 @@ describe("OpenClawCodeChatopsStore", () => {
         notifyTarget: "user:setup-chat",
       });
       expect(saved).toMatchObject({
+        projectMode: "existing-repo",
         repoKey: "zhyongrui/openclawcode",
         stage: "github-authenticated",
         githubAuthSource: "gh-auth-token",

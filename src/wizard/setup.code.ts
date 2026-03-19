@@ -66,6 +66,8 @@ export type OnboardingGitHubCliDeviceLoginStatus =
       logTail?: string;
     };
 
+export type OnboardingProjectMode = "existing-repo" | "new-project";
+
 type OnboardingBootstrapSummary = {
   repo?: {
     owner?: string;
@@ -318,6 +320,35 @@ function parseExistingRepositoryInput(value: string, owner: string): RepoRef {
   };
 }
 
+export function parseOnboardingRepositoryCreationInput(value: string, owner: string): RepoRef {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error("Repository name is required.");
+  }
+  if (trimmed.includes("/")) {
+    const [parsedOwner, parsedRepo, ...rest] = trimmed.split("/");
+    if (rest.length > 0 || !parsedOwner?.trim() || !parsedRepo?.trim()) {
+      throw new Error("Use owner/repo when entering a full repository reference.");
+    }
+    const validation = validateNewRepositoryName(parsedRepo);
+    if (validation) {
+      throw new Error(validation);
+    }
+    return {
+      owner: parsedOwner.trim(),
+      repo: parsedRepo.trim(),
+    };
+  }
+  const validation = validateNewRepositoryName(trimmed);
+  if (validation) {
+    throw new Error(validation);
+  }
+  return {
+    owner,
+    repo: trimmed,
+  };
+}
+
 async function fetchRepositorySummary(
   token: string,
   repoRef: RepoRef,
@@ -362,6 +393,52 @@ async function fetchRepositorySummary(
   };
 }
 
+export async function createOnboardingRepositoryViaGh(params: {
+  owner: string;
+  repo: string;
+  visibility?: "private" | "public";
+}): Promise<GitHubRepositorySummary> {
+  const visibility = params.visibility ?? "private";
+  const result = onboardingOpenClawCodeDeps.runGitHubCliCommand(
+    [
+      "repo",
+      "create",
+      `${params.owner}/${params.repo}`,
+      visibility === "public" ? "--public" : "--private",
+      "--clone=false",
+    ],
+    {
+      encoding: "utf8",
+    },
+  );
+  const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
+  const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
+  if (result.status !== 0) {
+    throw new Error(
+      [
+        `gh repo create failed for ${params.owner}/${params.repo}.`,
+        stderr || stdout || "No error output was returned.",
+      ].join("\n"),
+    );
+  }
+  const token = onboardingOpenClawCodeDeps.resolveGitHubToken();
+  if (token) {
+    const fetched = await onboardingOpenClawCodeDeps.fetchRepositorySummary(token.token, {
+      owner: params.owner,
+      repo: params.repo,
+    });
+    if (fetched) {
+      return fetched;
+    }
+  }
+  return {
+    owner: params.owner,
+    repo: params.repo,
+    private: visibility !== "public",
+    url: `https://github.com/${params.owner}/${params.repo}`,
+  };
+}
+
 export const onboardingOpenClawCodeDeps = {
   resolveGitHubToken: resolveOnboardingGitHubToken,
   fetchAuthenticatedViewer: async (token: string): Promise<GitHubAuthenticatedViewer> =>
@@ -387,6 +464,14 @@ export const onboardingOpenClawCodeDeps = {
     args: string[],
     options: childProcess.SpawnOptions,
   ): childProcess.ChildProcess => childProcess.spawn("gh", args, options),
+  runGitHubCliCommand: (
+    args: string[],
+    options: childProcess.SpawnSyncOptions,
+  ): childProcess.SpawnSyncReturns<string> =>
+    childProcess.spawnSync("gh", args, {
+      encoding: "utf8",
+      ...options,
+    }),
   sleep: async (ms: number) => await new Promise((resolve) => setTimeout(resolve, ms)),
   isGitHubCliProcessRunning: isProcessRunning,
 };

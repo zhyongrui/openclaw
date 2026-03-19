@@ -48,7 +48,9 @@ export type OpenClawCodeSetupSessionStage =
 export interface OpenClawCodeSetupSession {
   notifyChannel: string;
   notifyTarget: string;
+  projectMode?: "existing-repo" | "new-project";
   repoKey?: string;
+  pendingRepoName?: string;
   stage: OpenClawCodeSetupSessionStage;
   githubAuthSource?: "GH_TOKEN" | "GITHUB_TOKEN" | "gh-auth-token";
   githubDeviceAuth?: {
@@ -301,7 +303,13 @@ function normalizeSetupSession(raw: unknown): OpenClawCodeSetupSession | undefin
   return {
     notifyChannel: candidate.notifyChannel,
     notifyTarget: candidate.notifyTarget,
+    projectMode:
+      candidate.projectMode === "existing-repo" || candidate.projectMode === "new-project"
+        ? candidate.projectMode
+        : undefined,
     repoKey: typeof candidate.repoKey === "string" ? candidate.repoKey : undefined,
+    pendingRepoName:
+      typeof candidate.pendingRepoName === "string" ? candidate.pendingRepoName : undefined,
     stage: candidate.stage,
     githubAuthSource:
       candidate.githubAuthSource === "GH_TOKEN" ||

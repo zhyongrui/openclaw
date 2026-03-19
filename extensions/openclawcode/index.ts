@@ -36,9 +36,13 @@ import {
   type OpenClawCodeDeferredRuntimeReroute,
 } from "../../src/integrations/openclaw-plugin/index.js";
 import {
+  createOnboardingRepositoryViaGh,
   inspectOnboardingGitHubCliDeviceLogin,
+  onboardingOpenClawCodeDeps,
+  parseOnboardingRepositoryCreationInput,
   resolveOnboardingGitHubToken,
   startOnboardingGitHubCliDeviceLogin,
+  type OnboardingProjectMode,
   type OnboardingGitHubCliDeviceLoginStatus,
 } from "../../src/wizard/setup.code.js";
 import {
@@ -191,13 +195,13 @@ function trimToSingleLine(value: string | undefined): string | undefined {
 function buildChatSetupAwaitingGitHubAuthMessage(params: {
   verificationUri: string;
   userCode: string;
-  repoKey?: string;
+  selectionLabel?: string;
 }): string {
   return [
     "OpenClaw Code setup is waiting for GitHub approval.",
     `Open: ${params.verificationUri}`,
     `Code: ${params.userCode}`,
-    params.repoKey ? `Selected repo: ${params.repoKey}` : undefined,
+    params.selectionLabel ? `Selected target: ${params.selectionLabel}` : undefined,
     "The host-side GitHub login flow is already running.",
     "Finish approval in your browser, then send /occode-setup-status here.",
   ]
@@ -235,6 +239,184 @@ function buildChatSetupFailedMessage(params: {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+type ChatSetupProjectSelection =
+  | {
+      projectMode: "existing-repo";
+      repoKey: string;
+    }
+  | {
+      projectMode: "new-project";
+      pendingRepoName: string;
+    };
+
+function parseChatSetupProjectSelection(params: {
+  args: string;
+  defaultRepo?: { owner: string; repo: string };
+}): ChatSetupProjectSelection | "invalid" | undefined {
+  const trimmed = params.args.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const explicitExisting = /^existing\s+(.+)$/i.exec(trimmed)?.[1]?.trim();
+  if (explicitExisting) {
+    const repo = parseChatopsRepoReference(explicitExisting, params.defaultRepo);
+    return repo ? { projectMode: "existing-repo", repoKey: formatRepoKey(repo) } : "invalid";
+  }
+
+  const explicitNew = /^new\s+(.+)$/i.exec(trimmed)?.[1]?.trim();
+  if (explicitNew) {
+    return {
+      projectMode: "new-project",
+      pendingRepoName: explicitNew,
+    };
+  }
+
+  const repo = parseChatopsRepoReference(trimmed, params.defaultRepo);
+  if (repo) {
+    return {
+      projectMode: "existing-repo",
+      repoKey: formatRepoKey(repo),
+    };
+  }
+
+  return {
+    projectMode: "new-project",
+    pendingRepoName: trimmed,
+  };
+}
+
+function buildChatSetupRepoReadyMessage(params: {
+  source: "GH_TOKEN" | "GITHUB_TOKEN" | "gh-auth-token";
+  repoKey: string;
+  projectMode: OnboardingProjectMode;
+  created?: boolean;
+}): string {
+  return [
+    params.projectMode === "new-project"
+      ? params.created
+        ? "OpenClaw Code created the new GitHub repo for this setup."
+        : "OpenClaw Code has a new-project repo selected for this setup."
+      : "OpenClaw Code has an existing repo selected for this setup.",
+    `Source: ${params.source}`,
+    `Repo: ${params.repoKey}`,
+    `Next: ${formatCliCommand(`openclaw code bootstrap --repo ${params.repoKey} --mode auto`)}`,
+    "After bootstrap, use /occode-goal and /occode-blueprint to align the project blueprint in chat.",
+  ].join("\n");
+}
+
+async function completeChatSetupProjectSelection(params: {
+  store: OpenClawCodeChatopsStore;
+  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+}): Promise<{
+  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+  message?: string;
+}> {
+  if (params.session.stage !== "github-authenticated" || !params.session.githubAuthSource) {
+    return { session: params.session };
+  }
+  const token = resolveOnboardingGitHubToken();
+  if (!token) {
+    return { session: params.session };
+  }
+  if (params.session.projectMode === "existing-repo" && params.session.repoKey) {
+    const repo = parseChatopsRepoReference(params.session.repoKey);
+    if (!repo) {
+      return {
+        session: params.session,
+        message: buildChatSetupFailedMessage({
+          reason: `Saved repo reference is invalid: ${params.session.repoKey}`,
+          repoKey: params.session.repoKey,
+        }),
+      };
+    }
+    let summary;
+    try {
+      summary = await onboardingOpenClawCodeDeps.fetchRepositorySummary(token.token, repo);
+    } catch (error) {
+      return {
+        session: params.session,
+        message: buildChatSetupFailedMessage({
+          reason: error instanceof Error ? error.message : String(error),
+          repoKey: params.session.repoKey,
+        }),
+      };
+    }
+    if (!summary) {
+      return {
+        session: params.session,
+        message: buildChatSetupFailedMessage({
+          reason: `${params.session.repoKey} was not found or is not accessible with the current GitHub login.`,
+          repoKey: params.session.repoKey,
+        }),
+      };
+    }
+    const updated = {
+      ...params.session,
+      repoKey: formatRepoKey(summary),
+      updatedAt: new Date().toISOString(),
+    };
+    await params.store.upsertSetupSession(updated);
+    return {
+      session: updated,
+      message: buildChatSetupRepoReadyMessage({
+        source: updated.githubAuthSource,
+        repoKey: updated.repoKey ?? params.session.repoKey,
+        projectMode: "existing-repo",
+      }),
+    };
+  }
+  if (params.session.projectMode === "new-project" && params.session.pendingRepoName) {
+    if (params.session.repoKey) {
+      return {
+        session: params.session,
+        message: buildChatSetupRepoReadyMessage({
+          source: params.session.githubAuthSource,
+          repoKey: params.session.repoKey,
+          projectMode: "new-project",
+        }),
+      };
+    }
+    let created;
+    try {
+      const viewer = await onboardingOpenClawCodeDeps.fetchAuthenticatedViewer(token.token);
+      const repoRef = parseOnboardingRepositoryCreationInput(
+        params.session.pendingRepoName,
+        viewer.login,
+      );
+      created = await createOnboardingRepositoryViaGh({
+        owner: repoRef.owner,
+        repo: repoRef.repo,
+      });
+    } catch (error) {
+      return {
+        session: params.session,
+        message: buildChatSetupFailedMessage({
+          reason: error instanceof Error ? error.message : String(error),
+          repoKey: params.session.repoKey,
+        }),
+      };
+    }
+    const updated = {
+      ...params.session,
+      repoKey: formatRepoKey(created),
+      pendingRepoName: undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    await params.store.upsertSetupSession(updated);
+    return {
+      session: updated,
+      message: buildChatSetupRepoReadyMessage({
+        source: updated.githubAuthSource,
+        repoKey: updated.repoKey ?? formatRepoKey(created),
+        projectMode: "new-project",
+        created: true,
+      }),
+    };
+  }
+  return { session: params.session };
 }
 
 async function syncChatSetupSession(params: {
@@ -4535,21 +4717,17 @@ export default {
           };
         }
 
-        const trimmedArgs = ctx.args?.trim() ?? "";
-        const selectedRepo =
-          trimmedArgs.length > 0
-            ? parseChatopsRepoReference(trimmedArgs, {
-                owner: defaultRepo?.owner,
-                repo: defaultRepo?.repo,
-              })
-            : defaultRepo
-              ? { owner: defaultRepo.owner, repo: defaultRepo.repo }
-              : null;
-        if (trimmedArgs.length > 0 && !selectedRepo) {
+        const selection = parseChatSetupProjectSelection({
+          args: ctx.args ?? "",
+          defaultRepo: defaultRepo ? { owner: defaultRepo.owner, repo: defaultRepo.repo } : undefined,
+        });
+        if (selection === "invalid") {
           return {
             text:
-              "Usage: /occode-setup owner/repo\n" +
-              "Or, when exactly one repo is configured: /occode-setup",
+              "Usage: /occode-setup existing owner/repo\n" +
+              "   or: /occode-setup new repo-name\n" +
+              "   or: /occode-setup new owner/repo\n" +
+              "   or: /occode-setup owner/repo",
           };
         }
 
@@ -4563,33 +4741,61 @@ export default {
               session: existing,
             })
           : undefined;
-        const repoKey = selectedRepo ? formatRepoKey(selectedRepo) : synced?.session.repoKey;
         if (synced?.session.stage === "github-authenticated" && synced.session.githubAuthSource) {
-          if (repoKey !== synced.session.repoKey) {
-            await store.upsertSetupSession({
-              ...synced.session,
-              repoKey,
-              updatedAt: new Date().toISOString(),
-            });
+          const nextSession = {
+            ...synced.session,
+            projectMode: selection?.projectMode ?? synced.session.projectMode,
+            repoKey:
+              selection?.projectMode === "existing-repo"
+                ? selection.repoKey
+                : synced.session.repoKey,
+            pendingRepoName:
+              selection?.projectMode === "new-project"
+                ? selection.pendingRepoName
+                : synced.session.pendingRepoName,
+            updatedAt: new Date().toISOString(),
+          };
+          await store.upsertSetupSession(nextSession);
+          const completed = await completeChatSetupProjectSelection({
+            store,
+            session: nextSession,
+          });
+          if (completed.message) {
+            return {
+              text: completed.message,
+            };
           }
           return {
             text: buildChatSetupReadyMessage({
-              source: synced.session.githubAuthSource,
-              repoKey,
+              source: nextSession.githubAuthSource,
+              repoKey: nextSession.repoKey,
             }),
           };
         }
         if (synced?.status?.state === "pending") {
           await store.upsertSetupSession({
             ...synced.session,
-            repoKey,
+            projectMode: selection?.projectMode ?? synced.session.projectMode,
+            repoKey:
+              selection?.projectMode === "existing-repo"
+                ? selection.repoKey
+                : synced.session.repoKey,
+            pendingRepoName:
+              selection?.projectMode === "new-project"
+                ? selection.pendingRepoName
+                : synced.session.pendingRepoName,
             updatedAt: new Date().toISOString(),
           });
           return {
             text: buildChatSetupAwaitingGitHubAuthMessage({
               verificationUri: synced.status.verificationUri,
               userCode: synced.status.userCode,
-              repoKey,
+              selectionLabel:
+                selection?.projectMode === "existing-repo"
+                  ? selection.repoKey
+                  : selection?.projectMode === "new-project"
+                    ? selection.pendingRepoName
+                    : synced.session.repoKey ?? synced.session.pendingRepoName,
             }),
           };
         }
@@ -4597,19 +4803,32 @@ export default {
         const readyToken = resolveOnboardingGitHubToken();
         if (readyToken) {
           const now = new Date().toISOString();
-          await store.upsertSetupSession({
+          const nextSession = {
             notifyChannel: ctx.channel,
             notifyTarget,
-            repoKey,
+            projectMode: selection?.projectMode,
+            repoKey: selection?.projectMode === "existing-repo" ? selection.repoKey : undefined,
+            pendingRepoName:
+              selection?.projectMode === "new-project" ? selection.pendingRepoName : undefined,
             stage: "github-authenticated",
             githubAuthSource: readyToken.source,
             createdAt: existing?.createdAt ?? now,
             updatedAt: now,
+          } as const;
+          await store.upsertSetupSession(nextSession);
+          const completed = await completeChatSetupProjectSelection({
+            store,
+            session: nextSession,
           });
+          if (completed.message) {
+            return {
+              text: completed.message,
+            };
+          }
           return {
             text: buildChatSetupReadyMessage({
               source: readyToken.source,
-              repoKey,
+              repoKey: nextSession.repoKey,
             }),
           };
         }
@@ -4621,7 +4840,10 @@ export default {
         await store.upsertSetupSession({
           notifyChannel: ctx.channel,
           notifyTarget,
-          repoKey,
+          projectMode: selection?.projectMode,
+          repoKey: selection?.projectMode === "existing-repo" ? selection.repoKey : undefined,
+          pendingRepoName:
+            selection?.projectMode === "new-project" ? selection.pendingRepoName : undefined,
           stage: "awaiting-github-device-auth",
           githubDeviceAuth: {
             pid: started.pid,
@@ -4637,7 +4859,12 @@ export default {
           text: buildChatSetupAwaitingGitHubAuthMessage({
             verificationUri: started.verificationUri,
             userCode: started.userCode,
-            repoKey,
+            selectionLabel:
+              selection?.projectMode === "existing-repo"
+                ? selection.repoKey
+                : selection?.projectMode === "new-project"
+                  ? selection.pendingRepoName
+                  : undefined,
           }),
         };
       },
@@ -4677,6 +4904,17 @@ export default {
           session: existing,
         });
         if (synced.session.stage === "github-authenticated" && synced.session.githubAuthSource) {
+          const completed = await completeChatSetupProjectSelection({
+            store,
+            session: synced.session,
+          });
+          if (completed.message) {
+            return {
+              text: completed.message,
+            };
+          }
+        }
+        if (synced.session.stage === "github-authenticated" && synced.session.githubAuthSource) {
           return {
             text: buildChatSetupReadyMessage({
               source: synced.session.githubAuthSource,
@@ -4689,7 +4927,7 @@ export default {
             text: buildChatSetupAwaitingGitHubAuthMessage({
               verificationUri: synced.status.verificationUri,
               userCode: synced.status.userCode,
-              repoKey: synced.session.repoKey,
+              selectionLabel: synced.session.repoKey ?? synced.session.pendingRepoName,
             }),
           };
         }

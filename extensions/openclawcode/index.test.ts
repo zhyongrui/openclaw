@@ -17,6 +17,7 @@ import type {
   OpenClawPluginService,
 } from "../../src/plugins/types.js";
 import { createMockServerResponse } from "../../src/test-utils/mock-http-response.js";
+import { onboardingOpenClawCodeDeps } from "../../src/wizard/setup.code.js";
 import plugin from "./index.js";
 
 const mocked = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const mocked = vi.hoisted(() => ({
   resolveOnboardingGitHubToken: vi.fn(() => null),
   startOnboardingGitHubCliDeviceLogin: vi.fn(),
   inspectOnboardingGitHubCliDeviceLogin: vi.fn(),
+  createOnboardingRepositoryViaGh: vi.fn(),
 }));
 
 vi.mock("../../src/infra/http-body.js", () => ({
@@ -42,6 +44,7 @@ vi.mock("../../src/wizard/setup.code.js", async (importOriginal) => {
     resolveOnboardingGitHubToken: mocked.resolveOnboardingGitHubToken,
     startOnboardingGitHubCliDeviceLogin: mocked.startOnboardingGitHubCliDeviceLogin,
     inspectOnboardingGitHubCliDeviceLogin: mocked.inspectOnboardingGitHubCliDeviceLogin,
+    createOnboardingRepositoryViaGh: mocked.createOnboardingRepositoryViaGh,
   };
 });
 
@@ -542,6 +545,16 @@ describe("openclawcode extension", () => {
     mocked.resolveOnboardingGitHubToken.mockReturnValue(null);
     mocked.startOnboardingGitHubCliDeviceLogin.mockReset();
     mocked.inspectOnboardingGitHubCliDeviceLogin.mockReset();
+    mocked.createOnboardingRepositoryViaGh.mockReset();
+    onboardingOpenClawCodeDeps.fetchAuthenticatedViewer = vi.fn(
+      async () => ({ login: "zhyongrui" }),
+    );
+    onboardingOpenClawCodeDeps.fetchRepositorySummary = vi.fn(async (_token, repoRef) => ({
+      owner: repoRef.owner,
+      repo: repoRef.repo,
+      private: true,
+      url: `https://github.com/${repoRef.owner}/${repoRef.repo}`,
+    }));
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
@@ -3103,7 +3116,6 @@ describe("openclawcode extension", () => {
           notifyTarget: "user:setup-chat",
         }),
       ).toMatchObject({
-        repoKey: "zhyongrui/openclawcode",
         stage: "awaiting-github-device-auth",
         githubDeviceAuth: {
           pid: 321,
@@ -3132,9 +3144,9 @@ describe("openclawcode extension", () => {
         config: {},
       });
 
-      expect(result?.text).toContain("OpenClaw Code setup has GitHub auth ready.");
+      expect(result?.text).toContain("OpenClaw Code has an existing repo selected for this setup.");
       expect(result?.text).toContain("Source: gh-auth-token");
-      expect(result?.text).toContain("Selected repo: zhyongrui/iGallery");
+      expect(result?.text).toContain("Repo: zhyongrui/iGallery");
       expect(result?.text).toContain(
         "openclaw code bootstrap --repo zhyongrui/iGallery --mode auto",
       );
@@ -3144,9 +3156,57 @@ describe("openclawcode extension", () => {
           notifyTarget: "user:setup-chat",
         }),
       ).toMatchObject({
+        projectMode: "existing-repo",
         repoKey: "zhyongrui/iGallery",
         stage: "github-authenticated",
         githubAuthSource: "gh-auth-token",
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("creates a new GitHub repo from chat-native setup after auth is ready", async () => {
+    const fixture = await registerPluginFixture();
+    mocked.resolveOnboardingGitHubToken.mockReturnValue({
+      token: "gho_test",
+      source: "gh-auth-token",
+    });
+    mocked.createOnboardingRepositoryViaGh.mockResolvedValue({
+      owner: "zhyongrui",
+      repo: "iGallery",
+      private: true,
+      url: "https://github.com/zhyongrui/iGallery",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-setup")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup new iGallery",
+        args: "new iGallery",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("OpenClaw Code created the new GitHub repo for this setup.");
+      expect(result?.text).toContain("Repo: zhyongrui/iGallery");
+      expect(result?.text).toContain(
+        "openclaw code bootstrap --repo zhyongrui/iGallery --mode auto",
+      );
+      expect(mocked.createOnboardingRepositoryViaGh).toHaveBeenCalledWith({
+        owner: "zhyongrui",
+        repo: "iGallery",
+      });
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+        }),
+      ).toMatchObject({
+        projectMode: "new-project",
+        repoKey: "zhyongrui/iGallery",
+        stage: "github-authenticated",
       });
     } finally {
       await cleanupPluginFixture(fixture);

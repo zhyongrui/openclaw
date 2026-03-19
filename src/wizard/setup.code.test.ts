@@ -5,8 +5,10 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createWizardPrompter as buildWizardPrompter } from "../../test/helpers/wizard-prompter.js";
 import {
+  createOnboardingRepositoryViaGh,
   inspectOnboardingGitHubCliDeviceLogin,
   onboardingOpenClawCodeDeps,
+  parseOnboardingRepositoryCreationInput,
   runOnboardingOpenClawCode,
   startOnboardingGitHubCliDeviceLogin,
   type ResolvedOnboardingGitHubToken,
@@ -64,6 +66,9 @@ describe("runOnboardingOpenClawCode", () => {
     onboardingOpenClawCodeDeps.isGitHubCliProcessRunning = vi.fn(() => true);
     onboardingOpenClawCodeDeps.spawnGitHubCliCommand = vi.fn(() => {
       throw new Error("spawnGitHubCliCommand not stubbed");
+    }) as never;
+    onboardingOpenClawCodeDeps.runGitHubCliCommand = vi.fn(() => {
+      throw new Error("runGitHubCliCommand not stubbed");
     }) as never;
   });
 
@@ -283,5 +288,76 @@ describe("runOnboardingOpenClawCode", () => {
     } finally {
       await fsPromises.rm(rootDir, { recursive: true, force: true });
     }
+  });
+
+  it("parses new-repo input with either repo-name or owner/repo", () => {
+    expect(parseOnboardingRepositoryCreationInput("iGallery", "zhyongrui")).toEqual({
+      owner: "zhyongrui",
+      repo: "iGallery",
+    });
+    expect(parseOnboardingRepositoryCreationInput("acme/iGallery", "zhyongrui")).toEqual({
+      owner: "acme",
+      repo: "iGallery",
+    });
+  });
+
+  it("creates a repo through gh and refreshes the GitHub summary", async () => {
+    onboardingOpenClawCodeDeps.runGitHubCliCommand = vi.fn(
+      () =>
+        ({
+          status: 0,
+          stdout: "https://github.com/zhyongrui/iGallery",
+          stderr: "",
+        }) as never,
+    );
+    onboardingOpenClawCodeDeps.resolveGitHubToken = vi.fn(
+      () =>
+        ({
+          token: "gho_test",
+          source: "gh-auth-token",
+        }) satisfies ResolvedOnboardingGitHubToken,
+    );
+    onboardingOpenClawCodeDeps.fetchRepositorySummary = vi.fn(async (_token, repoRef) => ({
+      owner: repoRef.owner,
+      repo: repoRef.repo,
+      private: true,
+      url: `https://github.com/${repoRef.owner}/${repoRef.repo}`,
+    }));
+
+    await expect(
+      createOnboardingRepositoryViaGh({
+        owner: "zhyongrui",
+        repo: "iGallery",
+      }),
+    ).resolves.toMatchObject({
+      owner: "zhyongrui",
+      repo: "iGallery",
+      url: "https://github.com/zhyongrui/iGallery",
+    });
+
+    expect(onboardingOpenClawCodeDeps.runGitHubCliCommand).toHaveBeenCalledWith(
+      ["repo", "create", "zhyongrui/iGallery", "--private", "--clone=false"],
+      expect.objectContaining({
+        encoding: "utf8",
+      }),
+    );
+  });
+
+  it("surfaces gh repo create failures", async () => {
+    onboardingOpenClawCodeDeps.runGitHubCliCommand = vi.fn(
+      () =>
+        ({
+          status: 1,
+          stdout: "",
+          stderr: "name already exists",
+        }) as never,
+    );
+
+    await expect(
+      createOnboardingRepositoryViaGh({
+        owner: "zhyongrui",
+        repo: "iGallery",
+      }),
+    ).rejects.toThrow("name already exists");
   });
 });

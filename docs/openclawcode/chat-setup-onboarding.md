@@ -46,21 +46,45 @@ configuration should start there too.
 
 ## MVP Command Surface
 
+### `/occode-setup existing owner/repo`
+
+Select an existing GitHub repository for this chat-native setup session.
+
+Behavior:
+
+- if GitHub auth is missing:
+  - remember the chosen existing repo
+  - start the GitHub device flow
+  - continue after browser approval
+- if GitHub auth is ready:
+  - validate that the repo is accessible with the current login
+  - persist it as the selected repo for this chat
+  - hand off into bootstrap
+
+### `/occode-setup new repo-name`
+
+Create a new GitHub repo for this setup session.
+
+Behavior:
+
+- if GitHub auth is missing:
+  - remember the requested repo name
+  - start the GitHub device flow
+  - continue after browser approval
+- if GitHub auth is ready:
+  - resolve the authenticated GitHub owner
+  - create the repo on the host through `gh repo create`
+  - persist the created repo for this chat
+  - hand off into bootstrap
+
 ### `/occode-setup [owner/repo]`
 
 Starts or resumes setup for the current chat.
 
 Behavior:
 
-- if GitHub auth is already ready:
-  - mark setup as authenticated
-  - optionally remember the selected `owner/repo`
-  - return the next bootstrap handoff
-- if GitHub auth is missing:
-  - start a host-side GitHub device flow
-  - send the verification URL and one-time code into chat
-  - persist the session as waiting for browser approval
-  - optionally remember the selected `owner/repo`
+- treat plain `owner/repo` as the `existing` path for backward compatibility
+- when no project selection is given, only handle the auth step
 
 ### `/occode-setup-status`
 
@@ -73,6 +97,7 @@ Behavior:
   - tell the operator to finish approval in the browser
 - if auth is now ready:
   - transition the session to authenticated
+  - complete any pending existing-repo validation or new-repo creation
   - show the next repo/bootstrap action
 - if no setup session exists:
   - explain how to start with `/occode-setup`
@@ -90,7 +115,9 @@ Persisted fields:
 
 - `notifyChannel`
 - `notifyTarget`
+- `projectMode`
 - `repoKey`
+- `pendingRepoName`
 - `stage`
 - `githubAuthSource`
 - `createdAt`
@@ -150,7 +177,8 @@ The operator never pastes tokens into chat.
    - chat shows verification URL and code
 3. `github-authenticated`
    - host auth is now ready
-   - chat can move into repo selection and bootstrap handoff
+   - chat can validate an existing repo or create a new repo
+   - chat can then move into bootstrap handoff
 
 Future states can extend this into:
 
@@ -173,11 +201,11 @@ Future states can extend this into:
 After GitHub auth is stable in chat, the next slice should extend the same
 session into:
 
-1. repo selection from chat
-2. `openclaw code bootstrap --repo owner/repo`
-3. exact bootstrap progress and next-action reporting in chat
-4. optional auto-bind of the current conversation as the repo notification
+1. exact bootstrap progress and next-action reporting in chat
+2. optional auto-bind of the current conversation as the repo notification
    target
+3. blueprint draft generation for `new-project` before repo creation
+4. blueprint alignment against repo reality for `existing-repo`
 
 That is the path from "chat can start auth" to "chat can complete first-run
 configuration end-to-end".
