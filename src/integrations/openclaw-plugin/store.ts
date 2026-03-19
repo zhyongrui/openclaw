@@ -61,6 +61,12 @@ export interface OpenClawCodeSetupSession {
     blueprintPath?: string;
     blueprintStatus?: string;
     blueprintRevisionId?: string;
+    blueprintGoalSummary?: string;
+    workstreamCandidateCount?: number;
+    openQuestionCount?: number;
+    humanGateCount?: number;
+    clarificationQuestions?: string[];
+    clarificationSuggestions?: string[];
     nextAction?: string;
     cliRunCommand?: string | null;
     blueprintCommand?: string | null;
@@ -369,6 +375,32 @@ function normalizeSetupSession(raw: unknown): OpenClawCodeSetupSession | undefin
               typeof candidate.bootstrap.blueprintRevisionId === "string"
                 ? candidate.bootstrap.blueprintRevisionId
                 : undefined,
+            blueprintGoalSummary:
+              typeof candidate.bootstrap.blueprintGoalSummary === "string"
+                ? candidate.bootstrap.blueprintGoalSummary
+                : undefined,
+            workstreamCandidateCount:
+              typeof candidate.bootstrap.workstreamCandidateCount === "number"
+                ? candidate.bootstrap.workstreamCandidateCount
+                : undefined,
+            openQuestionCount:
+              typeof candidate.bootstrap.openQuestionCount === "number"
+                ? candidate.bootstrap.openQuestionCount
+                : undefined,
+            humanGateCount:
+              typeof candidate.bootstrap.humanGateCount === "number"
+                ? candidate.bootstrap.humanGateCount
+                : undefined,
+            clarificationQuestions: Array.isArray(candidate.bootstrap.clarificationQuestions)
+              ? candidate.bootstrap.clarificationQuestions.filter(
+                  (value): value is string => typeof value === "string",
+                )
+              : undefined,
+            clarificationSuggestions: Array.isArray(candidate.bootstrap.clarificationSuggestions)
+              ? candidate.bootstrap.clarificationSuggestions.filter(
+                  (value): value is string => typeof value === "string",
+                )
+              : undefined,
             nextAction:
               typeof candidate.bootstrap.nextAction === "string"
                 ? candidate.bootstrap.nextAction

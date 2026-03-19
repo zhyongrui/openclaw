@@ -530,6 +530,8 @@ describe("OpenClawCodeChatopsStore", () => {
             completedAt: "2026-03-19T02:03:00.000Z",
             repoRoot: "/home/zyr/pros/openclawcode-target",
             blueprintPath: "/home/zyr/pros/openclawcode-target/PROJECT-BLUEPRINT.md",
+            blueprintGoalSummary: "Ship chat-native setup.",
+            clarificationQuestions: ["What exact operator-visible success proves readiness?"],
             nextAction: "clarify-project-blueprint",
             blueprintCommand: "/occode-blueprint zhyongrui/openclawcode",
           },
@@ -556,6 +558,7 @@ describe("OpenClawCodeChatopsStore", () => {
         stage: "bootstrap-complete",
         githubAuthSource: "gh-auth-token",
         bootstrap: {
+          blueprintGoalSummary: "Ship chat-native setup.",
           nextAction: "clarify-project-blueprint",
         },
         createdAt,

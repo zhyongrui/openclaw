@@ -190,6 +190,8 @@ The operator never pastes tokens into chat.
 4. `bootstrap-complete`
    - bootstrap JSON has been captured into setup state
    - chat can show the exact blueprint and proof handoff commands
+   - chat can summarize the current blueprint goal, counts, and clarification
+     questions for the operator
 
 Future states can extend this into:
 

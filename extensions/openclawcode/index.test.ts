@@ -5,6 +5,7 @@ import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OpenClawCodeChatopsStore } from "../../src/integrations/openclaw-plugin/index.js";
+import { createProjectBlueprint } from "../../src/openclawcode/blueprint.js";
 import type { WorkflowRun } from "../../src/openclawcode/contracts/index.js";
 import { writeProjectDiscoveryInventory } from "../../src/openclawcode/discovery.js";
 import {
@@ -3353,6 +3354,73 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain("Repo: zhyongrui/openclawcode");
       expect(result?.text).toContain("/occode-blueprint zhyongrui/openclawcode");
       expect(mocked.runOnboardingOpenClawCodeBootstrap).not.toHaveBeenCalled();
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("captures blueprint alignment details after bootstrap completes", async () => {
+    const fixture = await registerPluginFixture();
+    mocked.resolveOnboardingGitHubToken.mockReturnValue({
+      token: "gho_test",
+      source: "gh-auth-token",
+    });
+    await createProjectBlueprint({
+      repoRoot: fixture.repoRoot,
+      title: "OpenClawCode target blueprint",
+      goal: "Ship chat-native setup with clear operator guidance.",
+    });
+    mocked.runOnboardingOpenClawCodeBootstrap.mockResolvedValue({
+      repo: {
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        repoKey: "zhyongrui/openclawcode",
+        repoRoot: fixture.repoRoot,
+        checkoutAction: "attached",
+      },
+      blueprint: {
+        blueprintPath: path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        status: "draft",
+        revisionId: "rev-blueprint",
+      },
+      handoff: {
+        blueprintCommand: "/occode-blueprint zhyongrui/openclawcode",
+      },
+      nextAction: "clarify-project-blueprint",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-setup")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup existing zhyongrui/openclawcode",
+        args: "existing zhyongrui/openclawcode",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Blueprint goal: Ship chat-native setup with clear operator guidance.");
+      expect(result?.text).toContain("Clarifications:");
+      expect(result?.text).toContain("/occode-blueprint zhyongrui/openclawcode");
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+        }),
+      ).toMatchObject({
+        stage: "bootstrap-complete",
+        bootstrap: {
+          blueprintGoalSummary: "Ship chat-native setup with clear operator guidance.",
+        },
+      });
+      expect(
+        (
+          await fixture.store.getSetupSession({
+            notifyChannel: "feishu",
+            notifyTarget: "user:setup-chat",
+          })
+        )?.bootstrap?.clarificationQuestions?.length,
+      ).toBeGreaterThan(0);
     } finally {
       await cleanupPluginFixture(fixture);
     }

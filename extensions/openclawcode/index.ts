@@ -322,6 +322,26 @@ function buildChatSetupBootstrapCompleteMessage(params: {
     params.bootstrap.repoRoot ? `Local path: ${params.bootstrap.repoRoot}` : undefined,
     params.bootstrap.checkoutAction ? `Checkout: ${params.bootstrap.checkoutAction}` : undefined,
     params.bootstrap.blueprintPath ? `Blueprint: ${params.bootstrap.blueprintPath}` : undefined,
+    params.bootstrap.blueprintStatus ? `Blueprint status: ${params.bootstrap.blueprintStatus}` : undefined,
+    params.bootstrap.blueprintRevisionId
+      ? `Blueprint revision: ${params.bootstrap.blueprintRevisionId}`
+      : undefined,
+    params.bootstrap.blueprintGoalSummary
+      ? `Blueprint goal: ${params.bootstrap.blueprintGoalSummary}`
+      : undefined,
+    typeof params.bootstrap.workstreamCandidateCount === "number" &&
+    typeof params.bootstrap.openQuestionCount === "number" &&
+    typeof params.bootstrap.humanGateCount === "number"
+      ? `Blueprint counts: workstreams=${params.bootstrap.workstreamCandidateCount} | openQuestions=${params.bootstrap.openQuestionCount} | humanGates=${params.bootstrap.humanGateCount}`
+      : undefined,
+    params.bootstrap.clarificationQuestions?.length
+      ? `Clarifications: ${params.bootstrap.clarificationQuestions.length}`
+      : undefined,
+    ...(params.bootstrap.clarificationQuestions ?? []).slice(0, 3).map((question) => `- ${question}`),
+    params.bootstrap.clarificationSuggestions?.length
+      ? `Suggestions: ${params.bootstrap.clarificationSuggestions.length}`
+      : undefined,
+    ...(params.bootstrap.clarificationSuggestions ?? []).slice(0, 2).map((suggestion) => `- ${suggestion}`),
     params.bootstrap.nextAction ? `Status: ${params.bootstrap.nextAction}` : undefined,
     params.bootstrap.cliRunCommand ? `CLI proof: ${params.bootstrap.cliRunCommand}` : undefined,
     params.bootstrap.blueprintCommand ? `Chat blueprint: ${params.bootstrap.blueprintCommand}` : undefined,
@@ -491,6 +511,21 @@ async function completeChatSetupBootstrap(params: {
       }),
     };
   }
+  let blueprintDocument:
+    | Awaited<ReturnType<typeof readProjectBlueprintDocument>>
+    | undefined;
+  let blueprintClarification:
+    | Awaited<ReturnType<typeof inspectProjectBlueprintClarifications>>
+    | undefined;
+  if (payload.repo?.repoRoot) {
+    try {
+      blueprintDocument = await readProjectBlueprintDocument(payload.repo.repoRoot);
+      blueprintClarification = await inspectProjectBlueprintClarifications(payload.repo.repoRoot);
+    } catch {
+      blueprintDocument = undefined;
+      blueprintClarification = undefined;
+    }
+  }
   const updated = {
     ...params.session,
     stage: "bootstrap-complete" as const,
@@ -501,6 +536,12 @@ async function completeChatSetupBootstrap(params: {
       blueprintPath: payload.blueprint?.blueprintPath,
       blueprintStatus: payload.blueprint?.status,
       blueprintRevisionId: payload.blueprint?.revisionId,
+      blueprintGoalSummary: blueprintDocument?.goalSummary ?? undefined,
+      workstreamCandidateCount: blueprintDocument?.workstreamCandidateCount,
+      openQuestionCount: blueprintDocument?.openQuestionCount,
+      humanGateCount: blueprintDocument?.humanGateCount,
+      clarificationQuestions: blueprintClarification?.questions ?? undefined,
+      clarificationSuggestions: blueprintClarification?.suggestions ?? undefined,
       nextAction: payload.nextAction,
       cliRunCommand: payload.handoff?.cliRunCommand,
       blueprintCommand: payload.handoff?.blueprintCommand,
