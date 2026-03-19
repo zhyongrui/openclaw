@@ -3994,6 +3994,76 @@ describe("openclawCodeBootstrapCommand", () => {
     expect(stageGates.exists).toBe(true);
   });
 
+  it("treats a truly empty repo as blueprint-first bootstrap instead of requiring fake test commands", async () => {
+    const operatorRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-bootstrap-empty-blueprint-operator-"),
+    );
+    const targetRepoRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-bootstrap-empty-blueprint-target-"),
+    );
+    vi.stubEnv("GH_TOKEN", "ghs_bootstrap_token");
+
+    const setupCheckSpy = vi
+      .spyOn(openclawCodeBootstrapInternals, "runSetupCheck")
+      .mockReturnValue({
+        payload: {
+          ok: true,
+          strict: true,
+          repoRoot: "/operator/repo",
+          operatorRoot,
+          readiness: {
+            basic: true,
+            strict: true,
+            lowRiskProofReady: true,
+            fallbackProofReady: false,
+            promotionReady: true,
+            gatewayReachable: false,
+            routeProbeReady: true,
+            routeProbeSkipped: false,
+            builtStartupProofRequested: false,
+            builtStartupProofReady: false,
+            nextAction: "ready-for-low-risk-proof",
+          },
+          summary: {
+            pass: 9,
+            warn: 0,
+            fail: 0,
+          },
+          checks: [],
+        },
+        stderr: "",
+        status: 0,
+      });
+    const webhookUrlSpy = vi
+      .spyOn(openclawCodeBootstrapInternals, "resolveWebhookUrl")
+      .mockResolvedValue({ url: null, source: null });
+
+    await openclawCodeBootstrapCommand(
+      {
+        repo: "acme/demo",
+        repoRoot: targetRepoRoot,
+        stateDir: operatorRoot,
+        baseBranch: "main",
+        startGateway: false,
+        probeBuiltStartup: false,
+        json: true,
+      },
+      runtime,
+    );
+
+    setupCheckSpy.mockRestore();
+    webhookUrlSpy.mockRestore();
+
+    const payload = JSON.parse(runtime.log.mock.calls.at(-1)?.[0] ?? "null");
+    expect(payload.config.testCommands).toEqual([]);
+    expect(payload.config.testCommandSource).toBe("empty-repo-blueprint");
+    expect(payload.config.blueprintFirstBootstrap).toBe(true);
+    expect(payload.nextAction).toBe("clarify-project-blueprint");
+    expect(payload.handoff.blueprintClarifyCommand).toContain("blueprint-clarify");
+    expect(payload.handoff.blueprintAgreeCommand).toContain("blueprint-set-status");
+    expect(payload.handoff.blueprintDecomposeCommand).toContain("blueprint-decompose");
+  });
+
   it("reuses existing operator config defaults and accepts explicit chat targets", async () => {
     const operatorRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-bootstrap-existing-"));
     const targetRepoRoot = await mkdtemp(

@@ -484,6 +484,9 @@ interface BootstrapHandoffPlan {
   operatorStatusCommand: string;
   cliRunCommand: string;
   blueprintCommand: string;
+  blueprintClarifyCommand: string;
+  blueprintAgreeCommand: string;
+  blueprintDecomposeCommand: string;
   gatesCommand: string;
   chatBindCommand: string | null;
   chatStartCommand: string | null;
@@ -822,6 +825,7 @@ async function detectBootstrapTestCommands(repoRoot: string): Promise<{
   source:
     | "explicit"
     | "existing-config"
+    | "empty-repo-blueprint"
     | "vitest-openclawcode"
     | "package-manager"
     | "go"
@@ -868,6 +872,34 @@ async function detectBootstrapTestCommands(repoRoot: string): Promise<{
     (await pathExists(path.join(repoRoot, "pytest.ini")))
   ) {
     return { commands: ["pytest"], source: "pytest" };
+  }
+
+  const trackedFiles = runGitCommand({
+    cwd: repoRoot,
+    args: ["ls-files"],
+    allowFailure: true,
+  });
+  if (!trackedFiles) {
+    const repoEntries = await readdir(repoRoot);
+    const meaningfulEntries = repoEntries.filter((entry) => {
+      if (entry === ".git" || entry === ".github") {
+        return false;
+      }
+      if (entry.startsWith(".")) {
+        return false;
+      }
+      const normalized = entry.toLowerCase();
+      if (normalized.startsWith("readme") || normalized.startsWith("license")) {
+        return false;
+      }
+      return true;
+    });
+    if (meaningfulEntries.length === 0) {
+      return {
+        commands: [],
+        source: "empty-repo-blueprint",
+      };
+    }
   }
 
   throw new Error(
@@ -1318,6 +1350,7 @@ function buildBootstrapHandoffPlan(params: {
   repoRef: { owner: string; repo: string };
   targetRepoRoot: string;
   mode: "cli-only" | "chatops";
+  blueprintFirstBootstrap: boolean;
   notifyBindingMode: BootstrapNotifyBindingMode;
   notifyChannel: string;
   notifyTarget: string;
@@ -1329,7 +1362,9 @@ function buildBootstrapHandoffPlan(params: {
       ? "chatops"
       : "cli-only";
   const reason =
-    recommendedProofMode === "chatops"
+    params.blueprintFirstBootstrap
+      ? "Blueprint-first bootstrap is ready; clarify and decompose the project blueprint before the first issue run."
+      : recommendedProofMode === "chatops"
       ? "Chat notifications are already routed to a concrete target."
       : params.mode === "chatops"
         ? "ChatOps is configured, but the repo still needs a real conversation bind."
@@ -1340,6 +1375,9 @@ function buildBootstrapHandoffPlan(params: {
     operatorStatusCommand: "openclaw code operator-status-snapshot-show --json",
     cliRunCommand: `openclaw code run --issue <issue-number> --owner ${params.repoRef.owner} --repo ${params.repoRef.repo} --repo-root ${shellQuoteArg(params.targetRepoRoot)}`,
     blueprintCommand: `/occode-blueprint ${params.repoKey}`,
+    blueprintClarifyCommand: `openclaw code blueprint-clarify --repo-root ${shellQuoteArg(params.targetRepoRoot)} --json`,
+    blueprintAgreeCommand: `openclaw code blueprint-set-status --repo-root ${shellQuoteArg(params.targetRepoRoot)} --status agreed --json`,
+    blueprintDecomposeCommand: `openclaw code blueprint-decompose --repo-root ${shellQuoteArg(params.targetRepoRoot)} --json`,
     gatesCommand: `/occode-gates ${params.repoKey}`,
     chatBindCommand:
       params.mode === "chatops" && params.notifyBindingMode === "chat-placeholder"
@@ -3061,6 +3099,7 @@ export async function openclawCodeBootstrapCommand(
     opts.verifierAgent?.trim() ||
     existingOperatorRepoConfig?.verifierAgent ||
     DEFAULT_OPENCLAWCODE_BOOTSTRAP_VERIFIER_AGENT;
+  const blueprintFirstBootstrap = testCommandsResult.source === "empty-repo-blueprint";
 
   const envFilePath = path.join(operatorStateDir, "openclawcode.env");
   const configPath = path.join(operatorStateDir, "openclaw.json");
@@ -3178,7 +3217,9 @@ export async function openclawCodeBootstrapCommand(
     probeBuiltStartup: opts.probeBuiltStartup !== false,
   });
   const nextAction =
-    notifyBindingMode === "chat-placeholder"
+    blueprintFirstBootstrap
+      ? "clarify-project-blueprint"
+      : notifyBindingMode === "chat-placeholder"
       ? "connect-chat-and-run-occode-bind"
       : webhook.action === "failed"
         ? "review-github-webhook-permissions"
@@ -3195,6 +3236,7 @@ export async function openclawCodeBootstrapCommand(
     repoRef,
     targetRepoRoot,
     mode,
+    blueprintFirstBootstrap,
     notifyBindingMode,
     notifyChannel,
     notifyTarget,
@@ -3249,6 +3291,7 @@ export async function openclawCodeBootstrapCommand(
       verifierAgent,
       testCommands: testCommandsResult.commands,
       testCommandSource: testCommandsResult.source,
+      blueprintFirstBootstrap,
     },
     tunnel,
     webhook,
@@ -3320,6 +3363,11 @@ export async function openclawCodeBootstrapCommand(
     `Proof readiness: cli=${proofReadiness.cliProofReady ? "ready" : "blocked"} chat=${proofReadiness.chatProofReady ? "ready" : "blocked"} webhook=${proofReadiness.webhookReady ? "ready" : "blocked"}`,
   );
   runtime.log(`Recommended proof mode: ${handoff.recommendedProofMode} | ${handoff.reason}`);
+  if (blueprintFirstBootstrap) {
+    runtime.log(`Blueprint clarify: ${handoff.blueprintClarifyCommand}`);
+    runtime.log(`Blueprint agree: ${handoff.blueprintAgreeCommand}`);
+    runtime.log(`Blueprint decompose: ${handoff.blueprintDecomposeCommand}`);
+  }
   runtime.log(`CLI proof: ${handoff.cliRunCommand}`);
   runtime.log(`Blueprint inspect: ${handoff.blueprintCommand}`);
   runtime.log(`Stage gates inspect: ${handoff.gatesCommand}`);

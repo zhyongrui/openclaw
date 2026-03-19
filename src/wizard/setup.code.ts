@@ -30,6 +30,9 @@ type OnboardingBootstrapSummary = {
   blueprint?: {
     blueprintPath?: string;
   };
+  config?: {
+    blueprintFirstBootstrap?: boolean;
+  };
   handoff?: {
     cliRunCommand?: string | null;
   };
@@ -250,9 +253,6 @@ async function handleNewRepositorySetup(params: {
       progress.update(`Bootstrapping ${created.owner}/${created.repo}…`);
       const payload = await runBootstrapWithCapturedJson({
         repo: `${created.owner}/${created.repo}`,
-        bootstrapOpts: {
-          test: ["echo no-tests-yet"],
-        },
       });
 
       await prompter.note(
@@ -263,7 +263,9 @@ async function handleNewRepositorySetup(params: {
           payload.blueprint?.blueprintPath
             ? `Blueprint: ${payload.blueprint.blueprintPath}`
             : undefined,
-          "Bootstrap used a placeholder test command for the empty repo: `echo no-tests-yet`.",
+          payload.config?.blueprintFirstBootstrap
+            ? "Bootstrap detected an empty repo and entered blueprint-first startup mode."
+            : undefined,
           payload.handoff?.cliRunCommand ? `Next: ${payload.handoff.cliRunCommand}` : undefined,
           payload.nextAction ? `Status: ${payload.nextAction}` : undefined,
         ]

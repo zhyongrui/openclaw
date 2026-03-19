@@ -73,6 +73,10 @@ See `single-login-bootstrap-proposal.md` for the target end state.
 - unique saved chat-target reuse when bootstrap is asked for ChatOps and the
   operator state already has one unambiguous binding
 - `PROJECT-BLUEPRINT.md` scaffold creation in the target repo when missing
+- true blueprint-first bootstrap for genuinely empty repos:
+  - no placeholder test command is persisted
+  - bootstrap reports `empty-repo-blueprint`
+  - handoff commands now include blueprint clarify / agree / decompose steps
 - role-routing, discovery, and stage-gate artifact seeding
 - local gateway startup attempt
 - strict setup-check plus built-startup proof

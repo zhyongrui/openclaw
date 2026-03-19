@@ -153,12 +153,23 @@ Use this when you want the fastest proof on a new machine.
 openclaw code bootstrap --repo <owner>/<repo> --json
 ```
 
-2. then run:
+2. if bootstrap reports a normal testable repo, then run:
 
 ```bash
 openclaw code blueprint-init --title "Project Blueprint" --goal "Describe the target goal"
 openclaw code run --issue 123 --owner <owner> --repo <repo> --repo-root <absolute-path-to-repo>
 ```
+
+3. if bootstrap reports `testCommandSource = "empty-repo-blueprint"`, use the
+   emitted handoff commands first:
+
+```bash
+openclaw code blueprint-clarify --repo-root <absolute-path-to-repo> --json
+openclaw code blueprint-set-status --repo-root <absolute-path-to-repo> --status agreed --json
+openclaw code blueprint-decompose --repo-root <absolute-path-to-repo> --json
+```
+
+Then materialize or pick the first issue only after the blueprint is clarified.
 
 ### Path B: ChatOps
 

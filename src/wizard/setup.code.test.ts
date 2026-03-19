@@ -34,6 +34,9 @@ describe("runOnboardingOpenClawCode", () => {
           blueprint: {
             blueprintPath: "/home/zyr/pros/iGallery/PROJECT-BLUEPRINT.md",
           },
+          config: {
+            blueprintFirstBootstrap: true,
+          },
           handoff: {
             cliRunCommand:
               "openclaw code run --issue <issue-number> --owner zhyongrui --repo iGallery",
@@ -101,7 +104,6 @@ describe("runOnboardingOpenClawCode", () => {
         repo: "zhyongrui/iGallery",
         mode: "auto",
         json: true,
-        test: ["echo no-tests-yet"],
       }),
       expect.any(Object),
     );
@@ -109,7 +111,7 @@ describe("runOnboardingOpenClawCode", () => {
     const readyNote = noteCalls.find((call) => call[1] === "OpenClaw Code repo ready");
     expect(readyNote?.[0]).toContain("Created repo: zhyongrui/iGallery");
     expect(readyNote?.[0]).toContain("PROJECT-BLUEPRINT.md");
-    expect(readyNote?.[0]).toContain("echo no-tests-yet");
+    expect(readyNote?.[0]).toContain("blueprint-first startup mode");
     expect(progressUpdate).toHaveBeenCalled();
     expect(progressStop).toHaveBeenCalled();
   });
