@@ -9,6 +9,7 @@ import {
   inspectOnboardingGitHubCliDeviceLogin,
   onboardingOpenClawCodeDeps,
   parseOnboardingRepositoryCreationInput,
+  runOnboardingOpenClawCodeBootstrap,
   runOnboardingOpenClawCode,
   startOnboardingGitHubCliDeviceLogin,
   type ResolvedOnboardingGitHubToken,
@@ -359,5 +360,49 @@ describe("runOnboardingOpenClawCode", () => {
         repo: "iGallery",
       }),
     ).rejects.toThrow("name already exists");
+  });
+
+  it("captures bootstrap JSON for chat-native setup flows", async () => {
+    onboardingOpenClawCodeDeps.bootstrapRepository = vi.fn(async (_opts, runtime) => {
+      runtime.log(
+        JSON.stringify({
+          repo: {
+            owner: "zhyongrui",
+            repo: "iGallery",
+            repoKey: "zhyongrui/iGallery",
+            repoRoot: "/home/zyr/pros/iGallery",
+            checkoutAction: "cloned",
+          },
+          blueprint: {
+            blueprintPath: "/home/zyr/pros/iGallery/PROJECT-BLUEPRINT.md",
+            status: "clarified",
+            revisionId: "rev-2",
+          },
+          handoff: {
+            blueprintCommand: "/occode-blueprint zhyongrui/iGallery",
+            cliRunCommand:
+              "openclaw code run --issue <issue-number> --owner zhyongrui --repo iGallery",
+          },
+          nextAction: "clarify-project-blueprint",
+        }),
+      );
+    });
+
+    await expect(
+      runOnboardingOpenClawCodeBootstrap({
+        repo: "zhyongrui/iGallery",
+      }),
+    ).resolves.toMatchObject({
+      repo: {
+        repoKey: "zhyongrui/iGallery",
+      },
+      blueprint: {
+        status: "clarified",
+      },
+      handoff: {
+        blueprintCommand: "/occode-blueprint zhyongrui/iGallery",
+      },
+      nextAction: "clarify-project-blueprint",
+    });
   });
 });

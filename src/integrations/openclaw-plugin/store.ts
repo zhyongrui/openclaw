@@ -43,7 +43,8 @@ export interface OpenClawCodePendingIntakeDraft {
 
 export type OpenClawCodeSetupSessionStage =
   | "awaiting-github-device-auth"
-  | "github-authenticated";
+  | "github-authenticated"
+  | "bootstrap-complete";
 
 export interface OpenClawCodeSetupSession {
   notifyChannel: string;
@@ -53,6 +54,35 @@ export interface OpenClawCodeSetupSession {
   pendingRepoName?: string;
   stage: OpenClawCodeSetupSessionStage;
   githubAuthSource?: "GH_TOKEN" | "GITHUB_TOKEN" | "gh-auth-token";
+  bootstrap?: {
+    completedAt: string;
+    repoRoot?: string;
+    checkoutAction?: string;
+    blueprintPath?: string;
+    blueprintStatus?: string;
+    blueprintRevisionId?: string;
+    nextAction?: string;
+    cliRunCommand?: string | null;
+    blueprintCommand?: string | null;
+    blueprintClarifyCommand?: string | null;
+    blueprintAgreeCommand?: string | null;
+    blueprintDecomposeCommand?: string | null;
+    gatesCommand?: string | null;
+    chatBindCommand?: string | null;
+    chatStartCommand?: string | null;
+    webhookRetryCommand?: string | null;
+    recommendedProofMode?: "cli-only" | "chatops";
+    reason?: string;
+    proofReadiness?: {
+      cliProofReady?: boolean;
+      chatProofReady?: boolean;
+      webhookReady?: boolean;
+      webhookUrlReady?: boolean;
+      needsChatBind?: boolean;
+      needsPublicWebhookUrl?: boolean;
+      recommendedProofMode?: "cli-only" | "chatops";
+    };
+  };
   githubDeviceAuth?: {
     pid?: number;
     logPath: string;
@@ -292,7 +322,8 @@ function normalizeSetupSession(raw: unknown): OpenClawCodeSetupSession | undefin
   }
   if (
     candidate.stage !== "awaiting-github-device-auth" &&
-    candidate.stage !== "github-authenticated"
+    candidate.stage !== "github-authenticated" &&
+    candidate.stage !== "bootstrap-complete"
   ) {
     return undefined;
   }
@@ -311,6 +342,137 @@ function normalizeSetupSession(raw: unknown): OpenClawCodeSetupSession | undefin
     pendingRepoName:
       typeof candidate.pendingRepoName === "string" ? candidate.pendingRepoName : undefined,
     stage: candidate.stage,
+    bootstrap:
+      candidate.bootstrap && typeof candidate.bootstrap === "object"
+        ? {
+            completedAt:
+              typeof candidate.bootstrap.completedAt === "string"
+                ? candidate.bootstrap.completedAt
+                : candidate.updatedAt,
+            repoRoot:
+              typeof candidate.bootstrap.repoRoot === "string"
+                ? candidate.bootstrap.repoRoot
+                : undefined,
+            checkoutAction:
+              typeof candidate.bootstrap.checkoutAction === "string"
+                ? candidate.bootstrap.checkoutAction
+                : undefined,
+            blueprintPath:
+              typeof candidate.bootstrap.blueprintPath === "string"
+                ? candidate.bootstrap.blueprintPath
+                : undefined,
+            blueprintStatus:
+              typeof candidate.bootstrap.blueprintStatus === "string"
+                ? candidate.bootstrap.blueprintStatus
+                : undefined,
+            blueprintRevisionId:
+              typeof candidate.bootstrap.blueprintRevisionId === "string"
+                ? candidate.bootstrap.blueprintRevisionId
+                : undefined,
+            nextAction:
+              typeof candidate.bootstrap.nextAction === "string"
+                ? candidate.bootstrap.nextAction
+                : undefined,
+            cliRunCommand:
+              typeof candidate.bootstrap.cliRunCommand === "string"
+                ? candidate.bootstrap.cliRunCommand
+                : candidate.bootstrap.cliRunCommand === null
+                  ? null
+                  : undefined,
+            blueprintCommand:
+              typeof candidate.bootstrap.blueprintCommand === "string"
+                ? candidate.bootstrap.blueprintCommand
+                : candidate.bootstrap.blueprintCommand === null
+                  ? null
+                  : undefined,
+            blueprintClarifyCommand:
+              typeof candidate.bootstrap.blueprintClarifyCommand === "string"
+                ? candidate.bootstrap.blueprintClarifyCommand
+                : candidate.bootstrap.blueprintClarifyCommand === null
+                  ? null
+                  : undefined,
+            blueprintAgreeCommand:
+              typeof candidate.bootstrap.blueprintAgreeCommand === "string"
+                ? candidate.bootstrap.blueprintAgreeCommand
+                : candidate.bootstrap.blueprintAgreeCommand === null
+                  ? null
+                  : undefined,
+            blueprintDecomposeCommand:
+              typeof candidate.bootstrap.blueprintDecomposeCommand === "string"
+                ? candidate.bootstrap.blueprintDecomposeCommand
+                : candidate.bootstrap.blueprintDecomposeCommand === null
+                  ? null
+                  : undefined,
+            gatesCommand:
+              typeof candidate.bootstrap.gatesCommand === "string"
+                ? candidate.bootstrap.gatesCommand
+                : candidate.bootstrap.gatesCommand === null
+                  ? null
+                  : undefined,
+            chatBindCommand:
+              typeof candidate.bootstrap.chatBindCommand === "string"
+                ? candidate.bootstrap.chatBindCommand
+                : candidate.bootstrap.chatBindCommand === null
+                  ? null
+                  : undefined,
+            chatStartCommand:
+              typeof candidate.bootstrap.chatStartCommand === "string"
+                ? candidate.bootstrap.chatStartCommand
+                : candidate.bootstrap.chatStartCommand === null
+                  ? null
+                  : undefined,
+            webhookRetryCommand:
+              typeof candidate.bootstrap.webhookRetryCommand === "string"
+                ? candidate.bootstrap.webhookRetryCommand
+                : candidate.bootstrap.webhookRetryCommand === null
+                  ? null
+                  : undefined,
+            recommendedProofMode:
+              candidate.bootstrap.recommendedProofMode === "cli-only" ||
+              candidate.bootstrap.recommendedProofMode === "chatops"
+                ? candidate.bootstrap.recommendedProofMode
+                : undefined,
+            reason:
+              typeof candidate.bootstrap.reason === "string"
+                ? candidate.bootstrap.reason
+                : undefined,
+            proofReadiness:
+              candidate.bootstrap.proofReadiness &&
+              typeof candidate.bootstrap.proofReadiness === "object"
+                ? {
+                    cliProofReady:
+                      typeof candidate.bootstrap.proofReadiness.cliProofReady === "boolean"
+                        ? candidate.bootstrap.proofReadiness.cliProofReady
+                        : undefined,
+                    chatProofReady:
+                      typeof candidate.bootstrap.proofReadiness.chatProofReady === "boolean"
+                        ? candidate.bootstrap.proofReadiness.chatProofReady
+                        : undefined,
+                    webhookReady:
+                      typeof candidate.bootstrap.proofReadiness.webhookReady === "boolean"
+                        ? candidate.bootstrap.proofReadiness.webhookReady
+                        : undefined,
+                    webhookUrlReady:
+                      typeof candidate.bootstrap.proofReadiness.webhookUrlReady === "boolean"
+                        ? candidate.bootstrap.proofReadiness.webhookUrlReady
+                        : undefined,
+                    needsChatBind:
+                      typeof candidate.bootstrap.proofReadiness.needsChatBind === "boolean"
+                        ? candidate.bootstrap.proofReadiness.needsChatBind
+                        : undefined,
+                    needsPublicWebhookUrl:
+                      typeof candidate.bootstrap.proofReadiness.needsPublicWebhookUrl === "boolean"
+                        ? candidate.bootstrap.proofReadiness.needsPublicWebhookUrl
+                        : undefined,
+                    recommendedProofMode:
+                      candidate.bootstrap.proofReadiness.recommendedProofMode === "cli-only" ||
+                      candidate.bootstrap.proofReadiness.recommendedProofMode === "chatops"
+                        ? candidate.bootstrap.proofReadiness.recommendedProofMode
+                        : undefined,
+                  }
+                : undefined,
+          }
+        : undefined,
     githubAuthSource:
       candidate.githubAuthSource === "GH_TOKEN" ||
       candidate.githubAuthSource === "GITHUB_TOKEN" ||

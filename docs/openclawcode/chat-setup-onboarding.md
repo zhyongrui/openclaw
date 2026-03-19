@@ -110,6 +110,7 @@ Initial MVP state:
 
 - `awaiting-github-device-auth`
 - `github-authenticated`
+- `bootstrap-complete`
 
 Persisted fields:
 
@@ -130,6 +131,13 @@ Persisted fields:
   - `startedAt`
   - `completedAt`
   - `failureReason`
+- `bootstrap`
+  - `repoRoot`
+  - `checkoutAction`
+  - `blueprintPath`
+  - `nextAction`
+  - `proofReadiness`
+  - handoff commands
 
 This belongs in the existing ChatOps store so chat setup survives process
 restart and uses the same durability model as approvals, reroutes, and intake
@@ -178,7 +186,10 @@ The operator never pastes tokens into chat.
 3. `github-authenticated`
    - host auth is now ready
    - chat can validate an existing repo or create a new repo
-   - chat can then move into bootstrap handoff
+   - chat can then move into bootstrap execution
+4. `bootstrap-complete`
+   - bootstrap JSON has been captured into setup state
+   - chat can show the exact blueprint and proof handoff commands
 
 Future states can extend this into:
 
@@ -201,11 +212,11 @@ Future states can extend this into:
 After GitHub auth is stable in chat, the next slice should extend the same
 session into:
 
-1. exact bootstrap progress and next-action reporting in chat
-2. optional auto-bind of the current conversation as the repo notification
+1. optional auto-bind of the current conversation as the repo notification
    target
-3. blueprint draft generation for `new-project` before repo creation
-4. blueprint alignment against repo reality for `existing-repo`
+2. blueprint draft generation for `new-project` before repo creation
+3. blueprint alignment against repo reality for `existing-repo`
+4. a guided chat-native discussion loop that updates the blueprint directly
 
 That is the path from "chat can start auth" to "chat can complete first-run
 configuration end-to-end".

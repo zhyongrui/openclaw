@@ -41,6 +41,7 @@ import {
   onboardingOpenClawCodeDeps,
   parseOnboardingRepositoryCreationInput,
   resolveOnboardingGitHubToken,
+  runOnboardingOpenClawCodeBootstrap,
   startOnboardingGitHubCliDeviceLogin,
   type OnboardingProjectMode,
   type OnboardingGitHubCliDeviceLoginStatus,
@@ -307,6 +308,43 @@ function buildChatSetupRepoReadyMessage(params: {
   ].join("\n");
 }
 
+function buildChatSetupBootstrapCompleteMessage(params: {
+  source: "GH_TOKEN" | "GITHUB_TOKEN" | "gh-auth-token";
+  repoKey: string;
+  bootstrap: NonNullable<
+    NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>["bootstrap"]
+  >;
+}): string {
+  return [
+    "OpenClaw Code bootstrap finished for this setup session.",
+    `Source: ${params.source}`,
+    `Repo: ${params.repoKey}`,
+    params.bootstrap.repoRoot ? `Local path: ${params.bootstrap.repoRoot}` : undefined,
+    params.bootstrap.checkoutAction ? `Checkout: ${params.bootstrap.checkoutAction}` : undefined,
+    params.bootstrap.blueprintPath ? `Blueprint: ${params.bootstrap.blueprintPath}` : undefined,
+    params.bootstrap.nextAction ? `Status: ${params.bootstrap.nextAction}` : undefined,
+    params.bootstrap.cliRunCommand ? `CLI proof: ${params.bootstrap.cliRunCommand}` : undefined,
+    params.bootstrap.blueprintCommand ? `Chat blueprint: ${params.bootstrap.blueprintCommand}` : undefined,
+    params.bootstrap.blueprintClarifyCommand
+      ? `Blueprint clarify: ${params.bootstrap.blueprintClarifyCommand}`
+      : undefined,
+    params.bootstrap.blueprintAgreeCommand
+      ? `Blueprint agree: ${params.bootstrap.blueprintAgreeCommand}`
+      : undefined,
+    params.bootstrap.blueprintDecomposeCommand
+      ? `Blueprint decompose: ${params.bootstrap.blueprintDecomposeCommand}`
+      : undefined,
+    params.bootstrap.gatesCommand ? `Stage gates: ${params.bootstrap.gatesCommand}` : undefined,
+    params.bootstrap.chatBindCommand ? `Chat bind: ${params.bootstrap.chatBindCommand}` : undefined,
+    params.bootstrap.chatStartCommand ? `Chat proof: ${params.bootstrap.chatStartCommand}` : undefined,
+    params.bootstrap.webhookRetryCommand
+      ? `Webhook retry: ${params.bootstrap.webhookRetryCommand}`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 async function completeChatSetupProjectSelection(params: {
   store: OpenClawCodeChatopsStore;
   session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
@@ -419,6 +457,77 @@ async function completeChatSetupProjectSelection(params: {
   return { session: params.session };
 }
 
+async function completeChatSetupBootstrap(params: {
+  store: OpenClawCodeChatopsStore;
+  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+}): Promise<{
+  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+  message?: string;
+}> {
+  if (!params.session.githubAuthSource || !params.session.repoKey) {
+    return { session: params.session };
+  }
+  if (params.session.stage === "bootstrap-complete" && params.session.bootstrap) {
+    return {
+      session: params.session,
+      message: buildChatSetupBootstrapCompleteMessage({
+        source: params.session.githubAuthSource,
+        repoKey: params.session.repoKey,
+        bootstrap: params.session.bootstrap,
+      }),
+    };
+  }
+  let payload;
+  try {
+    payload = await runOnboardingOpenClawCodeBootstrap({
+      repo: params.session.repoKey,
+    });
+  } catch (error) {
+    return {
+      session: params.session,
+      message: buildChatSetupFailedMessage({
+        reason: error instanceof Error ? error.message : String(error),
+        repoKey: params.session.repoKey,
+      }),
+    };
+  }
+  const updated = {
+    ...params.session,
+    stage: "bootstrap-complete" as const,
+    bootstrap: {
+      completedAt: new Date().toISOString(),
+      repoRoot: payload.repo?.repoRoot,
+      checkoutAction: payload.repo?.checkoutAction,
+      blueprintPath: payload.blueprint?.blueprintPath,
+      blueprintStatus: payload.blueprint?.status,
+      blueprintRevisionId: payload.blueprint?.revisionId,
+      nextAction: payload.nextAction,
+      cliRunCommand: payload.handoff?.cliRunCommand,
+      blueprintCommand: payload.handoff?.blueprintCommand,
+      blueprintClarifyCommand: payload.handoff?.blueprintClarifyCommand,
+      blueprintAgreeCommand: payload.handoff?.blueprintAgreeCommand,
+      blueprintDecomposeCommand: payload.handoff?.blueprintDecomposeCommand,
+      gatesCommand: payload.handoff?.gatesCommand,
+      chatBindCommand: payload.handoff?.chatBindCommand,
+      chatStartCommand: payload.handoff?.chatStartCommand,
+      webhookRetryCommand: payload.handoff?.webhookRetryCommand,
+      recommendedProofMode: payload.handoff?.recommendedProofMode,
+      reason: payload.handoff?.reason,
+      proofReadiness: payload.proofReadiness,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+  await params.store.upsertSetupSession(updated);
+  return {
+    session: updated,
+    message: buildChatSetupBootstrapCompleteMessage({
+      source: updated.githubAuthSource,
+      repoKey: updated.repoKey,
+      bootstrap: updated.bootstrap,
+    }),
+  };
+}
+
 async function syncChatSetupSession(params: {
   store: OpenClawCodeChatopsStore;
   session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
@@ -430,7 +539,10 @@ async function syncChatSetupSession(params: {
   if (resolvedToken) {
     const updated = {
       ...params.session,
-      stage: "github-authenticated" as const,
+      stage:
+        params.session.stage === "bootstrap-complete"
+          ? ("bootstrap-complete" as const)
+          : ("github-authenticated" as const),
       githubAuthSource: resolvedToken.source,
       githubDeviceAuth: params.session.githubDeviceAuth
         ? {
@@ -457,7 +569,10 @@ async function syncChatSetupSession(params: {
   if (status.state === "authorized") {
     const updated = {
       ...params.session,
-      stage: "github-authenticated" as const,
+      stage:
+        params.session.stage === "bootstrap-complete"
+          ? ("bootstrap-complete" as const)
+          : ("github-authenticated" as const),
       githubAuthSource: status.source,
       githubDeviceAuth: {
         ...params.session.githubDeviceAuth,
@@ -4760,6 +4875,17 @@ export default {
             store,
             session: nextSession,
           });
+          if (completed.session.repoKey) {
+            const bootstrapped = await completeChatSetupBootstrap({
+              store,
+              session: completed.session,
+            });
+            if (bootstrapped.message) {
+              return {
+                text: bootstrapped.message,
+              };
+            }
+          }
           if (completed.message) {
             return {
               text: completed.message,
@@ -4820,6 +4946,17 @@ export default {
             store,
             session: nextSession,
           });
+          if (completed.session.repoKey) {
+            const bootstrapped = await completeChatSetupBootstrap({
+              store,
+              session: completed.session,
+            });
+            if (bootstrapped.message) {
+              return {
+                text: bootstrapped.message,
+              };
+            }
+          }
           if (completed.message) {
             return {
               text: completed.message,
@@ -4908,11 +5045,33 @@ export default {
             store,
             session: synced.session,
           });
+          if (completed.session.repoKey) {
+            const bootstrapped = await completeChatSetupBootstrap({
+              store,
+              session: completed.session,
+            });
+            if (bootstrapped.message) {
+              return {
+                text: bootstrapped.message,
+              };
+            }
+          }
           if (completed.message) {
             return {
               text: completed.message,
             };
           }
+        }
+        if (synced.session.stage === "bootstrap-complete" && synced.session.githubAuthSource) {
+          return {
+            text: buildChatSetupBootstrapCompleteMessage({
+              source: synced.session.githubAuthSource,
+              repoKey: synced.session.repoKey ?? "unknown",
+              bootstrap: synced.session.bootstrap ?? {
+                completedAt: new Date().toISOString(),
+              },
+            }),
+          };
         }
         if (synced.session.stage === "github-authenticated" && synced.session.githubAuthSource) {
           return {

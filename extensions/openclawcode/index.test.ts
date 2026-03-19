@@ -27,6 +27,7 @@ const mocked = vi.hoisted(() => ({
   startOnboardingGitHubCliDeviceLogin: vi.fn(),
   inspectOnboardingGitHubCliDeviceLogin: vi.fn(),
   createOnboardingRepositoryViaGh: vi.fn(),
+  runOnboardingOpenClawCodeBootstrap: vi.fn(),
 }));
 
 vi.mock("../../src/infra/http-body.js", () => ({
@@ -45,6 +46,7 @@ vi.mock("../../src/wizard/setup.code.js", async (importOriginal) => {
     startOnboardingGitHubCliDeviceLogin: mocked.startOnboardingGitHubCliDeviceLogin,
     inspectOnboardingGitHubCliDeviceLogin: mocked.inspectOnboardingGitHubCliDeviceLogin,
     createOnboardingRepositoryViaGh: mocked.createOnboardingRepositoryViaGh,
+    runOnboardingOpenClawCodeBootstrap: mocked.runOnboardingOpenClawCodeBootstrap,
   };
 });
 
@@ -546,6 +548,39 @@ describe("openclawcode extension", () => {
     mocked.startOnboardingGitHubCliDeviceLogin.mockReset();
     mocked.inspectOnboardingGitHubCliDeviceLogin.mockReset();
     mocked.createOnboardingRepositoryViaGh.mockReset();
+    mocked.runOnboardingOpenClawCodeBootstrap.mockReset();
+    mocked.runOnboardingOpenClawCodeBootstrap.mockResolvedValue({
+      repo: {
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        repoKey: "zhyongrui/openclawcode",
+        repoRoot: "/home/zyr/pros/openclawcode-target",
+        checkoutAction: "cloned",
+      },
+      blueprint: {
+        blueprintPath: "/home/zyr/pros/openclawcode-target/PROJECT-BLUEPRINT.md",
+        status: "clarified",
+        revisionId: "rev-1",
+      },
+      handoff: {
+        cliRunCommand:
+          "openclaw code run --issue <issue-number> --owner zhyongrui --repo openclawcode",
+        blueprintCommand: "/occode-blueprint zhyongrui/openclawcode",
+        blueprintClarifyCommand:
+          "openclaw code blueprint-clarify --repo-root /home/zyr/pros/openclawcode-target --json",
+        blueprintAgreeCommand:
+          "openclaw code blueprint-set-status --repo-root /home/zyr/pros/openclawcode-target --status agreed --json",
+        blueprintDecomposeCommand:
+          "openclaw code blueprint-decompose --repo-root /home/zyr/pros/openclawcode-target --json",
+        gatesCommand: "/occode-gates zhyongrui/openclawcode",
+      },
+      nextAction: "clarify-project-blueprint",
+      proofReadiness: {
+        cliProofReady: true,
+        chatProofReady: false,
+        recommendedProofMode: "cli-only",
+      },
+    });
     onboardingOpenClawCodeDeps.fetchAuthenticatedViewer = vi.fn(
       async () => ({ login: "zhyongrui" }),
     );
@@ -3144,12 +3179,16 @@ describe("openclawcode extension", () => {
         config: {},
       });
 
-      expect(result?.text).toContain("OpenClaw Code has an existing repo selected for this setup.");
+      expect(result?.text).toContain("OpenClaw Code bootstrap finished for this setup session.");
       expect(result?.text).toContain("Source: gh-auth-token");
       expect(result?.text).toContain("Repo: zhyongrui/iGallery");
-      expect(result?.text).toContain(
-        "openclaw code bootstrap --repo zhyongrui/iGallery --mode auto",
-      );
+      expect(result?.text).toContain("Local path: /home/zyr/pros/openclawcode-target");
+      expect(result?.text).toContain("Blueprint: /home/zyr/pros/openclawcode-target/PROJECT-BLUEPRINT.md");
+      expect(result?.text).toContain("Status: clarify-project-blueprint");
+      expect(result?.text).toContain("/occode-blueprint zhyongrui/openclawcode");
+      expect(mocked.runOnboardingOpenClawCodeBootstrap).toHaveBeenCalledWith({
+        repo: "zhyongrui/iGallery",
+      });
       expect(
         await fixture.store.getSetupSession({
           notifyChannel: "feishu",
@@ -3158,8 +3197,12 @@ describe("openclawcode extension", () => {
       ).toMatchObject({
         projectMode: "existing-repo",
         repoKey: "zhyongrui/iGallery",
-        stage: "github-authenticated",
+        stage: "bootstrap-complete",
         githubAuthSource: "gh-auth-token",
+        bootstrap: {
+          repoRoot: "/home/zyr/pros/openclawcode-target",
+          nextAction: "clarify-project-blueprint",
+        },
       });
     } finally {
       await cleanupPluginFixture(fixture);
@@ -3189,14 +3232,14 @@ describe("openclawcode extension", () => {
         config: {},
       });
 
-      expect(result?.text).toContain("OpenClaw Code created the new GitHub repo for this setup.");
+      expect(result?.text).toContain("OpenClaw Code bootstrap finished for this setup session.");
       expect(result?.text).toContain("Repo: zhyongrui/iGallery");
-      expect(result?.text).toContain(
-        "openclaw code bootstrap --repo zhyongrui/iGallery --mode auto",
-      );
       expect(mocked.createOnboardingRepositoryViaGh).toHaveBeenCalledWith({
         owner: "zhyongrui",
         repo: "iGallery",
+      });
+      expect(mocked.runOnboardingOpenClawCodeBootstrap).toHaveBeenCalledWith({
+        repo: "zhyongrui/iGallery",
       });
       expect(
         await fixture.store.getSetupSession({
@@ -3206,7 +3249,7 @@ describe("openclawcode extension", () => {
       ).toMatchObject({
         projectMode: "new-project",
         repoKey: "zhyongrui/iGallery",
-        stage: "github-authenticated",
+        stage: "bootstrap-complete",
       });
     } finally {
       await cleanupPluginFixture(fixture);
@@ -3250,20 +3293,66 @@ describe("openclawcode extension", () => {
         config: {},
       });
 
-      expect(result?.text).toContain("OpenClaw Code setup has GitHub auth ready.");
-      expect(result?.text).toContain("Selected repo: zhyongrui/openclawcode");
+      expect(result?.text).toContain("OpenClaw Code bootstrap finished for this setup session.");
+      expect(result?.text).toContain("Repo: zhyongrui/openclawcode");
+      expect(mocked.runOnboardingOpenClawCodeBootstrap).toHaveBeenCalledWith({
+        repo: "zhyongrui/openclawcode",
+      });
       expect(
         await fixture.store.getSetupSession({
           notifyChannel: "feishu",
           notifyTarget: "user:setup-chat",
         }),
       ).toMatchObject({
-        stage: "github-authenticated",
+        stage: "bootstrap-complete",
         githubAuthSource: "gh-auth-token",
         githubDeviceAuth: {
           completedAt: "2026-03-19T02:36:00.000Z",
         },
       });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("replays the saved bootstrap summary through /occode-setup-status", async () => {
+    const fixture = await registerPluginFixture();
+    await fixture.store.upsertSetupSession({
+      notifyChannel: "feishu",
+      notifyTarget: "user:setup-chat",
+      projectMode: "existing-repo",
+      repoKey: "zhyongrui/openclawcode",
+      stage: "bootstrap-complete",
+      githubAuthSource: "gh-auth-token",
+      bootstrap: {
+        completedAt: "2026-03-19T02:40:00.000Z",
+        repoRoot: "/home/zyr/pros/openclawcode-target",
+        blueprintPath: "/home/zyr/pros/openclawcode-target/PROJECT-BLUEPRINT.md",
+        nextAction: "clarify-project-blueprint",
+        blueprintCommand: "/occode-blueprint zhyongrui/openclawcode",
+      },
+      createdAt: "2026-03-19T02:35:00.000Z",
+      updatedAt: "2026-03-19T02:40:00.000Z",
+    });
+    mocked.resolveOnboardingGitHubToken.mockReturnValue({
+      token: "gho_test",
+      source: "gh-auth-token",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-setup-status")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup-status",
+        args: "",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("OpenClaw Code bootstrap finished for this setup session.");
+      expect(result?.text).toContain("Repo: zhyongrui/openclawcode");
+      expect(result?.text).toContain("/occode-blueprint zhyongrui/openclawcode");
+      expect(mocked.runOnboardingOpenClawCodeBootstrap).not.toHaveBeenCalled();
     } finally {
       await cleanupPluginFixture(fixture);
     }

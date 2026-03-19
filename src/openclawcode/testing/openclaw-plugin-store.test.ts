@@ -524,8 +524,15 @@ describe("OpenClawCodeChatopsStore", () => {
           notifyTarget: "user:setup-chat",
           projectMode: "existing-repo",
           repoKey: "zhyongrui/openclawcode",
-          stage: "github-authenticated",
+          stage: "bootstrap-complete",
           githubAuthSource: "gh-auth-token",
+          bootstrap: {
+            completedAt: "2026-03-19T02:03:00.000Z",
+            repoRoot: "/home/zyr/pros/openclawcode-target",
+            blueprintPath: "/home/zyr/pros/openclawcode-target/PROJECT-BLUEPRINT.md",
+            nextAction: "clarify-project-blueprint",
+            blueprintCommand: "/occode-blueprint zhyongrui/openclawcode",
+          },
           githubDeviceAuth: {
             pid: 321,
             logPath: "/tmp/gh-auth-login.log",
@@ -546,8 +553,11 @@ describe("OpenClawCodeChatopsStore", () => {
       expect(saved).toMatchObject({
         projectMode: "existing-repo",
         repoKey: "zhyongrui/openclawcode",
-        stage: "github-authenticated",
+        stage: "bootstrap-complete",
         githubAuthSource: "gh-auth-token",
+        bootstrap: {
+          nextAction: "clarify-project-blueprint",
+        },
         createdAt,
       });
 

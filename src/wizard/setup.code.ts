@@ -68,21 +68,43 @@ export type OnboardingGitHubCliDeviceLoginStatus =
 
 export type OnboardingProjectMode = "existing-repo" | "new-project";
 
-type OnboardingBootstrapSummary = {
+export type OnboardingBootstrapSummary = {
   repo?: {
     owner?: string;
     repo?: string;
+    repoKey?: string;
     repoRoot?: string;
     checkoutAction?: string;
   };
   blueprint?: {
     blueprintPath?: string;
+    status?: string;
+    revisionId?: string;
   };
   config?: {
     blueprintFirstBootstrap?: boolean;
   };
+  proofReadiness?: {
+    cliProofReady?: boolean;
+    chatProofReady?: boolean;
+    webhookReady?: boolean;
+    webhookUrlReady?: boolean;
+    needsChatBind?: boolean;
+    needsPublicWebhookUrl?: boolean;
+    recommendedProofMode?: "cli-only" | "chatops";
+  };
   handoff?: {
+    recommendedProofMode?: "cli-only" | "chatops";
+    reason?: string;
     cliRunCommand?: string | null;
+    blueprintCommand?: string | null;
+    blueprintClarifyCommand?: string | null;
+    blueprintAgreeCommand?: string | null;
+    blueprintDecomposeCommand?: string | null;
+    gatesCommand?: string | null;
+    chatBindCommand?: string | null;
+    chatStartCommand?: string | null;
+    webhookRetryCommand?: string | null;
   };
   nextAction?: string;
 };
@@ -506,6 +528,13 @@ async function runBootstrapWithCapturedJson(params: {
     throw new Error("Bootstrap completed but returned no JSON summary.");
   }
   return JSON.parse(raw) as OnboardingBootstrapSummary;
+}
+
+export async function runOnboardingOpenClawCodeBootstrap(params: {
+  repo: string;
+  bootstrapOpts?: Partial<OpenClawCodeBootstrapOpts>;
+}): Promise<OnboardingBootstrapSummary> {
+  return await runBootstrapWithCapturedJson(params);
 }
 
 async function handleNewRepositorySetup(params: {
