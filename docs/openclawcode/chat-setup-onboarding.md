@@ -46,6 +46,18 @@ configuration should start there too.
 
 ## MVP Command Surface
 
+### `/occode-setup new-project`
+
+Start a blueprint-first setup draft for a brand-new project before creating
+the repo.
+
+Behavior:
+
+- do not require GitHub auth yet
+- persist a setup-local blueprint draft in the current chat session
+- guide the operator to fill goal, MVP, scope, non-goals, and constraints
+- hand off into repo-name choice only after blueprint agreement
+
 ### `/occode-setup existing owner/repo`
 
 Select an existing GitHub repository for this chat-native setup session.
@@ -102,12 +114,35 @@ Behavior:
 - if no setup session exists:
   - explain how to start with `/occode-setup`
 
+### Setup-aware blueprint commands
+
+When the active setup session is a `new-project` draft, these commands operate
+on the setup draft before any repo exists yet:
+
+- `/occode-goal <goal text>`
+- `/occode-blueprint-edit <section>` with a multiline body
+- `/occode-blueprint-agree`
+- `/occode-blueprint`
+
+After agreement:
+
+- `/occode-blueprint-agree` derives 3-5 repo-name suggestions
+- `/occode-setup new <repo-name>` continues through auth, repo creation, and
+  bootstrap
+
+### Recovery controls
+
+- `/occode-setup-cancel` discards the active setup session for the current chat
+- `/occode-setup-retry` resumes or retries the active setup session
+
 ## Session Model
 
 Persist one setup session per `(notifyChannel, notifyTarget)`.
 
-Initial MVP state:
+Current setup state:
 
+- `drafting-blueprint`
+- `awaiting-repo-choice`
 - `awaiting-github-device-auth`
 - `github-authenticated`
 - `bootstrap-complete`
@@ -123,6 +158,15 @@ Persisted fields:
 - `githubAuthSource`
 - `createdAt`
 - `updatedAt`
+- `blueprintDraft`
+  - `status`
+  - `agreedAt`
+  - `repoNameSuggestions`
+  - section content keyed by blueprint section
+- `lastFailure`
+  - `step`
+  - `reason`
+  - `occurredAt`
 - `githubDeviceAuth`
   - `pid`
   - `logPath`
@@ -135,8 +179,11 @@ Persisted fields:
   - `repoRoot`
   - `checkoutAction`
   - `blueprintPath`
+  - blueprint summary fields
+  - work-item / gate counts
   - `nextAction`
   - `proofReadiness`
+  - auto-bind status
   - handoff commands
 
 This belongs in the existing ChatOps store so chat setup survives process
@@ -179,26 +226,31 @@ The operator never pastes tokens into chat.
 
 1. `idle`
    - no setup session yet
-2. `awaiting-github-device-auth`
+2. `drafting-blueprint`
+   - `new-project` goal discussion is active
+   - the setup-local blueprint draft is still incomplete or not yet agreed
+3. `awaiting-repo-choice`
+   - the setup-local blueprint draft is agreed
+   - repo-name suggestions are ready
+   - repo creation can start after the operator chooses a name
+4. `awaiting-github-device-auth`
    - GitHub auth not ready
    - device flow started on host
    - chat shows verification URL and code
-3. `github-authenticated`
+5. `github-authenticated`
    - host auth is now ready
    - chat can validate an existing repo or create a new repo
    - chat can then move into bootstrap execution
-4. `bootstrap-complete`
+6. `bootstrap-complete`
    - bootstrap JSON has been captured into setup state
-   - chat can show the exact blueprint and proof handoff commands
-   - chat can summarize the current blueprint goal, counts, and clarification
-     questions for the operator
+   - chat can show the exact blueprint, work-item, gate, and proof handoff
+     commands
+   - chat can summarize the current blueprint goal, counts, clarification
+     questions, auto-bind status, and next suggested command for the operator
 
 Future states can extend this into:
 
-- `repo-selected`
-- `bootstrap-running`
 - `bootstrap-blocked`
-- `chat-bound`
 - `ready-for-intake`
 
 ## Security Rules
@@ -209,78 +261,46 @@ Future states can extend this into:
 - store only the minimum temporary session data needed for resume or poll
 - clear temporary device-flow state after auth succeeds
 
-## Near-Term Follow-Up
+## Current landed scope
 
-After GitHub auth is stable in chat, the next slice should extend the same
-session into:
+The setup flow now covers the first end-to-end operator path:
 
-1. optional auto-bind of the current conversation as the repo notification
-   target
-2. blueprint draft generation for `new-project` before repo creation
-3. blueprint alignment against repo reality for `existing-repo`
-4. a guided chat-native discussion loop that updates the blueprint directly
-
-That is the path from "chat can start auth" to "chat can complete first-run
-configuration end-to-end".
+1. start from chat with `/occode-setup`, `/occode-setup existing owner/repo`,
+   or `/occode-setup new-project`
+2. if needed, complete GitHub device auth without pasting tokens into chat
+3. for `new-project`, draft and agree the initial blueprint directly in chat
+4. derive repo-name suggestions and continue with `/occode-setup new <repo>`
+5. run bootstrap automatically after repo selection
+6. sync the setup draft into the repo-local `PROJECT-BLUEPRINT.md`
+7. refresh work items and stage gates
+8. auto-bind the active chat when safe
+9. surface the next suggested command and proof readiness directly in chat
 
 ## Remaining Delivery Tasks
 
-The remaining setup-specific work is now small enough to track explicitly.
+The remaining setup-specific work is now hardening rather than missing basic
+control-plane steps.
 
-### 1. `new-project` blueprint-first conversation
+### 1. live operator proof
 
-- capture the project goal from chat before repo creation
-- ask for:
-  - target user
-  - first MVP
-  - constraints
-  - non-goals
-- generate the first blueprint draft directly from setup state
-- let the operator revise that draft before creating the repo
+- run the full `new-project` path against a real chat surface and GitHub host
+- capture exactly where the operator still has to leave chat
 
-### 2. repo-name suggestion flow for `new-project`
+### 2. failure recovery polish
 
-- derive 3-5 suggested repo names from the agreed blueprint
-- let the operator pick one or provide a custom name
-- keep the chosen name in setup state until creation succeeds
+- make expired GitHub auth failures explicit and recoverable
+- tighten repo-create and bootstrap failure messages
+- keep blueprint-sync failures actionable from chat
 
-### 3. chat-native blueprint agreement loop
+### 3. handoff into autonomous progress
 
-- add setup-aware prompts for missing blueprint sections
-- expose one-step follow-ups from setup into:
-  - `/occode-goal`
-  - `/occode-blueprint-edit`
-  - `/occode-blueprint-agree`
-- mark the setup session when blueprint agreement is complete
-
-### 4. automatic post-blueprint progression
-
-- after blueprint agreement:
-  - refresh work items
-  - refresh stage gates
-  - show the first executable next step
-- avoid forcing the operator to jump back into CLI output
-
-### 5. auto-bind and chat readiness
-
-- reuse the current chat as the repo binding when safe
-- only fall back to `/occode-bind` when the target is ambiguous
-- surface webhook/chat proof readiness in a setup-specific summary
-
-### 6. operator controls and resilience
-
-- `/occode-setup-cancel`
-- `/occode-setup-retry`
-- clearer recovery when:
-  - GitHub login expires
-  - repo creation fails
-  - bootstrap fails
-  - blueprint is missing or malformed
+- make the post-bootstrap summary point directly at the next actionable work
+  item, not only the next command
+- connect setup-complete state to the next-work selection logic from the main
+  autonomy plan
 
 ### Recommended build order
 
-1. `new-project` blueprint-first conversation
-2. repo-name suggestions
-3. chat-native blueprint agreement loop
-4. automatic post-blueprint progression
-5. auto-bind and recovery controls
+1. live operator proof
+2. failure recovery polish
+3. handoff into autonomous progress

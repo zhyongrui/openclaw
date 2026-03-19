@@ -5,14 +5,20 @@ import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OpenClawCodeChatopsStore } from "../../src/integrations/openclaw-plugin/index.js";
-import { createProjectBlueprint } from "../../src/openclawcode/blueprint.js";
+import {
+  createProjectBlueprint,
+  readProjectBlueprintDocument,
+} from "../../src/openclawcode/blueprint.js";
 import type { WorkflowRun } from "../../src/openclawcode/contracts/index.js";
 import { writeProjectDiscoveryInventory } from "../../src/openclawcode/discovery.js";
 import {
   readProjectStageGateArtifact,
   writeProjectStageGateArtifact,
 } from "../../src/openclawcode/stage-gates.js";
-import { writeProjectWorkItemInventory } from "../../src/openclawcode/work-items.js";
+import {
+  readProjectWorkItemInventory,
+  writeProjectWorkItemInventory,
+} from "../../src/openclawcode/work-items.js";
 import type {
   OpenClawPluginCommandDefinition,
   OpenClawPluginService,
@@ -298,7 +304,7 @@ function createGitHubIssueResponse(params: {
 
 async function waitForAssertion(
   assertion: () => void | Promise<void>,
-  attempts = 60,
+  attempts = 200,
 ): Promise<void> {
   let lastError: unknown;
   for (let index = 0; index < attempts; index += 1) {
@@ -524,7 +530,7 @@ async function cleanupPluginFixture(fixture: Awaited<ReturnType<typeof registerP
     logger: { info() {}, warn() {}, error() {} },
   });
   await fixture.store.snapshot();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 25));
   await fs.rm(fixture.repoRoot, {
     recursive: true,
     force: true,
@@ -3163,6 +3169,284 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("starts a blueprint-first new-project setup draft without forcing GitHub auth", async () => {
+    const fixture = await registerPluginFixture();
+
+    try {
+      const result = await fixture.commands.get("occode-setup")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup new-project",
+        args: "new-project",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain(
+        "OpenClaw Code is drafting a blueprint-first new-project setup for this chat.",
+      );
+      expect(result?.text).toContain("/occode-goal <goal text>");
+      expect(mocked.startOnboardingGitHubCliDeviceLogin).not.toHaveBeenCalled();
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+        }),
+      ).toMatchObject({
+        projectMode: "new-project",
+        stage: "drafting-blueprint",
+        blueprintDraft: {
+          status: "draft",
+        },
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("routes /occode-goal into the active new-project setup draft", async () => {
+    const fixture = await registerPluginFixture();
+    await fixture.store.upsertSetupSession({
+      notifyChannel: "feishu",
+      notifyTarget: "user:setup-chat",
+      projectMode: "new-project",
+      stage: "drafting-blueprint",
+      blueprintDraft: {
+        status: "draft",
+        sections: {},
+      },
+      createdAt: "2026-03-19T03:00:00.000Z",
+      updatedAt: "2026-03-19T03:00:00.000Z",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-goal")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-goal Shared image gallery for family albums",
+        args: "Shared image gallery for family albums",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Updated setup draft section `Goal`.");
+      expect(result?.text).toContain("Goal: Shared image gallery for family albums");
+      expect(
+        (
+          await fixture.store.getSetupSession({
+            notifyChannel: "feishu",
+            notifyTarget: "user:setup-chat",
+          })
+        )?.blueprintDraft?.sections?.Goal,
+      ).toBe("Shared image gallery for family albums");
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("routes /occode-blueprint-edit into the active new-project setup draft", async () => {
+    const fixture = await registerPluginFixture();
+    await fixture.store.upsertSetupSession({
+      notifyChannel: "feishu",
+      notifyTarget: "user:setup-chat",
+      projectMode: "new-project",
+      stage: "drafting-blueprint",
+      blueprintDraft: {
+        status: "draft",
+        sections: {
+          Goal: "Shared image gallery for family albums",
+        },
+      },
+      createdAt: "2026-03-19T03:05:00.000Z",
+      updatedAt: "2026-03-19T03:05:00.000Z",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-blueprint-edit")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody:
+          "/occode-blueprint-edit constraints\n- Stay inside chat until repo creation is necessary.",
+        args: "constraints",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Updated setup draft section `Constraints`.");
+      expect(
+        (
+          await fixture.store.getSetupSession({
+            notifyChannel: "feishu",
+            notifyTarget: "user:setup-chat",
+          })
+        )?.blueprintDraft?.sections?.Constraints,
+      ).toBe("- Stay inside chat until repo creation is necessary.");
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("agrees a new-project setup draft and suggests repo names", async () => {
+    const fixture = await registerPluginFixture();
+    await fixture.store.upsertSetupSession({
+      notifyChannel: "feishu",
+      notifyTarget: "user:setup-chat",
+      projectMode: "new-project",
+      stage: "drafting-blueprint",
+      blueprintDraft: {
+        status: "draft",
+        sections: {
+          Goal: "Shared image gallery for family albums",
+          "Success Criteria":
+            "- Create the repo from chat and return the next proof commands.",
+          Scope: "- Start with repo bootstrap and blueprint alignment only.",
+          "Non-Goals": "- No mobile app or public sharing in the first MVP.",
+          Constraints: "- Stay inside chat until repo creation is necessary.",
+        },
+      },
+      createdAt: "2026-03-19T03:10:00.000Z",
+      updatedAt: "2026-03-19T03:10:00.000Z",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-blueprint-agree")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-blueprint-agree",
+        args: "",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain(
+        "OpenClaw Code has an agreed blueprint draft for this new-project setup.",
+      );
+      expect(result?.text).toContain("shared-image-gallery-family");
+      const saved = await fixture.store.getSetupSession({
+        notifyChannel: "feishu",
+        notifyTarget: "user:setup-chat",
+      });
+      expect(saved).toMatchObject({
+        stage: "awaiting-repo-choice",
+        blueprintDraft: {
+          status: "agreed",
+        },
+      });
+      expect(saved?.blueprintDraft?.repoNameSuggestions?.[0]).toBe(
+        "shared-image-gallery-family",
+      );
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("creates a repo from an agreed setup draft and syncs the draft into PROJECT-BLUEPRINT.md", async () => {
+    const fixture = await registerPluginFixture();
+    mocked.resolveOnboardingGitHubToken.mockReturnValue({
+      token: "gho_test",
+      source: "gh-auth-token",
+    });
+    mocked.createOnboardingRepositoryViaGh.mockResolvedValue({
+      owner: "zhyongrui",
+      repo: "shared-image-gallery",
+      private: true,
+      url: "https://github.com/zhyongrui/shared-image-gallery",
+    });
+    mocked.runOnboardingOpenClawCodeBootstrap.mockResolvedValue({
+      repo: {
+        owner: "zhyongrui",
+        repo: "shared-image-gallery",
+        repoKey: "zhyongrui/shared-image-gallery",
+        repoRoot: fixture.repoRoot,
+        checkoutAction: "attached",
+      },
+      blueprint: {
+        blueprintPath: path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        status: "draft",
+        revisionId: "rev-bootstrap",
+      },
+      handoff: {
+        blueprintCommand: "/occode-blueprint zhyongrui/shared-image-gallery",
+        gatesCommand: "/occode-gates zhyongrui/shared-image-gallery",
+      },
+      nextAction: "clarify-project-blueprint",
+    });
+    await fixture.store.upsertSetupSession({
+      notifyChannel: "feishu",
+      notifyTarget: "user:setup-chat",
+      projectMode: "new-project",
+      stage: "awaiting-repo-choice",
+      githubAuthSource: "gh-auth-token",
+      blueprintDraft: {
+        status: "agreed",
+        agreedAt: "2026-03-19T03:15:00.000Z",
+        repoNameSuggestions: ["shared-image-gallery"],
+        sections: {
+          Goal: "Shared image gallery for family albums",
+          "Success Criteria":
+            "- Create the repo from chat and return the next proof commands.",
+          Scope: "- Start with repo bootstrap and blueprint alignment only.",
+          "Non-Goals": "- No mobile app or public sharing in the first MVP.",
+          Constraints: "- Stay inside chat until repo creation is necessary.",
+          "Open Questions": "- None.",
+          Workstreams: "- Bootstrap the repo and return the first proof path.",
+        },
+      },
+      createdAt: "2026-03-19T03:15:00.000Z",
+      updatedAt: "2026-03-19T03:15:00.000Z",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-setup")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup new shared-image-gallery",
+        args: "new shared-image-gallery",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(mocked.createOnboardingRepositoryViaGh).toHaveBeenCalledWith({
+        owner: "zhyongrui",
+        repo: "shared-image-gallery",
+      });
+      expect(mocked.runOnboardingOpenClawCodeBootstrap).toHaveBeenCalledWith({
+        repo: "zhyongrui/shared-image-gallery",
+      });
+      expect(result?.text).toContain("Repo: zhyongrui/shared-image-gallery");
+      expect(result?.text).toContain("Work items: total=1 | planned=1");
+
+      const blueprint = await readProjectBlueprintDocument(fixture.repoRoot);
+      expect(blueprint.status).toBe("agreed");
+      expect(blueprint.goalSummary).toBe("Shared image gallery for family albums");
+      expect(blueprint.sectionBodies["Open Questions"]).toContain("- None.");
+      expect(blueprint.sectionBodies.Workstreams).toContain(
+        "- Bootstrap the repo and return the first proof path.",
+      );
+
+      const workItems = await readProjectWorkItemInventory(fixture.repoRoot);
+      expect(workItems.workItemCount).toBe(1);
+      expect(workItems.workItems[0]?.title).toContain("Bootstrap the repo");
+
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+        }),
+      ).toMatchObject({
+        stage: "bootstrap-complete",
+        repoKey: "zhyongrui/shared-image-gallery",
+        bootstrap: {
+          workItemCount: 1,
+          plannedWorkItemCount: 1,
+          firstWorkItemTitle: expect.stringContaining("Bootstrap the repo"),
+        },
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
   it("reports authenticated setup status and preserves the selected repo", async () => {
     const fixture = await registerPluginFixture();
     mocked.resolveOnboardingGitHubToken.mockReturnValue({
@@ -3204,6 +3488,67 @@ describe("openclawcode extension", () => {
           repoRoot: "/home/zyr/pros/openclawcode-target",
           nextAction: "clarify-project-blueprint",
         },
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("auto-binds the current chat after bootstrap when no repo binding exists yet", async () => {
+    const fixture = await registerPluginFixture();
+    mocked.resolveOnboardingGitHubToken.mockReturnValue({
+      token: "gho_test",
+      source: "gh-auth-token",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-setup")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup existing zhyongrui/iGallery",
+        args: "existing zhyongrui/iGallery",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Auto-bind: bound (feishu:user:setup-chat)");
+      expect(await fixture.store.getRepoBinding("zhyongrui/iGallery")).toMatchObject({
+        repoKey: "zhyongrui/iGallery",
+        notifyChannel: "feishu",
+        notifyTarget: "user:setup-chat",
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("keeps an existing repo binding when bootstrap runs from a different chat", async () => {
+    const fixture = await registerPluginFixture();
+    mocked.resolveOnboardingGitHubToken.mockReturnValue({
+      token: "gho_test",
+      source: "gh-auth-token",
+    });
+    await fixture.store.setRepoBinding({
+      repoKey: "zhyongrui/iGallery",
+      notifyChannel: "feishu",
+      notifyTarget: "user:existing-chat",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-setup")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup existing zhyongrui/iGallery",
+        args: "existing zhyongrui/iGallery",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Auto-bind: existing-binding-kept (feishu:user:existing-chat)");
+      expect(await fixture.store.getRepoBinding("zhyongrui/iGallery")).toMatchObject({
+        repoKey: "zhyongrui/iGallery",
+        notifyChannel: "feishu",
+        notifyTarget: "user:existing-chat",
       });
     } finally {
       await cleanupPluginFixture(fixture);
@@ -3252,6 +3597,112 @@ describe("openclawcode extension", () => {
         repoKey: "zhyongrui/iGallery",
         stage: "bootstrap-complete",
       });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("retries a failed bootstrap setup session", async () => {
+    const fixture = await registerPluginFixture();
+    mocked.resolveOnboardingGitHubToken.mockReturnValue({
+      token: "gho_test",
+      source: "gh-auth-token",
+    });
+    mocked.runOnboardingOpenClawCodeBootstrap.mockResolvedValue({
+      repo: {
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        repoKey: "zhyongrui/openclawcode",
+        repoRoot: "/home/zyr/pros/openclawcode-target",
+        checkoutAction: "attached",
+      },
+      blueprint: {
+        blueprintPath: "/home/zyr/pros/openclawcode-target/PROJECT-BLUEPRINT.md",
+        status: "draft",
+        revisionId: "rev-bootstrap",
+      },
+      handoff: {
+        blueprintCommand: "/occode-blueprint zhyongrui/openclawcode",
+      },
+      nextAction: "clarify-project-blueprint",
+    });
+    await fixture.store.upsertSetupSession({
+      notifyChannel: "feishu",
+      notifyTarget: "user:setup-chat",
+      projectMode: "existing-repo",
+      repoKey: "zhyongrui/openclawcode",
+      stage: "github-authenticated",
+      githubAuthSource: "gh-auth-token",
+      lastFailure: {
+        step: "bootstrap",
+        reason: "previous bootstrap failure",
+        occurredAt: "2026-03-19T02:39:00.000Z",
+      },
+      createdAt: "2026-03-19T02:35:00.000Z",
+      updatedAt: "2026-03-19T02:39:00.000Z",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-setup-retry")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup-retry",
+        args: "",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("OpenClaw Code bootstrap finished for this setup session.");
+      expect(mocked.runOnboardingOpenClawCodeBootstrap).toHaveBeenCalledWith({
+        repo: "zhyongrui/openclawcode",
+      });
+      expect(
+        (
+          await fixture.store.getSetupSession({
+            notifyChannel: "feishu",
+            notifyTarget: "user:setup-chat",
+          })
+        )?.lastFailure,
+      ).toBeUndefined();
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("cancels the active setup session for the current chat", async () => {
+    const fixture = await registerPluginFixture();
+    await fixture.store.upsertSetupSession({
+      notifyChannel: "feishu",
+      notifyTarget: "user:setup-chat",
+      projectMode: "new-project",
+      stage: "drafting-blueprint",
+      blueprintDraft: {
+        status: "draft",
+        sections: {
+          Goal: "Ship chat-native setup.",
+        },
+      },
+      createdAt: "2026-03-19T03:00:00.000Z",
+      updatedAt: "2026-03-19T03:00:00.000Z",
+    });
+
+    try {
+      const result = await fixture.commands.get("occode-setup-cancel")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-setup-cancel",
+        args: "",
+        to: "user:setup-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Cancelled the active openclawcode setup session");
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+        }),
+      ).toBeUndefined();
     } finally {
       await cleanupPluginFixture(fixture);
     }

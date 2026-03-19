@@ -5,6 +5,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createWizardPrompter as buildWizardPrompter } from "../../test/helpers/wizard-prompter.js";
 import {
+  buildOnboardingRepoNameSuggestions,
   createOnboardingRepositoryViaGh,
   inspectOnboardingGitHubCliDeviceLogin,
   onboardingOpenClawCodeDeps,
@@ -300,6 +301,16 @@ describe("runOnboardingOpenClawCode", () => {
       owner: "acme",
       repo: "iGallery",
     });
+  });
+
+  it("builds deterministic repo-name suggestions from project text", () => {
+    expect(buildOnboardingRepoNameSuggestions("Shared image gallery for family albums")).toEqual([
+      "shared-image-gallery-family",
+      "shared-image-gallery-family-app",
+      "shared-image-gallery-family-web",
+      "shared-image-gallery-family-service",
+      "shared-image-gallery-family-workspace",
+    ]);
   });
 
   it("creates a repo through gh and refreshes the GitHub summary", async () => {

@@ -41,6 +41,10 @@ Exit signal:
 
 - a new repo can be onboarded and bootstrapped without fake test commands
 
+Status:
+
+- landed on 2026-03-19 across bootstrap and chat-native onboarding
+
 ### Milestone 2: Blueprint-Driven Next-Work Selection
 
 Problem:
@@ -183,40 +187,39 @@ The plan must preserve:
 
 ## Recommendation
 
-The next implementation slice should be Milestone 1:
+Milestone 1 is now complete.
 
-- empty-repo bootstrap as a true blueprint-first path
+The next implementation slice should be Milestone 2:
 
-It is the shortest path to aligning the new onboarding flow with the real
-product thesis.
+- blueprint-driven next-work selection
+
+It is now the shortest path to moving from "chat can finish setup" to "the
+system can keep choosing credible work without a human re-framing the repo
+state each time."
 
 ## Setup Track Addendum
 
 The chat-native setup track now has a concrete operator-facing foundation:
 
 - GitHub device auth can start from chat
-- chat can validate an existing repo or create a new repo
-- chat can run bootstrap and persist the result
-- chat can surface the first blueprint-alignment prompts
+- chat can validate an existing repo, create a new repo, or start a
+  blueprint-first `new-project` flow
+- chat can draft and agree the initial blueprint before repo creation
+- repo-name suggestions are derived from the agreed blueprint draft
+- chat can run bootstrap, sync the setup draft into the real
+  `PROJECT-BLUEPRINT.md`, refresh work items and stage gates, and surface the
+  first follow-up command
+- bootstrap can auto-bind the active chat when safe
+- setup sessions now have cancel/retry controls and persisted failure context
 
-The remaining setup-specific execution sequence should be:
+The remaining setup-specific hardening sequence should be:
 
-1. `new-project` blueprint-first chat flow
-   - capture goal, MVP, constraints, non-goals
-   - draft the initial blueprint before repo creation
-2. repo-name suggestion and choice
-   - derive 3-5 candidate names from the draft blueprint
-   - allow explicit operator override
-3. setup-aware blueprint agreement loop
-   - drive `/occode-goal`, `/occode-blueprint-edit`, and
-     `/occode-blueprint-agree` from the active setup session
-4. automatic post-blueprint progression
-   - refresh work items and stage gates
-   - surface the first executable next step in chat
-5. auto-bind and resilience
-   - reuse the active chat as the repo notification target when safe
-   - add cancel/retry/recovery controls for setup sessions
+1. live-proof the full `new-project` flow on a real chat + GitHub operator host
+2. tighten recovery messaging for expired auth, repo-create failures,
+   bootstrap failures, and blueprint-sync failures
+3. feed the agreed blueprint/work-item/gate state directly into Milestone 2
+   next-work selection so setup hands off into autonomous progress cleanly
 
-This setup track should be treated as the operator-surface prerequisite for the
-later autonomous loop milestones, because it turns onboarding from a CLI-heavy
+This setup track remains the operator-surface prerequisite for the later
+autonomous loop milestones, because it turns onboarding from a CLI-heavy
 handoff into a real chat-native control plane.

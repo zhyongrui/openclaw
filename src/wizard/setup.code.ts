@@ -321,6 +321,50 @@ function validateNewRepositoryName(value: string): string | undefined {
   return undefined;
 }
 
+function slugifyOnboardingRepoNamePart(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function buildOnboardingRepoNameSuggestions(projectText: string): string[] {
+  const stopWords = new Set([
+    "a",
+    "an",
+    "and",
+    "app",
+    "application",
+    "build",
+    "for",
+    "in",
+    "of",
+    "platform",
+    "project",
+    "service",
+    "system",
+    "the",
+    "to",
+    "tool",
+  ]);
+  const rawWords = projectText
+    .split(/[^A-Za-z0-9]+/)
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  const words = rawWords.filter((entry) => !stopWords.has(entry));
+  const seedWords = (words.length > 0 ? words : rawWords).slice(0, 4);
+  const base = slugifyOnboardingRepoNamePart(seedWords.join("-")) || "new-project";
+  const suggestions = [base];
+  const suffixes = ["app", "web", "service", "workspace"];
+  for (const suffix of suffixes) {
+    if (!base.endsWith(`-${suffix}`) && base !== suffix) {
+      suggestions.push(`${base}-${suffix}`);
+    }
+  }
+  return [...new Set(suggestions)].slice(0, 5);
+}
+
 function parseExistingRepositoryInput(value: string, owner: string): RepoRef {
   const trimmed = value.trim();
   if (!trimmed) {

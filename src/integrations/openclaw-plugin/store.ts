@@ -42,6 +42,8 @@ export interface OpenClawCodePendingIntakeDraft {
 }
 
 export type OpenClawCodeSetupSessionStage =
+  | "drafting-blueprint"
+  | "awaiting-repo-choice"
   | "awaiting-github-device-auth"
   | "github-authenticated"
   | "bootstrap-complete";
@@ -54,6 +56,17 @@ export interface OpenClawCodeSetupSession {
   pendingRepoName?: string;
   stage: OpenClawCodeSetupSessionStage;
   githubAuthSource?: "GH_TOKEN" | "GITHUB_TOKEN" | "gh-auth-token";
+  blueprintDraft?: {
+    status?: "draft" | "agreed";
+    agreedAt?: string;
+    repoNameSuggestions?: string[];
+    sections?: Record<string, string>;
+  };
+  lastFailure?: {
+    step: "github-auth" | "repo-create" | "bootstrap" | "blueprint-sync";
+    reason: string;
+    occurredAt: string;
+  };
   bootstrap?: {
     completedAt: string;
     repoRoot?: string;
@@ -79,6 +92,16 @@ export interface OpenClawCodeSetupSession {
     webhookRetryCommand?: string | null;
     recommendedProofMode?: "cli-only" | "chatops";
     reason?: string;
+    autoBindStatus?: "bound" | "already-bound" | "existing-binding-kept";
+    autoBindChannel?: string;
+    autoBindTarget?: string;
+    workItemCount?: number;
+    plannedWorkItemCount?: number;
+    readyForIssueProjection?: boolean;
+    blockedGateCount?: number;
+    needsHumanDecisionCount?: number;
+    firstWorkItemTitle?: string;
+    nextSuggestedCommand?: string | null;
     proofReadiness?: {
       cliProofReady?: boolean;
       chatProofReady?: boolean;
@@ -327,6 +350,8 @@ function normalizeSetupSession(raw: unknown): OpenClawCodeSetupSession | undefin
     return undefined;
   }
   if (
+    candidate.stage !== "drafting-blueprint" &&
+    candidate.stage !== "awaiting-repo-choice" &&
     candidate.stage !== "awaiting-github-device-auth" &&
     candidate.stage !== "github-authenticated" &&
     candidate.stage !== "bootstrap-complete"
@@ -348,6 +373,49 @@ function normalizeSetupSession(raw: unknown): OpenClawCodeSetupSession | undefin
     pendingRepoName:
       typeof candidate.pendingRepoName === "string" ? candidate.pendingRepoName : undefined,
     stage: candidate.stage,
+    blueprintDraft:
+      candidate.blueprintDraft && typeof candidate.blueprintDraft === "object"
+        ? {
+            status:
+              candidate.blueprintDraft.status === "draft" ||
+              candidate.blueprintDraft.status === "agreed"
+                ? candidate.blueprintDraft.status
+                : undefined,
+            agreedAt:
+              typeof candidate.blueprintDraft.agreedAt === "string"
+                ? candidate.blueprintDraft.agreedAt
+                : undefined,
+            repoNameSuggestions: Array.isArray(candidate.blueprintDraft.repoNameSuggestions)
+              ? candidate.blueprintDraft.repoNameSuggestions.filter(
+                  (value): value is string => typeof value === "string",
+                )
+              : undefined,
+            sections:
+              candidate.blueprintDraft.sections &&
+              typeof candidate.blueprintDraft.sections === "object"
+                ? Object.fromEntries(
+                    Object.entries(candidate.blueprintDraft.sections).filter(
+                      (entry): entry is [string, string] => typeof entry[1] === "string",
+                    ),
+                  )
+                : undefined,
+          }
+        : undefined,
+    lastFailure:
+      candidate.lastFailure &&
+      typeof candidate.lastFailure === "object" &&
+      typeof candidate.lastFailure.reason === "string" &&
+      typeof candidate.lastFailure.occurredAt === "string" &&
+      (candidate.lastFailure.step === "github-auth" ||
+        candidate.lastFailure.step === "repo-create" ||
+        candidate.lastFailure.step === "bootstrap" ||
+        candidate.lastFailure.step === "blueprint-sync")
+        ? {
+            step: candidate.lastFailure.step,
+            reason: candidate.lastFailure.reason,
+            occurredAt: candidate.lastFailure.occurredAt,
+          }
+        : undefined,
     bootstrap:
       candidate.bootstrap && typeof candidate.bootstrap === "object"
         ? {
@@ -468,6 +536,50 @@ function normalizeSetupSession(raw: unknown): OpenClawCodeSetupSession | undefin
               typeof candidate.bootstrap.reason === "string"
                 ? candidate.bootstrap.reason
                 : undefined,
+            autoBindStatus:
+              candidate.bootstrap.autoBindStatus === "bound" ||
+              candidate.bootstrap.autoBindStatus === "already-bound" ||
+              candidate.bootstrap.autoBindStatus === "existing-binding-kept"
+                ? candidate.bootstrap.autoBindStatus
+                : undefined,
+            autoBindChannel:
+              typeof candidate.bootstrap.autoBindChannel === "string"
+                ? candidate.bootstrap.autoBindChannel
+                : undefined,
+            autoBindTarget:
+              typeof candidate.bootstrap.autoBindTarget === "string"
+                ? candidate.bootstrap.autoBindTarget
+                : undefined,
+            workItemCount:
+              typeof candidate.bootstrap.workItemCount === "number"
+                ? candidate.bootstrap.workItemCount
+                : undefined,
+            plannedWorkItemCount:
+              typeof candidate.bootstrap.plannedWorkItemCount === "number"
+                ? candidate.bootstrap.plannedWorkItemCount
+                : undefined,
+            readyForIssueProjection:
+              typeof candidate.bootstrap.readyForIssueProjection === "boolean"
+                ? candidate.bootstrap.readyForIssueProjection
+                : undefined,
+            blockedGateCount:
+              typeof candidate.bootstrap.blockedGateCount === "number"
+                ? candidate.bootstrap.blockedGateCount
+                : undefined,
+            needsHumanDecisionCount:
+              typeof candidate.bootstrap.needsHumanDecisionCount === "number"
+                ? candidate.bootstrap.needsHumanDecisionCount
+                : undefined,
+            firstWorkItemTitle:
+              typeof candidate.bootstrap.firstWorkItemTitle === "string"
+                ? candidate.bootstrap.firstWorkItemTitle
+                : undefined,
+            nextSuggestedCommand:
+              typeof candidate.bootstrap.nextSuggestedCommand === "string"
+                ? candidate.bootstrap.nextSuggestedCommand
+                : candidate.bootstrap.nextSuggestedCommand === null
+                  ? null
+                  : undefined,
             proofReadiness:
               candidate.bootstrap.proofReadiness &&
               typeof candidate.bootstrap.proofReadiness === "object"

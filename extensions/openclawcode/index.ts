@@ -36,6 +36,7 @@ import {
   type OpenClawCodeDeferredRuntimeReroute,
 } from "../../src/integrations/openclaw-plugin/index.js";
 import {
+  buildOnboardingRepoNameSuggestions,
   createOnboardingRepositoryViaGh,
   inspectOnboardingGitHubCliDeviceLogin,
   onboardingOpenClawCodeDeps,
@@ -47,6 +48,7 @@ import {
   type OnboardingGitHubCliDeviceLoginStatus,
 } from "../../src/wizard/setup.code.js";
 import {
+  PROJECT_BLUEPRINT_REQUIRED_SECTIONS,
   inspectProjectBlueprintClarifications,
   parseProjectBlueprintSectionName,
   parseProjectBlueprintRoleId,
@@ -77,7 +79,10 @@ import {
   type ValidationIssueClass,
   type ValidationIssueTemplateId,
 } from "../../src/openclawcode/validation-issues.js";
-import { readProjectWorkItemInventory } from "../../src/openclawcode/work-items.js";
+import {
+  readProjectWorkItemInventory,
+  writeProjectWorkItemInventory,
+} from "../../src/openclawcode/work-items.js";
 
 const DEFAULT_POLL_INTERVAL_MS = 3_000;
 const DEFAULT_RUN_TIMEOUT_MS = 30 * 60_000;
@@ -242,15 +247,139 @@ function buildChatSetupFailedMessage(params: {
     .join("\n");
 }
 
+type ChatSetupSession = NonNullable<
+  Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>
+>;
+
 type ChatSetupProjectSelection =
   | {
+      kind: "existing-repo";
       projectMode: "existing-repo";
       repoKey: string;
     }
   | {
+      kind: "new-repo";
       projectMode: "new-project";
       pendingRepoName: string;
+    }
+  | {
+      kind: "new-project-blueprint";
+      projectMode: "new-project";
     };
+
+const SETUP_BLUEPRINT_REQUIRED_SECTIONS_FOR_AGREEMENT = [
+  "Goal",
+  "Success Criteria",
+  "Scope",
+  "Non-Goals",
+  "Constraints",
+] as const satisfies readonly (typeof PROJECT_BLUEPRINT_REQUIRED_SECTIONS)[number][];
+
+function isChatSetupBlueprintDraftSession(
+  session: ChatSetupSession | undefined,
+): session is ChatSetupSession &
+  Required<Pick<ChatSetupSession, "blueprintDraft">> & { projectMode: "new-project" } {
+  return Boolean(
+    session &&
+      session.projectMode === "new-project" &&
+      !session.repoKey &&
+      session.blueprintDraft &&
+      (session.stage === "drafting-blueprint" || session.stage === "awaiting-repo-choice"),
+  );
+}
+
+function hasChatSetupBlueprintDraft(
+  session: ChatSetupSession | undefined,
+): session is ChatSetupSession &
+  Required<Pick<ChatSetupSession, "blueprintDraft">> & { projectMode: "new-project" } {
+  return Boolean(session && session.projectMode === "new-project" && session.blueprintDraft);
+}
+
+function collectChatSetupDraftMissingSections(
+  session: ChatSetupSession,
+): (typeof SETUP_BLUEPRINT_REQUIRED_SECTIONS_FOR_AGREEMENT)[number][] {
+  const sections = session.blueprintDraft?.sections ?? {};
+  return SETUP_BLUEPRINT_REQUIRED_SECTIONS_FOR_AGREEMENT.filter(
+    (section) => !sections[section] || sections[section]?.trim().length === 0,
+  );
+}
+
+function buildChatSetupDraftProjectText(session: ChatSetupSession): string {
+  const sections = session.blueprintDraft?.sections ?? {};
+  return [
+    sections.Goal,
+    sections["Success Criteria"],
+    sections.Scope,
+    sections["Non-Goals"],
+    sections.Constraints,
+  ]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join("\n");
+}
+
+function buildChatSetupDraftGoalSummary(session: ChatSetupSession): string | undefined {
+  return trimToSingleLine(session.blueprintDraft?.sections?.Goal);
+}
+
+function buildChatSetupDraftingBlueprintMessage(params: {
+  session: ChatSetupSession;
+}): string {
+  const missing = collectChatSetupDraftMissingSections(params.session);
+  const filledCount = Object.values(params.session.blueprintDraft?.sections ?? {}).filter(
+    (value) => value.trim().length > 0,
+  ).length;
+  const goalSummary = buildChatSetupDraftGoalSummary(params.session);
+  return [
+    "OpenClaw Code is drafting a blueprint-first new-project setup for this chat.",
+    params.session.githubAuthSource
+      ? `GitHub auth: ready via ${params.session.githubAuthSource}`
+      : "GitHub auth: not needed yet; auth will start when you choose a repo name.",
+    `Draft status: ${params.session.blueprintDraft?.status ?? "draft"}`,
+    goalSummary ? `Goal: ${goalSummary}` : undefined,
+    `Draft sections captured: ${filledCount}`,
+    `Missing before agreement: ${missing.length}`,
+    ...missing.slice(0, 5).map((section) => `- ${section}`),
+    "Use /occode-goal <goal text> to capture the project goal.",
+    `Use /occode-blueprint-edit <section>\\n<body...> for sections such as ${projectBlueprintSectionIds().join(", ")}.`,
+    "Capture the first MVP in `success-criteria`, then add scope, non-goals, and constraints.",
+    "When the draft is ready, send /occode-blueprint-agree to lock the setup draft and get repo-name suggestions.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildChatSetupAwaitingRepoChoiceMessage(params: {
+  session: ChatSetupSession;
+}): string {
+  const goalSummary = buildChatSetupDraftGoalSummary(params.session);
+  const suggestions = params.session.blueprintDraft?.repoNameSuggestions ?? [];
+  return [
+    "OpenClaw Code has an agreed blueprint draft for this new-project setup.",
+    params.session.githubAuthSource
+      ? `GitHub auth: ready via ${params.session.githubAuthSource}`
+      : "GitHub auth: will start after you pick a repo name.",
+    goalSummary ? `Goal: ${goalSummary}` : undefined,
+    `Repo-name suggestions: ${suggestions.length}`,
+    ...suggestions.map((suggestion) => `- ${suggestion}`),
+    suggestions[0]
+      ? `Choose one with /occode-setup new ${suggestions[0]}`
+      : "Choose a repo name with /occode-setup new <repo-name>",
+    "You can also send /occode-setup new <custom-name> to override the suggestions.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildChatSetupRepoCreationBlockedMessage(params: {
+  session: ChatSetupSession;
+}): string {
+  return [
+    "OpenClaw Code has a new-project setup draft, but the blueprint is not agreed yet.",
+    buildChatSetupDraftingBlueprintMessage({
+      session: params.session,
+    }),
+  ].join("\n");
+}
 
 function parseChatSetupProjectSelection(params: {
   args: string;
@@ -261,15 +390,25 @@ function parseChatSetupProjectSelection(params: {
     return undefined;
   }
 
+  if (/^new-project$/i.test(trimmed)) {
+    return {
+      kind: "new-project-blueprint",
+      projectMode: "new-project",
+    };
+  }
+
   const explicitExisting = /^existing\s+(.+)$/i.exec(trimmed)?.[1]?.trim();
   if (explicitExisting) {
     const repo = parseChatopsRepoReference(explicitExisting, params.defaultRepo);
-    return repo ? { projectMode: "existing-repo", repoKey: formatRepoKey(repo) } : "invalid";
+    return repo
+      ? { kind: "existing-repo", projectMode: "existing-repo", repoKey: formatRepoKey(repo) }
+      : "invalid";
   }
 
   const explicitNew = /^new\s+(.+)$/i.exec(trimmed)?.[1]?.trim();
   if (explicitNew) {
     return {
+      kind: "new-repo",
       projectMode: "new-project",
       pendingRepoName: explicitNew,
     };
@@ -278,12 +417,14 @@ function parseChatSetupProjectSelection(params: {
   const repo = parseChatopsRepoReference(trimmed, params.defaultRepo);
   if (repo) {
     return {
+      kind: "existing-repo",
       projectMode: "existing-repo",
       repoKey: formatRepoKey(repo),
     };
   }
 
   return {
+    kind: "new-repo",
     projectMode: "new-project",
     pendingRepoName: trimmed,
   };
@@ -334,6 +475,26 @@ function buildChatSetupBootstrapCompleteMessage(params: {
     typeof params.bootstrap.humanGateCount === "number"
       ? `Blueprint counts: workstreams=${params.bootstrap.workstreamCandidateCount} | openQuestions=${params.bootstrap.openQuestionCount} | humanGates=${params.bootstrap.humanGateCount}`
       : undefined,
+    typeof params.bootstrap.workItemCount === "number" &&
+    typeof params.bootstrap.plannedWorkItemCount === "number"
+      ? `Work items: total=${params.bootstrap.workItemCount} | planned=${params.bootstrap.plannedWorkItemCount}`
+      : undefined,
+    typeof params.bootstrap.blockedGateCount === "number" &&
+    typeof params.bootstrap.needsHumanDecisionCount === "number"
+      ? `Stage gates: blocked=${params.bootstrap.blockedGateCount} | needsHumanDecision=${params.bootstrap.needsHumanDecisionCount}`
+      : undefined,
+    typeof params.bootstrap.readyForIssueProjection === "boolean"
+      ? `Issue projection: ${params.bootstrap.readyForIssueProjection ? "ready" : "blocked"}`
+      : undefined,
+    params.bootstrap.firstWorkItemTitle
+      ? `First work item: ${params.bootstrap.firstWorkItemTitle}`
+      : undefined,
+    params.bootstrap.nextSuggestedCommand
+      ? `Next suggested command: ${params.bootstrap.nextSuggestedCommand}`
+      : undefined,
+    params.bootstrap.autoBindStatus
+      ? `Auto-bind: ${params.bootstrap.autoBindStatus}${params.bootstrap.autoBindChannel && params.bootstrap.autoBindTarget ? ` (${params.bootstrap.autoBindChannel}:${params.bootstrap.autoBindTarget})` : ""}`
+      : undefined,
     params.bootstrap.clarificationQuestions?.length
       ? `Clarifications: ${params.bootstrap.clarificationQuestions.length}`
       : undefined,
@@ -365,14 +526,129 @@ function buildChatSetupBootstrapCompleteMessage(params: {
     .join("\n");
 }
 
+async function ensureChatSetupRepoBinding(params: {
+  store: OpenClawCodeChatopsStore;
+  session: ChatSetupSession;
+}): Promise<{
+  status: "bound" | "already-bound" | "existing-binding-kept";
+  notifyChannel: string;
+  notifyTarget: string;
+}> {
+  const current = params.session.repoKey
+    ? await params.store.getRepoBinding(params.session.repoKey)
+    : undefined;
+  if (!params.session.repoKey) {
+    return {
+      status: "existing-binding-kept",
+      notifyChannel: params.session.notifyChannel,
+      notifyTarget: params.session.notifyTarget,
+    };
+  }
+  if (!current) {
+    await params.store.setRepoBinding({
+      repoKey: params.session.repoKey,
+      notifyChannel: params.session.notifyChannel,
+      notifyTarget: params.session.notifyTarget,
+    });
+    return {
+      status: "bound",
+      notifyChannel: params.session.notifyChannel,
+      notifyTarget: params.session.notifyTarget,
+    };
+  }
+  if (
+    current.notifyChannel === params.session.notifyChannel &&
+    current.notifyTarget === params.session.notifyTarget
+  ) {
+    return {
+      status: "already-bound",
+      notifyChannel: current.notifyChannel,
+      notifyTarget: current.notifyTarget,
+    };
+  }
+  return {
+    status: "existing-binding-kept",
+    notifyChannel: current.notifyChannel,
+    notifyTarget: current.notifyTarget,
+  };
+}
+
+function resolveChatSetupStageAfterAuth(session: ChatSetupSession): ChatSetupSession["stage"] {
+  if (session.stage === "bootstrap-complete") {
+    return "bootstrap-complete";
+  }
+  if (session.stage === "drafting-blueprint" || session.stage === "awaiting-repo-choice") {
+    return session.stage;
+  }
+  return "github-authenticated";
+}
+
+async function syncChatSetupBlueprintDraftToRepo(params: {
+  session: ChatSetupSession;
+  repo: { owner: string; repo: string };
+  repoRoot: string;
+}): Promise<{
+  blueprint: Awaited<ReturnType<typeof readProjectBlueprintDocument>>;
+  clarification: Awaited<ReturnType<typeof inspectProjectBlueprintClarifications>>;
+  workItems: Awaited<ReturnType<typeof writeProjectWorkItemInventory>>;
+  stageGates: Awaited<ReturnType<typeof writeProjectStageGateArtifact>>;
+}> {
+  const sections = Object.entries(params.session.blueprintDraft?.sections ?? {})
+    .map(([sectionName, body]) => {
+      const normalizedSectionName = parseProjectBlueprintSectionName(sectionName);
+      if (!normalizedSectionName || body.trim().length === 0) {
+        return undefined;
+      }
+      return [normalizedSectionName, body] as const;
+    })
+    .filter(
+      (
+        entry,
+      ): entry is readonly [(typeof PROJECT_BLUEPRINT_REQUIRED_SECTIONS)[number], string] =>
+        Boolean(entry),
+    );
+
+  for (const [sectionName, body] of sections) {
+    await updateProjectBlueprintSection({
+      repoRoot: params.repoRoot,
+      sectionName,
+      body,
+      createIfMissing: true,
+      title: `${params.repo.repo} project blueprint`,
+    });
+  }
+
+  if (sections.some(([sectionName]) => sectionName === "Provider Strategy")) {
+    await writeProjectRoleRoutingPlan(params.repoRoot);
+  }
+
+  if (params.session.blueprintDraft?.status === "agreed") {
+    await updateProjectBlueprintStatus({
+      repoRoot: params.repoRoot,
+      status: "agreed",
+    });
+  }
+
+  const blueprint = await readProjectBlueprintDocument(params.repoRoot);
+  const clarification = await inspectProjectBlueprintClarifications(params.repoRoot);
+  const workItems = await writeProjectWorkItemInventory(params.repoRoot);
+  const stageGates = await writeProjectStageGateArtifact(params.repoRoot);
+  return {
+    blueprint,
+    clarification,
+    workItems,
+    stageGates,
+  };
+}
+
 async function completeChatSetupProjectSelection(params: {
   store: OpenClawCodeChatopsStore;
-  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+  session: ChatSetupSession;
 }): Promise<{
-  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+  session: ChatSetupSession;
   message?: string;
 }> {
-  if (params.session.stage !== "github-authenticated" || !params.session.githubAuthSource) {
+  if (!params.session.githubAuthSource || params.session.stage === "awaiting-github-device-auth") {
     return { session: params.session };
   }
   const token = resolveOnboardingGitHubToken();
@@ -437,6 +713,17 @@ async function completeChatSetupProjectSelection(params: {
         }),
       };
     }
+    if (
+      isChatSetupBlueprintDraftSession(params.session) &&
+      params.session.blueprintDraft.status !== "agreed"
+    ) {
+      return {
+        session: params.session,
+        message: buildChatSetupRepoCreationBlockedMessage({
+          session: params.session,
+        }),
+      };
+    }
     let created;
     try {
       const viewer = await onboardingOpenClawCodeDeps.fetchAuthenticatedViewer(token.token);
@@ -449,8 +736,18 @@ async function completeChatSetupProjectSelection(params: {
         repo: repoRef.repo,
       });
     } catch (error) {
+      const failed = {
+        ...params.session,
+        lastFailure: {
+          step: "repo-create" as const,
+          reason: error instanceof Error ? error.message : String(error),
+          occurredAt: new Date().toISOString(),
+        },
+        updatedAt: new Date().toISOString(),
+      };
+      await params.store.upsertSetupSession(failed);
       return {
-        session: params.session,
+        session: failed,
         message: buildChatSetupFailedMessage({
           reason: error instanceof Error ? error.message : String(error),
           repoKey: params.session.repoKey,
@@ -461,6 +758,11 @@ async function completeChatSetupProjectSelection(params: {
       ...params.session,
       repoKey: formatRepoKey(created),
       pendingRepoName: undefined,
+      lastFailure: undefined,
+      stage:
+        params.session.stage === "awaiting-repo-choice"
+          ? ("github-authenticated" as const)
+          : params.session.stage,
       updatedAt: new Date().toISOString(),
     };
     await params.store.upsertSetupSession(updated);
@@ -479,9 +781,9 @@ async function completeChatSetupProjectSelection(params: {
 
 async function completeChatSetupBootstrap(params: {
   store: OpenClawCodeChatopsStore;
-  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+  session: ChatSetupSession;
 }): Promise<{
-  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+  session: ChatSetupSession;
   message?: string;
 }> {
   if (!params.session.githubAuthSource || !params.session.repoKey) {
@@ -503,8 +805,18 @@ async function completeChatSetupBootstrap(params: {
       repo: params.session.repoKey,
     });
   } catch (error) {
+    const failed = {
+      ...params.session,
+      lastFailure: {
+        step: "bootstrap" as const,
+        reason: error instanceof Error ? error.message : String(error),
+        occurredAt: new Date().toISOString(),
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    await params.store.upsertSetupSession(failed);
     return {
-      session: params.session,
+      session: failed,
       message: buildChatSetupFailedMessage({
         reason: error instanceof Error ? error.message : String(error),
         repoKey: params.session.repoKey,
@@ -517,29 +829,85 @@ async function completeChatSetupBootstrap(params: {
   let blueprintClarification:
     | Awaited<ReturnType<typeof inspectProjectBlueprintClarifications>>
     | undefined;
+  let workItems: Awaited<ReturnType<typeof readProjectWorkItemInventory>> | undefined;
+  let stageGates: Awaited<ReturnType<typeof readProjectStageGateArtifact>> | undefined;
+  const autoBind =
+    params.session.repoKey != null
+      ? await ensureChatSetupRepoBinding({
+          store: params.store,
+          session: params.session,
+        })
+      : undefined;
   if (payload.repo?.repoRoot) {
     try {
-      blueprintDocument = await readProjectBlueprintDocument(payload.repo.repoRoot);
-      blueprintClarification = await inspectProjectBlueprintClarifications(payload.repo.repoRoot);
-    } catch {
-      blueprintDocument = undefined;
-      blueprintClarification = undefined;
+      const repo = parseChatopsRepoReference(params.session.repoKey);
+      if (repo && hasChatSetupBlueprintDraft(params.session)) {
+        const synchronized = await syncChatSetupBlueprintDraftToRepo({
+          session: params.session,
+          repo,
+          repoRoot: payload.repo.repoRoot,
+        });
+        blueprintDocument = synchronized.blueprint;
+        blueprintClarification = synchronized.clarification;
+        workItems = synchronized.workItems;
+        stageGates = synchronized.stageGates;
+      } else {
+        blueprintDocument = await readProjectBlueprintDocument(payload.repo.repoRoot);
+        blueprintClarification = await inspectProjectBlueprintClarifications(payload.repo.repoRoot);
+        workItems = await readProjectWorkItemInventory(payload.repo.repoRoot);
+        stageGates = await readProjectStageGateArtifact(payload.repo.repoRoot);
+      }
+    } catch (error) {
+      const failed = {
+        ...params.session,
+        lastFailure: {
+          step: "blueprint-sync" as const,
+          reason: error instanceof Error ? error.message : String(error),
+          occurredAt: new Date().toISOString(),
+        },
+        updatedAt: new Date().toISOString(),
+      };
+      await params.store.upsertSetupSession(failed);
+      return {
+        session: failed,
+        message: buildChatSetupFailedMessage({
+          reason: error instanceof Error ? error.message : String(error),
+          repoKey: params.session.repoKey,
+        }),
+      };
     }
   }
+  const nextSuggestedCommand =
+    stageGates && (stageGates.blockedGateCount > 0 || stageGates.needsHumanDecisionCount > 0)
+      ? (payload.handoff?.gatesCommand ?? null)
+      : (payload.handoff?.blueprintCommand ??
+          payload.handoff?.blueprintDecomposeCommand ??
+          null);
   const updated = {
     ...params.session,
     stage: "bootstrap-complete" as const,
+    lastFailure: undefined,
     bootstrap: {
       completedAt: new Date().toISOString(),
       repoRoot: payload.repo?.repoRoot,
       checkoutAction: payload.repo?.checkoutAction,
-      blueprintPath: payload.blueprint?.blueprintPath,
-      blueprintStatus: payload.blueprint?.status,
-      blueprintRevisionId: payload.blueprint?.revisionId,
+      blueprintPath: blueprintDocument?.blueprintPath ?? payload.blueprint?.blueprintPath,
+      blueprintStatus: blueprintDocument?.status ?? payload.blueprint?.status,
+      blueprintRevisionId: blueprintDocument?.revisionId ?? payload.blueprint?.revisionId,
       blueprintGoalSummary: blueprintDocument?.goalSummary ?? undefined,
       workstreamCandidateCount: blueprintDocument?.workstreamCandidateCount,
       openQuestionCount: blueprintDocument?.openQuestionCount,
       humanGateCount: blueprintDocument?.humanGateCount,
+      workItemCount: workItems?.workItemCount,
+      plannedWorkItemCount: workItems?.plannedWorkItemCount,
+      readyForIssueProjection: workItems?.readyForIssueProjection,
+      blockedGateCount: stageGates?.blockedGateCount,
+      needsHumanDecisionCount: stageGates?.needsHumanDecisionCount,
+      firstWorkItemTitle: workItems?.workItems[0]?.title,
+      nextSuggestedCommand,
+      autoBindStatus: autoBind?.status,
+      autoBindChannel: autoBind?.notifyChannel,
+      autoBindTarget: autoBind?.notifyTarget,
       clarificationQuestions: blueprintClarification?.questions ?? undefined,
       clarificationSuggestions: blueprintClarification?.suggestions ?? undefined,
       nextAction: payload.nextAction,
@@ -569,21 +937,89 @@ async function completeChatSetupBootstrap(params: {
   };
 }
 
+async function continueChatSetupSession(params: {
+  store: OpenClawCodeChatopsStore;
+  session: ChatSetupSession;
+}): Promise<string> {
+  const synced = await syncChatSetupSession({
+    store: params.store,
+    session: params.session,
+  });
+  if (
+    synced.session.githubAuthSource &&
+    synced.session.stage !== "awaiting-github-device-auth" &&
+    (synced.session.repoKey || synced.session.pendingRepoName)
+  ) {
+    const completed = await completeChatSetupProjectSelection({
+      store: params.store,
+      session: synced.session,
+    });
+    if (completed.session.repoKey) {
+      const bootstrapped = await completeChatSetupBootstrap({
+        store: params.store,
+        session: completed.session,
+      });
+      if (bootstrapped.message) {
+        return bootstrapped.message;
+      }
+    }
+    if (completed.message) {
+      return completed.message;
+    }
+  }
+  if (isChatSetupBlueprintDraftSession(synced.session)) {
+    return synced.session.stage === "awaiting-repo-choice"
+      ? buildChatSetupAwaitingRepoChoiceMessage({
+          session: synced.session,
+        })
+      : buildChatSetupDraftingBlueprintMessage({
+          session: synced.session,
+        });
+  }
+  if (synced.session.stage === "bootstrap-complete" && synced.session.githubAuthSource) {
+    return buildChatSetupBootstrapCompleteMessage({
+      source: synced.session.githubAuthSource,
+      repoKey: synced.session.repoKey ?? "unknown",
+      bootstrap: synced.session.bootstrap ?? {
+        completedAt: new Date().toISOString(),
+      },
+    });
+  }
+  if (synced.session.stage === "github-authenticated" && synced.session.githubAuthSource) {
+    return buildChatSetupReadyMessage({
+      source: synced.session.githubAuthSource,
+      repoKey: synced.session.repoKey,
+    });
+  }
+  if (synced.status?.state === "pending") {
+    return buildChatSetupAwaitingGitHubAuthMessage({
+      verificationUri: synced.status.verificationUri,
+      userCode: synced.status.userCode,
+      selectionLabel: synced.session.repoKey ?? synced.session.pendingRepoName,
+    });
+  }
+  return buildChatSetupFailedMessage({
+    reason:
+      synced.status?.state === "failed"
+        ? synced.status.reason ?? "GitHub device login did not complete."
+        : synced.session.lastFailure?.reason ??
+          "GitHub auth is still missing. Start with /occode-setup.",
+    repoKey: synced.session.repoKey,
+  });
+}
+
 async function syncChatSetupSession(params: {
   store: OpenClawCodeChatopsStore;
-  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+  session: ChatSetupSession;
 }): Promise<{
-  session: NonNullable<Awaited<ReturnType<OpenClawCodeChatopsStore["getSetupSession"]>>>;
+  session: ChatSetupSession;
   status?: OnboardingGitHubCliDeviceLoginStatus;
 }> {
   const resolvedToken = resolveOnboardingGitHubToken();
   if (resolvedToken) {
     const updated = {
       ...params.session,
-      stage:
-        params.session.stage === "bootstrap-complete"
-          ? ("bootstrap-complete" as const)
-          : ("github-authenticated" as const),
+      stage: resolveChatSetupStageAfterAuth(params.session),
       githubAuthSource: resolvedToken.source,
       githubDeviceAuth: params.session.githubDeviceAuth
         ? {
@@ -610,10 +1046,7 @@ async function syncChatSetupSession(params: {
   if (status.state === "authorized") {
     const updated = {
       ...params.session,
-      stage:
-        params.session.stage === "bootstrap-complete"
-          ? ("bootstrap-complete" as const)
-          : ("github-authenticated" as const),
+      stage: resolveChatSetupStageAfterAuth(params.session),
       githubAuthSource: status.source,
       githubDeviceAuth: {
         ...params.session.githubDeviceAuth,
@@ -1787,7 +2220,7 @@ function parseRepoScopedMultilineBody(params: {
   commandBody: string;
   commandName: string;
   defaults: { owner?: string; repo?: string };
-}):
+}): 
   | {
       repo: { owner: string; repo: string };
       body: string;
@@ -1821,6 +2254,39 @@ function parseRepoScopedMultilineBody(params: {
     repo,
     body,
   };
+}
+
+function extractMultilineCommandBody(params: {
+  commandBody: string;
+  commandName: string;
+}): string | undefined {
+  const normalized = params.commandBody.replace(/\r\n/g, "\n").trim();
+  const [firstLine = "", ...remainingLines] = normalized.split("\n");
+  const firstLineArgs = firstLine
+    .replace(new RegExp(`^/${params.commandName}\\b\\s*`, "i"), "")
+    .trim();
+  const lines = [firstLineArgs, ...remainingLines];
+  while (lines.length > 0 && lines[0]?.trim().length === 0) {
+    lines.shift();
+  }
+  const body = lines.join("\n").trim();
+  return body || undefined;
+}
+
+function hasExplicitRepoArgumentInCommandBody(params: {
+  commandBody: string;
+  commandName: string;
+}): boolean {
+  const normalized = params.commandBody.replace(/\r\n/g, "\n").trim();
+  const [firstLine = ""] = normalized.split("\n");
+  const firstLineArgs = firstLine
+    .replace(new RegExp(`^/${params.commandName}\\b\\s*`, "i"), "")
+    .trim();
+  const firstToken = firstLineArgs
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .find(Boolean);
+  return Boolean(firstToken && parseChatopsRepoReference(firstToken));
 }
 
 function parseBlueprintEditArgs(params: {
@@ -1858,6 +2324,34 @@ function parseBlueprintEditArgs(params: {
   }
   return {
     repo,
+    sectionName: parseProjectBlueprintSectionName(sectionToken),
+    body,
+  };
+}
+
+function parseSetupBlueprintEditArgs(commandBody: string):
+  | {
+      sectionName: ReturnType<typeof parseProjectBlueprintSectionName>;
+      body: string;
+    }
+  | undefined {
+  const normalized = commandBody.replace(/\r\n/g, "\n").trim();
+  const [firstLine = "", ...remainingLines] = normalized.split("\n");
+  const firstLineArgs = firstLine.replace(/^\/occode-blueprint-edit\b\s*/i, "").trim();
+  const tokens = firstLineArgs
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  const sectionToken = tokens[0];
+  const lines = [tokens.slice(1).join(" ").trim(), ...remainingLines];
+  while (lines.length > 0 && lines[0]?.trim().length === 0) {
+    lines.shift();
+  }
+  const body = lines.join("\n").trim();
+  if (!sectionToken || !body) {
+    return undefined;
+  }
+  return {
     sectionName: parseProjectBlueprintSectionName(sectionToken),
     body,
   };
@@ -1901,6 +2395,46 @@ function buildBlueprintAgreementMessage(params: {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+async function updateChatSetupBlueprintDraftSection(params: {
+  store: OpenClawCodeChatopsStore;
+  session: ChatSetupSession;
+  sectionName: (typeof PROJECT_BLUEPRINT_REQUIRED_SECTIONS)[number];
+  body: string;
+}): Promise<ChatSetupSession> {
+  const currentSections = params.session.blueprintDraft?.sections ?? {};
+  const nextSession = {
+    ...params.session,
+    stage: "drafting-blueprint" as const,
+    blueprintDraft: {
+      status: "draft" as const,
+      repoNameSuggestions: undefined,
+      sections: {
+        ...currentSections,
+        [params.sectionName]: params.body.trim(),
+      },
+    },
+    updatedAt: new Date().toISOString(),
+  };
+  await params.store.upsertSetupSession(nextSession);
+  return nextSession;
+}
+
+function buildChatSetupDraftUpdateMessage(params: {
+  sectionName: string;
+  session: ChatSetupSession;
+}): string {
+  return [
+    `Updated setup draft section \`${params.sectionName}\`.`,
+    params.session.stage === "awaiting-repo-choice"
+      ? buildChatSetupAwaitingRepoChoiceMessage({
+          session: params.session,
+        })
+      : buildChatSetupDraftingBlueprintMessage({
+          session: params.session,
+        }),
+  ].join("\n");
 }
 
 function buildWorkItemBacklogLines(
@@ -4880,7 +5414,8 @@ export default {
         if (selection === "invalid") {
           return {
             text:
-              "Usage: /occode-setup existing owner/repo\n" +
+              "Usage: /occode-setup new-project\n" +
+              "   or: /occode-setup existing owner/repo\n" +
               "   or: /occode-setup new repo-name\n" +
               "   or: /occode-setup new owner/repo\n" +
               "   or: /occode-setup owner/repo",
@@ -4897,18 +5432,69 @@ export default {
               session: existing,
             })
           : undefined;
+        const currentSession = synced?.session ?? existing;
+        if (selection?.kind === "new-project-blueprint") {
+          const now = new Date().toISOString();
+          const nextSession = {
+            notifyChannel: ctx.channel,
+            notifyTarget,
+            projectMode: "new-project" as const,
+            repoKey: undefined,
+            pendingRepoName: undefined,
+            stage: "drafting-blueprint" as const,
+            githubAuthSource: currentSession?.githubAuthSource,
+            githubDeviceAuth: currentSession?.githubDeviceAuth,
+            blueprintDraft: currentSession?.blueprintDraft ?? {
+              status: "draft" as const,
+              sections: {},
+            },
+            createdAt: currentSession?.createdAt ?? now,
+            updatedAt: now,
+          };
+          await store.upsertSetupSession(nextSession);
+          return {
+            text: buildChatSetupDraftingBlueprintMessage({
+              session: nextSession,
+            }),
+          };
+        }
+        if (isChatSetupBlueprintDraftSession(currentSession) && !selection) {
+          return {
+            text:
+              currentSession.stage === "awaiting-repo-choice"
+                ? buildChatSetupAwaitingRepoChoiceMessage({
+                    session: currentSession,
+                  })
+                : buildChatSetupDraftingBlueprintMessage({
+                    session: currentSession,
+                  }),
+          };
+        }
+        if (
+          isChatSetupBlueprintDraftSession(currentSession) &&
+          selection?.kind === "new-repo" &&
+          currentSession.blueprintDraft.status !== "agreed"
+        ) {
+          return {
+            text: buildChatSetupRepoCreationBlockedMessage({
+              session: currentSession,
+            }),
+          };
+        }
         if (synced?.session.stage === "github-authenticated" && synced.session.githubAuthSource) {
           const nextSession = {
             ...synced.session,
             projectMode: selection?.projectMode ?? synced.session.projectMode,
-            repoKey:
-              selection?.projectMode === "existing-repo"
-                ? selection.repoKey
-                : synced.session.repoKey,
+            repoKey: selection?.kind === "existing-repo" ? selection.repoKey : synced.session.repoKey,
             pendingRepoName:
-              selection?.projectMode === "new-project"
+              selection?.kind === "new-repo"
                 ? selection.pendingRepoName
-                : synced.session.pendingRepoName,
+                : selection?.kind === "existing-repo" ||
+                    selection?.kind === "new-project-blueprint"
+                  ? undefined
+                  : synced.session.pendingRepoName,
+            blueprintDraft:
+              selection?.kind === "existing-repo" ? undefined : synced.session.blueprintDraft,
             updatedAt: new Date().toISOString(),
           };
           await store.upsertSetupSession(nextSession);
@@ -4943,14 +5529,16 @@ export default {
           await store.upsertSetupSession({
             ...synced.session,
             projectMode: selection?.projectMode ?? synced.session.projectMode,
-            repoKey:
-              selection?.projectMode === "existing-repo"
-                ? selection.repoKey
-                : synced.session.repoKey,
+            repoKey: selection?.kind === "existing-repo" ? selection.repoKey : synced.session.repoKey,
             pendingRepoName:
-              selection?.projectMode === "new-project"
+              selection?.kind === "new-repo"
                 ? selection.pendingRepoName
-                : synced.session.pendingRepoName,
+                : selection?.kind === "existing-repo" ||
+                    selection?.kind === "new-project-blueprint"
+                  ? undefined
+                  : synced.session.pendingRepoName,
+            blueprintDraft:
+              selection?.kind === "existing-repo" ? undefined : synced.session.blueprintDraft,
             updatedAt: new Date().toISOString(),
           });
           return {
@@ -4958,9 +5546,9 @@ export default {
               verificationUri: synced.status.verificationUri,
               userCode: synced.status.userCode,
               selectionLabel:
-                selection?.projectMode === "existing-repo"
+                selection?.kind === "existing-repo"
                   ? selection.repoKey
-                  : selection?.projectMode === "new-project"
+                  : selection?.kind === "new-repo"
                     ? selection.pendingRepoName
                     : synced.session.repoKey ?? synced.session.pendingRepoName,
             }),
@@ -4973,12 +5561,15 @@ export default {
           const nextSession = {
             notifyChannel: ctx.channel,
             notifyTarget,
-            projectMode: selection?.projectMode,
-            repoKey: selection?.projectMode === "existing-repo" ? selection.repoKey : undefined,
+            projectMode: selection?.projectMode ?? currentSession?.projectMode,
+            repoKey: selection?.kind === "existing-repo" ? selection.repoKey : undefined,
             pendingRepoName:
-              selection?.projectMode === "new-project" ? selection.pendingRepoName : undefined,
-            stage: "github-authenticated",
+              selection?.kind === "new-repo" ? selection.pendingRepoName : undefined,
+            stage: currentSession ? resolveChatSetupStageAfterAuth(currentSession) : "github-authenticated",
             githubAuthSource: readyToken.source,
+            blueprintDraft:
+              selection?.kind === "existing-repo" ? undefined : currentSession?.blueprintDraft,
+            githubDeviceAuth: currentSession?.githubDeviceAuth,
             createdAt: existing?.createdAt ?? now,
             updatedAt: now,
           } as const;
@@ -5011,18 +5602,50 @@ export default {
           };
         }
 
-        const started = await startOnboardingGitHubCliDeviceLogin({
-          stateDir: api.runtime.state.resolveStateDir(),
-        });
+        let started;
+        try {
+          started = await startOnboardingGitHubCliDeviceLogin({
+            stateDir: api.runtime.state.resolveStateDir(),
+          });
+        } catch (error) {
+          const failed = {
+            notifyChannel: ctx.channel,
+            notifyTarget,
+            projectMode: selection?.projectMode ?? currentSession?.projectMode,
+            repoKey: selection?.kind === "existing-repo" ? selection.repoKey : undefined,
+            pendingRepoName:
+              selection?.kind === "new-repo" ? selection.pendingRepoName : undefined,
+            stage: "awaiting-github-device-auth" as const,
+            blueprintDraft:
+              selection?.kind === "existing-repo" ? undefined : currentSession?.blueprintDraft,
+            lastFailure: {
+              step: "github-auth" as const,
+              reason: error instanceof Error ? error.message : String(error),
+              occurredAt: new Date().toISOString(),
+            },
+            createdAt: existing?.createdAt ?? new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          await store.upsertSetupSession(failed);
+          return {
+            text: buildChatSetupFailedMessage({
+              reason: error instanceof Error ? error.message : String(error),
+              repoKey: failed.repoKey,
+            }),
+          };
+        }
         const now = new Date().toISOString();
         await store.upsertSetupSession({
           notifyChannel: ctx.channel,
           notifyTarget,
-          projectMode: selection?.projectMode,
-          repoKey: selection?.projectMode === "existing-repo" ? selection.repoKey : undefined,
+          projectMode: selection?.projectMode ?? currentSession?.projectMode,
+          repoKey: selection?.kind === "existing-repo" ? selection.repoKey : undefined,
           pendingRepoName:
-            selection?.projectMode === "new-project" ? selection.pendingRepoName : undefined,
+            selection?.kind === "new-repo" ? selection.pendingRepoName : undefined,
           stage: "awaiting-github-device-auth",
+          blueprintDraft:
+            selection?.kind === "existing-repo" ? undefined : currentSession?.blueprintDraft,
+          lastFailure: undefined,
           githubDeviceAuth: {
             pid: started.pid,
             logPath: started.logPath,
@@ -5038,9 +5661,9 @@ export default {
             verificationUri: started.verificationUri,
             userCode: started.userCode,
             selectionLabel:
-              selection?.projectMode === "existing-repo"
+              selection?.kind === "existing-repo"
                 ? selection.repoKey
-                : selection?.projectMode === "new-project"
+                : selection?.kind === "new-repo"
                   ? selection.pendingRepoName
                   : undefined,
           }),
@@ -5077,68 +5700,64 @@ export default {
             text: "No active openclawcode setup session for this chat. Start with /occode-setup.",
           };
         }
-        const synced = await syncChatSetupSession({
-          store,
-          session: existing,
-        });
-        if (synced.session.stage === "github-authenticated" && synced.session.githubAuthSource) {
-          const completed = await completeChatSetupProjectSelection({
+        return {
+          text: await continueChatSetupSession({
             store,
-            session: synced.session,
-          });
-          if (completed.session.repoKey) {
-            const bootstrapped = await completeChatSetupBootstrap({
-              store,
-              session: completed.session,
-            });
-            if (bootstrapped.message) {
-              return {
-                text: bootstrapped.message,
-              };
-            }
-          }
-          if (completed.message) {
-            return {
-              text: completed.message,
-            };
-          }
-        }
-        if (synced.session.stage === "bootstrap-complete" && synced.session.githubAuthSource) {
+            session: existing,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-setup-cancel",
+      description: "Discard the active openclawcode setup session for this chat.",
+      acceptsArgs: false,
+      handler: async (ctx) => {
+        const notifyTarget = resolveCommandNotifyTarget(ctx);
+        if (!notifyTarget) {
           return {
-            text: buildChatSetupBootstrapCompleteMessage({
-              source: synced.session.githubAuthSource,
-              repoKey: synced.session.repoKey ?? "unknown",
-              bootstrap: synced.session.bootstrap ?? {
-                completedAt: new Date().toISOString(),
-              },
-            }),
+            text:
+              "This setup flow needs a concrete chat target. Start it from a direct or bound chat.",
           };
         }
-        if (synced.session.stage === "github-authenticated" && synced.session.githubAuthSource) {
+        const removed = await store.removeSetupSession({
+          notifyChannel: ctx.channel,
+          notifyTarget,
+        });
+        return {
+          text: removed
+            ? "Cancelled the active openclawcode setup session for this chat."
+            : "No active openclawcode setup session for this chat. Start with /occode-setup.",
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-setup-retry",
+      description: "Retry or resume the active openclawcode setup session for this chat.",
+      acceptsArgs: false,
+      handler: async (ctx) => {
+        const notifyTarget = resolveCommandNotifyTarget(ctx);
+        if (!notifyTarget) {
           return {
-            text: buildChatSetupReadyMessage({
-              source: synced.session.githubAuthSource,
-              repoKey: synced.session.repoKey,
-            }),
+            text:
+              "This setup flow needs a concrete chat target. Start it from a direct or bound chat.",
           };
         }
-        if (synced.status?.state === "pending") {
+        const existing = await store.getSetupSession({
+          notifyChannel: ctx.channel,
+          notifyTarget,
+        });
+        if (!existing) {
           return {
-            text: buildChatSetupAwaitingGitHubAuthMessage({
-              verificationUri: synced.status.verificationUri,
-              userCode: synced.status.userCode,
-              selectionLabel: synced.session.repoKey ?? synced.session.pendingRepoName,
-            }),
+            text: "No active openclawcode setup session for this chat. Start with /occode-setup.",
           };
         }
         return {
-          text: buildChatSetupFailedMessage({
-            reason:
-              synced.status?.state === "failed"
-                ? synced.status.reason
-                : "GitHub auth is still missing.",
-            repoKey: synced.session.repoKey,
-            logTail: synced.status?.logTail,
+          text: await continueChatSetupSession({
+            store,
+            session: existing,
           }),
         };
       },
@@ -5375,6 +5994,42 @@ export default {
       handler: async (ctx) => {
         const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
         const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const notifyTarget = resolveCommandNotifyTarget(ctx);
+        const setupSession = notifyTarget
+          ? await store.getSetupSession({
+              notifyChannel: ctx.channel,
+              notifyTarget,
+            })
+          : undefined;
+        if (
+          isChatSetupBlueprintDraftSession(setupSession) &&
+          !hasExplicitRepoArgumentInCommandBody({
+            commandBody: ctx.commandBody,
+            commandName: "occode-goal",
+          })
+        ) {
+          const body = extractMultilineCommandBody({
+            commandBody: ctx.commandBody,
+            commandName: "occode-goal",
+          });
+          if (!body) {
+            return {
+              text: "Usage during new-project setup: /occode-goal <goal text>",
+            };
+          }
+          const updated = await updateChatSetupBlueprintDraftSection({
+            store,
+            session: setupSession,
+            sectionName: "Goal",
+            body,
+          });
+          return {
+            text: buildChatSetupDraftUpdateMessage({
+              sectionName: "Goal",
+              session: updated,
+            }),
+          };
+        }
         const parsed = parseRepoScopedMultilineBody({
           commandBody: ctx.commandBody,
           commandName: "occode-goal",
@@ -5428,6 +6083,48 @@ export default {
       handler: async (ctx) => {
         const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
         const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const notifyTarget = resolveCommandNotifyTarget(ctx);
+        const setupSession = notifyTarget
+          ? await store.getSetupSession({
+              notifyChannel: ctx.channel,
+              notifyTarget,
+            })
+          : undefined;
+        if (
+          isChatSetupBlueprintDraftSession(setupSession) &&
+          !hasExplicitRepoArgumentInCommandBody({
+            commandBody: ctx.commandBody,
+            commandName: "occode-blueprint-edit",
+          })
+        ) {
+          let parsedSetup;
+          try {
+            parsedSetup = parseSetupBlueprintEditArgs(ctx.commandBody);
+          } catch (error) {
+            return {
+              text: (error as Error).message,
+            };
+          }
+          if (!parsedSetup) {
+            return {
+              text:
+                "Usage during new-project setup: /occode-blueprint-edit <section>\n<body...>\n" +
+                `Sections: ${projectBlueprintSectionIds().join(", ")}`,
+            };
+          }
+          const updated = await updateChatSetupBlueprintDraftSection({
+            store,
+            session: setupSession,
+            sectionName: parsedSetup.sectionName,
+            body: parsedSetup.body,
+          });
+          return {
+            text: buildChatSetupDraftUpdateMessage({
+              sectionName: parsedSetup.sectionName,
+              session: updated,
+            }),
+          };
+        }
         let parsed:
           | {
               repo: { owner: string; repo: string };
@@ -5499,6 +6196,43 @@ export default {
       handler: async (ctx) => {
         const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
         const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const notifyTarget = resolveCommandNotifyTarget(ctx);
+        const setupSession = notifyTarget
+          ? await store.getSetupSession({
+              notifyChannel: ctx.channel,
+              notifyTarget,
+            })
+          : undefined;
+        if (isChatSetupBlueprintDraftSession(setupSession) && !(ctx.args ?? "").trim()) {
+          const missing = collectChatSetupDraftMissingSections(setupSession);
+          if (missing.length > 0) {
+            return {
+              text: buildChatSetupDraftingBlueprintMessage({
+                session: setupSession,
+              }),
+            };
+          }
+          const now = new Date().toISOString();
+          const updated = {
+            ...setupSession,
+            stage: "awaiting-repo-choice" as const,
+            blueprintDraft: {
+              ...setupSession.blueprintDraft,
+              status: "agreed" as const,
+              agreedAt: now,
+              repoNameSuggestions: buildOnboardingRepoNameSuggestions(
+                buildChatSetupDraftProjectText(setupSession),
+              ),
+            },
+            updatedAt: now,
+          };
+          await store.upsertSetupSession(updated);
+          return {
+            text: buildChatSetupAwaitingRepoChoiceMessage({
+              session: updated,
+            }),
+          };
+        }
         const repo = parseChatopsRepoReference(ctx.args ?? "", {
           owner: defaultRepo?.owner,
           repo: defaultRepo?.repo,
@@ -5544,6 +6278,25 @@ export default {
       handler: async (ctx) => {
         const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
         const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const notifyTarget = resolveCommandNotifyTarget(ctx);
+        const setupSession = notifyTarget
+          ? await store.getSetupSession({
+              notifyChannel: ctx.channel,
+              notifyTarget,
+            })
+          : undefined;
+        if (isChatSetupBlueprintDraftSession(setupSession) && !(ctx.args ?? "").trim()) {
+          return {
+            text:
+              setupSession.stage === "awaiting-repo-choice"
+                ? buildChatSetupAwaitingRepoChoiceMessage({
+                    session: setupSession,
+                  })
+                : buildChatSetupDraftingBlueprintMessage({
+                    session: setupSession,
+                  }),
+          };
+        }
         const repo = parseChatopsRepoReference(ctx.args ?? "", {
           owner: defaultRepo?.owner,
           repo: defaultRepo?.repo,
