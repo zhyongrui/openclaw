@@ -27,6 +27,7 @@ import {
   openclawCodeBlueprintSetStatusCommand,
   openclawCodeBlueprintShowCommand,
   openclawCodeListValidationIssuesCommand,
+  openclawCodeNextWorkShowCommand,
   openclawCodePromotionGateRefreshCommand,
   openclawCodePromotionGateShowCommand,
   openclawCodePromotionReceiptRecordCommand,
@@ -2473,6 +2474,275 @@ describe("openclawCodeRunCommand", () => {
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(payload.exists).toBe(true);
     expect(payload.artifactStale).toBe(true);
+  });
+
+  it("selects the first blueprint-backed work item when execution is ready", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-next-work-ready-"));
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Next Work Ready Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-19T00:00:00.000Z",
+        "updatedAt: 2026-03-19T00:00:00.000Z",
+        "statusChangedAt: 2026-03-19T00:00:00.000Z",
+        "agreedAt: 2026-03-19T00:00:00.000Z",
+        "---",
+        "",
+        "# Next Work Ready Blueprint",
+        "",
+        "## Goal",
+        "Select the next blueprint-backed work item when all prerequisites are satisfied.",
+        "",
+        "## Success Criteria",
+        "- The next-work command returns a ready-to-execute decision.",
+        "",
+        "## Scope",
+        "- In scope: machine-readable next-work selection.",
+        "",
+        "## Non-Goals",
+        "- Issue creation.",
+        "",
+        "## Constraints",
+        "- Keep the first selection deterministic.",
+        "",
+        "## Risks",
+        "- Hidden blockers could derail autonomous progress.",
+        "",
+        "## Assumptions",
+        "- All operator-facing prerequisites are already satisfied.",
+        "",
+        "## Human Gates",
+        "- Merge promotion: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Ship the next-work selection artifact.",
+        "- Surface the next decision in chat.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-19: ready-selection baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+    runtime.log.mockClear();
+
+    await openclawCodeNextWorkShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      exists: true,
+      decision: "ready-to-execute",
+      canContinueAutonomously: true,
+      blockingGateId: null,
+      workItemCount: 2,
+      discoveryEvidenceCount: 0,
+      unresolvedRoleCount: 0,
+      selectedWorkItem: {
+        id: "planned-01-ship-the-next-work-selection-artifact",
+        selectedFrom: "work-item-inventory",
+        title: "Ship the next-work selection artifact.",
+      },
+    });
+  });
+
+  it("surfaces missing clarification as the reason autonomous progress cannot continue", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-next-work-clarify-"));
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Next Work Clarification Blueprint",
+        "status: draft",
+        "createdAt: 2026-03-19T00:00:00.000Z",
+        "updatedAt: 2026-03-19T00:00:00.000Z",
+        "statusChangedAt: 2026-03-19T00:00:00.000Z",
+        "---",
+        "",
+        "# Next Work Clarification Blueprint",
+        "",
+        "## Goal",
+        "Clarify the missing project target before choosing execution work.",
+        "",
+        "## Success Criteria",
+        "- None yet.",
+        "",
+        "## Scope",
+        "- In scope: clarification handling.",
+        "",
+        "## Non-Goals",
+        "- Autonomous execution.",
+        "",
+        "## Constraints",
+        "- Keep the ambiguity visible.",
+        "",
+        "## Risks",
+        "- Wrong work could be selected too early.",
+        "",
+        "## Assumptions",
+        "- None yet.",
+        "",
+        "## Human Gates",
+        "- Goal agreement: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "",
+        "## Workstreams",
+        "- None.",
+        "",
+        "## Open Questions",
+        "- Which repository outcome matters most right now?",
+        "",
+        "## Change Log",
+        "- 2026-03-19: clarification baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    runtime.log.mockClear();
+    await openclawCodeNextWorkShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.decision).toBe("blocked-on-missing-clarification");
+    expect(payload.canContinueAutonomously).toBe(false);
+    expect(payload.blockingGateId).toBe("work-item-projection");
+    expect(payload.blockers.length).toBeGreaterThan(0);
+    expect(payload.suggestions.length).toBeGreaterThan(0);
+  });
+
+  it("selects discovery-maintenance work first when the work-item artifact is stale", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-next-work-discovery-"));
+    const blueprintPath = path.join(repoRoot, "PROJECT-BLUEPRINT.md");
+
+    await writeFile(
+      blueprintPath,
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Next Work Discovery Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-19T00:00:00.000Z",
+        "updatedAt: 2026-03-19T00:00:00.000Z",
+        "statusChangedAt: 2026-03-19T00:00:00.000Z",
+        "agreedAt: 2026-03-19T00:00:00.000Z",
+        "---",
+        "",
+        "# Next Work Discovery Blueprint",
+        "",
+        "## Goal",
+        "Prioritize stale-artifact maintenance before continuing blueprint execution.",
+        "",
+        "## Success Criteria",
+        "- The next-work command prefers stale-artifact discovery work.",
+        "",
+        "## Scope",
+        "- In scope: discovery precedence.",
+        "",
+        "## Non-Goals",
+        "- Live issue creation.",
+        "",
+        "## Constraints",
+        "- Keep the selection deterministic.",
+        "",
+        "## Risks",
+        "- A stale backlog could misdirect future issue materialization.",
+        "",
+        "## Assumptions",
+        "- The blueprint was already agreed before the edit.",
+        "",
+        "## Human Gates",
+        "- Merge promotion: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Ship the initial artifact snapshot.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-19: discovery precedence baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+    runtime.log.mockClear();
+
+    const updatedContent = (await readFile(blueprintPath, "utf8")).replace(
+      "Ship the initial artifact snapshot.",
+      "Ship the initial artifact snapshot after the blueprint edit.",
+    );
+    await writeFile(blueprintPath, updatedContent, "utf8");
+
+    await openclawCodeNextWorkShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.decision).toBe("blocked-on-human");
+    expect(payload.blockingGateId).toBe("execution-start");
+    expect(payload.discoveryEvidenceCount).toBeGreaterThan(0);
+    expect(payload.selectedWorkItem).toMatchObject({
+      id: "discovered-refresh-stale-work-item-artifact",
+      selectedFrom: "discovery",
+      title: "Refresh the repo-local work-item inventory after blueprint changes.",
+    });
   });
 
   it("shows an empty operator status snapshot when no chatops state file exists", async () => {

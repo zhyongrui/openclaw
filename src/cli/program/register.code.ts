@@ -13,6 +13,7 @@ import {
   openclawCodeBlueprintStatusIds,
   openclawCodeDiscoverWorkItemsCommand,
   openclawCodeListValidationIssuesCommand,
+  openclawCodeNextWorkShowCommand,
   openclawCodeOperatorStatusSnapshotShowCommand,
   openclawCodePolicyShowCommand,
   openclawCodePromotionGateRefreshCommand,
@@ -101,6 +102,10 @@ ${formatHelpExamples([
   [
     "openclaw code discover-work-items --json",
     "Run the first non-validation discovery pipeline and persist discovered work items.",
+  ],
+  [
+    "openclaw code next-work-show --json",
+    "Explain the next blueprint-backed work item to execute or why the system is blocked.",
   ],
   [
     "openclaw code role-routing-refresh --json",
@@ -439,6 +444,23 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .action(async (opts) => {
       await runCommandWithRuntime(defaultRuntime, async () => {
         await openclawCodeDiscoverWorkItemsCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("next-work-show")
+    .description("Show the current next-work decision for blueprint-backed execution")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeNextWorkShowCommand(
           {
             repoRoot: opts.repoRoot as string | undefined,
             json: Boolean(opts.json),

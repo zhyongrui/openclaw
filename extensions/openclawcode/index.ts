@@ -66,6 +66,10 @@ import {
   readProjectRollbackReceiptArtifact,
 } from "../../src/openclawcode/promotion-artifacts.js";
 import {
+  readProjectNextWorkSelection,
+  writeProjectNextWorkSelection,
+} from "../../src/openclawcode/next-work.js";
+import {
   readProjectRoleRoutingPlan,
   writeProjectRoleRoutingPlan,
 } from "../../src/openclawcode/role-routing.js";
@@ -2672,6 +2676,49 @@ function buildStageGateSummaryMessage(params: {
     } else if (gate.suggestions.length > 0) {
       lines.push(`  suggestions: ${gate.suggestions.slice(0, 2).join(" ; ")}`);
     }
+  }
+
+  return lines.join("\n");
+}
+
+function buildNextWorkSummaryMessage(params: {
+  repo: { owner: string; repo: string };
+  selection: Awaited<ReturnType<typeof readProjectNextWorkSelection>>;
+}): string {
+  const lines = [`openclawcode next work for ${formatRepoKey(params.repo)}`];
+
+  if (!params.selection.blueprintExists) {
+    lines.push("Blueprint: missing");
+    return lines.join("\n");
+  }
+
+  if (params.selection.blueprintRevisionId) {
+    lines.push(`Blueprint revision: ${params.selection.blueprintRevisionId}`);
+  }
+  lines.push(`Decision: ${params.selection.decision}`);
+  lines.push(
+    `Autonomous continuation: ${params.selection.canContinueAutonomously ? "ready" : "blocked"}`,
+  );
+  lines.push(
+    `Signals: clarifications=${params.selection.clarificationQuestionCount} | discovery=${params.selection.discoveryEvidenceCount} | workItems=${params.selection.workItemCount} | blockedGates=${params.selection.blockedGateCount} | needsHuman=${params.selection.needsHumanDecisionCount} | unresolvedRoles=${params.selection.unresolvedRoleCount}`,
+  );
+  if (params.selection.blockingGateId) {
+    lines.push(`Blocking gate: ${params.selection.blockingGateId}`);
+  }
+  if (params.selection.selectedWorkItem) {
+    lines.push(
+      `Selected: ${params.selection.selectedWorkItem.title} | ${params.selection.selectedWorkItem.selectedFrom} | ${params.selection.selectedWorkItem.kind}`,
+    );
+    lines.push(`Issue draft: ${params.selection.selectedWorkItem.githubIssueDraftTitle}`);
+  }
+  if (params.selection.selectedReason) {
+    lines.push(`Reason: ${params.selection.selectedReason}`);
+  }
+  for (const blocker of params.selection.blockers.slice(0, 3)) {
+    lines.push(`- blocker: ${blocker}`);
+  }
+  for (const suggestion of params.selection.suggestions.slice(0, 3)) {
+    lines.push(`- suggestion: ${suggestion}`);
   }
 
   return lines.join("\n");
@@ -6486,6 +6533,46 @@ export default {
               repo: repoConfig.repo,
             },
             artifact,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-next",
+      description:
+        "Show the next blueprint-backed work item to execute, or explain why autonomous progress is blocked.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const repo = parseChatopsRepoReference(ctx.args ?? "", {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!repo) {
+          return {
+            text:
+              "Usage: /occode-next owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-next",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+
+        const selection = await writeProjectNextWorkSelection(repoConfig.repoRoot);
+        return {
+          text: buildNextWorkSummaryMessage({
+            repo: {
+              owner: repoConfig.owner,
+              repo: repoConfig.repo,
+            },
+            selection,
           }),
         };
       },

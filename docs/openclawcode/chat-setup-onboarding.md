@@ -247,6 +247,8 @@ The operator never pastes tokens into chat.
      commands
    - chat can summarize the current blueprint goal, counts, clarification
      questions, auto-bind status, and next suggested command for the operator
+   - chat can hand off into `/occode-next owner/repo` once the repo-local
+     work-item artifact exists
 
 Future states can extend this into:
 
@@ -294,13 +296,19 @@ control-plane steps.
 
 ### 3. handoff into autonomous progress
 
-- make the post-bootstrap summary point directly at the next actionable work
-  item, not only the next command
-- connect setup-complete state to the next-work selection logic from the main
-  autonomy plan
+- `openclaw code next-work-show` now persists `.openclawcode/next-work.json`
+  and explains:
+  - ready to execute
+  - blocked on human
+  - blocked on missing clarification
+  - blocked on policy
+- `/occode-next owner/repo` now exposes the same decision in chat
+- the remaining handoff gap is issue materialization:
+  - setup can now point at the next work item
+  - it still cannot create or reuse the GitHub issue for that work item yet
 
 ### Recommended build order
 
 1. live operator proof
 2. failure recovery polish
-3. handoff into autonomous progress
+3. handoff into issue materialization

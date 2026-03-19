@@ -49,6 +49,7 @@ import {
   readProjectPromotionGateArtifact,
   readProjectPromotionReceiptArtifact,
   readOpenClawCodeOperatorStatusSnapshot,
+  readProjectNextWorkSelection,
   readProjectRollbackReceiptArtifact,
   readProjectRollbackSuggestionArtifact,
   readProjectStageGateArtifact,
@@ -68,6 +69,7 @@ import {
   writeProjectRollbackReceiptArtifact,
   writeProjectRollbackSuggestionArtifact,
   writeProjectRoleRoutingPlan,
+  writeProjectNextWorkSelection,
   writeProjectWorkItemInventory,
   buildOpenClawCodePolicySnapshot,
   resolveAutoMergeDisposition,
@@ -241,6 +243,11 @@ export interface OpenClawCodeStageGatesRefreshOpts {
 }
 
 export interface OpenClawCodeStageGatesShowOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeNextWorkShowOpts {
   repoRoot?: string;
   json?: boolean;
 }
@@ -1925,6 +1932,54 @@ function logProjectStageGateArtifact(params: {
   runtime.log(`Needs human decision: ${artifact.needsHumanDecisionCount}`);
   for (const gate of artifact.gates) {
     runtime.log(`- ${gate.gateId}: ${gate.readiness} | ${gate.title}`);
+  }
+}
+
+function logProjectNextWorkSelection(params: {
+  selection: Awaited<ReturnType<typeof readProjectNextWorkSelection>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { selection, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(selection, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${selection.repoRoot}`);
+  runtime.log(`Next-work path: ${selection.artifactPath}`);
+  runtime.log(`Exists: ${selection.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${selection.generatedAt ?? "not yet generated"}`);
+  runtime.log(`Decision: ${selection.decision}`);
+  runtime.log(`Autonomous continuation: ${selection.canContinueAutonomously ? "yes" : "no"}`);
+  runtime.log(`Blueprint revision: ${selection.blueprintRevisionId ?? "unknown"}`);
+  if (selection.blockingGateId) {
+    runtime.log(`Blocking gate: ${selection.blockingGateId}`);
+  }
+  if (selection.selectedWorkItem) {
+    runtime.log(
+      `Selected work item: ${selection.selectedWorkItem.id} | ${selection.selectedWorkItem.title}`,
+    );
+    runtime.log(`Selected from: ${selection.selectedWorkItem.selectedFrom}`);
+    runtime.log(`Issue draft: ${selection.selectedWorkItem.githubIssueDraftTitle}`);
+  }
+  if (selection.selectedReason) {
+    runtime.log(`Reason: ${selection.selectedReason}`);
+  }
+  runtime.log(
+    `Signals: clarifications=${selection.clarificationQuestionCount} | discovery=${selection.discoveryEvidenceCount} | workItems=${selection.workItemCount} | blockedGates=${selection.blockedGateCount} | needsHuman=${selection.needsHumanDecisionCount} | unresolvedRoles=${selection.unresolvedRoleCount}`,
+  );
+  if (selection.blockers.length > 0) {
+    runtime.log("Blockers:");
+    for (const blocker of selection.blockers) {
+      runtime.log(`- ${blocker}`);
+    }
+  }
+  if (selection.suggestions.length > 0) {
+    runtime.log("Suggestions:");
+    for (const suggestion of selection.suggestions) {
+      runtime.log(`- ${suggestion}`);
+    }
   }
 }
 
@@ -3651,6 +3706,19 @@ export async function openclawCodeStageGatesShowCommand(
   const artifact = await readProjectStageGateArtifact(repoRoot);
   logProjectStageGateArtifact({
     artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeNextWorkShowCommand(
+  opts: OpenClawCodeNextWorkShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const selection = await writeProjectNextWorkSelection(repoRoot);
+  logProjectNextWorkSelection({
+    selection,
     runtime,
     json: Boolean(opts.json),
   });

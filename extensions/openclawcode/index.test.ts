@@ -5900,6 +5900,88 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("shows the next blueprint-backed work item through /occode-next", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Next Work Chat Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-19T00:00:00.000Z",
+          "updatedAt: 2026-03-19T00:00:00.000Z",
+          "statusChangedAt: 2026-03-19T00:00:00.000Z",
+          "agreedAt: 2026-03-19T00:00:00.000Z",
+          "---",
+          "",
+          "# Next Work Chat Blueprint",
+          "",
+          "## Goal",
+          "Show the next blueprint-backed work item directly in chat.",
+          "",
+          "## Success Criteria",
+          "- /occode-next explains the next selected work item.",
+          "",
+          "## Scope",
+          "- In scope: chat-visible next-work summary.",
+          "",
+          "## Non-Goals",
+          "- Issue creation.",
+          "",
+          "## Constraints",
+          "- Keep the message concise.",
+          "",
+          "## Risks",
+          "- Operators could lose project context without a direct summary.",
+          "",
+          "## Assumptions",
+          "- The blueprint is already agreed.",
+          "",
+          "## Human Gates",
+          "- Merge promotion: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: Codex",
+          "- Doc-writer: Codex",
+          "",
+          "## Workstreams",
+          "- Add a chat summary for the next selected work item.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-19: next-work chat proof.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+
+      const result = await fixture.commands.get("occode-next")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-next",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain("openclawcode next work for zhyongrui/openclawcode");
+      expect(result?.text).toContain("Decision: ready-to-execute");
+      expect(result?.text).toContain(
+        "Selected: Add a chat summary for the next selected work item. | work-item-inventory | planned",
+      );
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("records a stage-gate decision through /occode-gate-decide", async () => {
     const fixture = await registerPluginFixture();
     try {

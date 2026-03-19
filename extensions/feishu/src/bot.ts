@@ -20,7 +20,11 @@ import {
   resolveDefaultGroupPolicy,
   warnMissingProviderGroupPolicyFallbackOnce,
 } from "../runtime-api.js";
-import { executePluginCommand, matchPluginCommand } from "../../../src/plugins/commands.js";
+import {
+  executePluginCommand,
+  matchPluginCommand,
+  normalizePluginCommandBody,
+} from "../../../src/plugins/commands.js";
 import { resolveFeishuAccount } from "./accounts.js";
 import {
   checkBotMentioned,
@@ -467,7 +471,9 @@ export async function handleFeishuMessage(params: {
       channel: "feishu",
       accountId: account.accountId,
     });
-    const commandProbeBody = isGroup ? normalizeFeishuCommandProbeBody(ctx.content) : ctx.content;
+    const commandProbeBody = normalizePluginCommandBody(
+      isGroup ? normalizeFeishuCommandProbeBody(ctx.content) : ctx.content,
+    );
     const shouldComputeCommandAuthorized = core.channel.commands.shouldComputeCommandAuthorized(
       commandProbeBody,
       cfg,

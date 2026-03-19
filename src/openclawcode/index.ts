@@ -2,6 +2,7 @@ export * from "./app/index.js";
 export * from "./contracts/index.js";
 export * from "./discovery.js";
 export * from "./github/index.js";
+export * from "./next-work.js";
 export * from "./orchestrator/index.js";
 export * from "./operator-status.js";
 export * from "./policy.js";

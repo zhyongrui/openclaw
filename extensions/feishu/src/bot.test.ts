@@ -89,10 +89,14 @@ vi.mock("./client.js", () => ({
   createFeishuClient: mockCreateFeishuClient,
 }));
 
-vi.mock("../../../src/plugins/commands.js", () => ({
-  matchPluginCommand: mockMatchPluginCommand,
-  executePluginCommand: mockExecutePluginCommand,
-}));
+vi.mock("../../../src/plugins/commands.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../src/plugins/commands.js")>();
+  return {
+    ...actual,
+    matchPluginCommand: mockMatchPluginCommand,
+    executePluginCommand: mockExecutePluginCommand,
+  };
+});
 
 vi.mock("openclaw/plugin-sdk/conversation-runtime", async (importOriginal) => {
   const actual = await importOriginal<typeof import("openclaw/plugin-sdk/conversation-runtime")>();
@@ -1017,6 +1021,59 @@ describe("handleFeishuMessage command authorization", () => {
     await dispatchMessage({ cfg, event });
 
     expect(mockShouldComputeCommandAuthorized).toHaveBeenCalledWith("/model", cfg);
+  });
+
+  it("normalizes invisible characters and slash variants before plugin-command probing", async () => {
+    mockShouldComputeCommandAuthorized.mockReturnValue(true);
+    mockResolveCommandAuthorizedFromAuthorizers.mockReturnValue(true);
+    mockMatchPluginCommand.mockReturnValue({
+      command: {
+        name: "occode-setup",
+        description: "Start setup",
+        pluginId: "openclawcode",
+        acceptsArgs: true,
+        handler: vi.fn(),
+      },
+      args: "new-project",
+    });
+    mockExecutePluginCommand.mockResolvedValue({ text: "plugin output" });
+
+    const cfg: ClawdbotConfig = {
+      channels: {
+        feishu: {
+          dmPolicy: "open",
+        },
+      },
+    } as ClawdbotConfig;
+
+    const event: FeishuMessageEvent = {
+      sender: {
+        sender_id: {
+          open_id: "ou-attacker",
+        },
+      },
+      message: {
+        message_id: "msg-plugin-command-normalized",
+        chat_id: "oc-dm",
+        chat_type: "p2p",
+        message_type: "text",
+        content: JSON.stringify({ text: "\u200b／occode-setup new-project" }),
+      },
+    };
+
+    await dispatchMessage({ cfg, event });
+
+    expect(mockShouldComputeCommandAuthorized).toHaveBeenCalledWith(
+      "/occode-setup new-project",
+      cfg,
+    );
+    expect(mockMatchPluginCommand).toHaveBeenCalledWith("/occode-setup new-project");
+    expect(mockExecutePluginCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandBody: "/occode-setup new-project",
+      }),
+    );
+    expect(mockDispatchReplyFromConfig).not.toHaveBeenCalled();
   });
 
   it("falls back to top-level allowFrom for group command authorization", async () => {

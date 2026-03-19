@@ -71,6 +71,11 @@ Exit signal:
 - the system can explain why a specific next work item was chosen or why it
   cannot continue
 
+Status:
+
+- landed on 2026-03-19 through `openclaw code next-work-show`,
+  `.openclawcode/next-work.json`, and `/occode-next`
+
 ### Milestone 3: Issue Materialization From Work Items
 
 Problem:
@@ -187,15 +192,15 @@ The plan must preserve:
 
 ## Recommendation
 
-Milestone 1 is now complete.
+Milestones 1 and 2 are now complete.
 
-The next implementation slice should be Milestone 2:
+The next implementation slice should be Milestone 3:
 
-- blueprint-driven next-work selection
+- issue materialization from work items
 
-It is now the shortest path to moving from "chat can finish setup" to "the
-system can keep choosing credible work without a human re-framing the repo
-state each time."
+That is now the shortest path from "the system can choose the next credible
+work item" to "the system can create or reuse the correct GitHub issue and
+keep moving without manual issue framing."
 
 ## Setup Track Addendum
 
@@ -209,6 +214,8 @@ The chat-native setup track now has a concrete operator-facing foundation:
 - chat can run bootstrap, sync the setup draft into the real
   `PROJECT-BLUEPRINT.md`, refresh work items and stage gates, and surface the
   first follow-up command
+- chat and CLI can now explain the next blueprint-backed work item through
+  `/occode-next` and `openclaw code next-work-show`
 - bootstrap can auto-bind the active chat when safe
 - setup sessions now have cancel/retry controls and persisted failure context
 
@@ -217,8 +224,8 @@ The remaining setup-specific hardening sequence should be:
 1. live-proof the full `new-project` flow on a real chat + GitHub operator host
 2. tighten recovery messaging for expired auth, repo-create failures,
    bootstrap failures, and blueprint-sync failures
-3. feed the agreed blueprint/work-item/gate state directly into Milestone 2
-   next-work selection so setup hands off into autonomous progress cleanly
+3. feed the agreed blueprint/work-item/gate state directly into Milestone 3
+   issue materialization so setup hands off into autonomous execution cleanly
 
 This setup track remains the operator-surface prerequisite for the later
 autonomous loop milestones, because it turns onboarding from a CLI-heavy

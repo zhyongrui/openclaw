@@ -33,6 +33,19 @@ let registryLocked = false;
 
 // Maximum allowed length for command arguments (defense in depth)
 const MAX_ARGS_LENGTH = 4096;
+const INVISIBLE_COMMAND_CHARS_RE = /[\u200b-\u200d\u2060\ufeff]/gu;
+const SLASH_VARIANTS_RE = /[／⁄∕]/gu;
+
+export function normalizePluginCommandBody(commandBody: string): string {
+  if (!commandBody) {
+    return "";
+  }
+  return commandBody
+    .normalize("NFKC")
+    .replace(INVISIBLE_COMMAND_CHARS_RE, "")
+    .replace(SLASH_VARIANTS_RE, "/")
+    .trim();
+}
 
 /**
  * Reserved command names that plugins cannot override (built-in commands).
@@ -246,7 +259,7 @@ export function clearPluginCommandsForPlugin(pluginId: string): void {
 export function matchPluginCommand(
   commandBody: string,
 ): { command: RegisteredPluginCommand; args?: string } | null {
-  const trimmed = commandBody.trim();
+  const trimmed = normalizePluginCommandBody(commandBody);
   if (!trimmed.startsWith("/")) {
     return null;
   }
@@ -524,5 +537,6 @@ export function getPluginCommandSpecs(provider?: string): Array<{
 }
 
 export const __testing = {
+  normalizePluginCommandBody,
   resolveBindingConversationFromCommand,
 };
