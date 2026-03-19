@@ -222,3 +222,65 @@ session into:
 
 That is the path from "chat can start auth" to "chat can complete first-run
 configuration end-to-end".
+
+## Remaining Delivery Tasks
+
+The remaining setup-specific work is now small enough to track explicitly.
+
+### 1. `new-project` blueprint-first conversation
+
+- capture the project goal from chat before repo creation
+- ask for:
+  - target user
+  - first MVP
+  - constraints
+  - non-goals
+- generate the first blueprint draft directly from setup state
+- let the operator revise that draft before creating the repo
+
+### 2. repo-name suggestion flow for `new-project`
+
+- derive 3-5 suggested repo names from the agreed blueprint
+- let the operator pick one or provide a custom name
+- keep the chosen name in setup state until creation succeeds
+
+### 3. chat-native blueprint agreement loop
+
+- add setup-aware prompts for missing blueprint sections
+- expose one-step follow-ups from setup into:
+  - `/occode-goal`
+  - `/occode-blueprint-edit`
+  - `/occode-blueprint-agree`
+- mark the setup session when blueprint agreement is complete
+
+### 4. automatic post-blueprint progression
+
+- after blueprint agreement:
+  - refresh work items
+  - refresh stage gates
+  - show the first executable next step
+- avoid forcing the operator to jump back into CLI output
+
+### 5. auto-bind and chat readiness
+
+- reuse the current chat as the repo binding when safe
+- only fall back to `/occode-bind` when the target is ambiguous
+- surface webhook/chat proof readiness in a setup-specific summary
+
+### 6. operator controls and resilience
+
+- `/occode-setup-cancel`
+- `/occode-setup-retry`
+- clearer recovery when:
+  - GitHub login expires
+  - repo creation fails
+  - bootstrap fails
+  - blueprint is missing or malformed
+
+### Recommended build order
+
+1. `new-project` blueprint-first conversation
+2. repo-name suggestions
+3. chat-native blueprint agreement loop
+4. automatic post-blueprint progression
+5. auto-bind and recovery controls

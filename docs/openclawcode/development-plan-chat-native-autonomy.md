@@ -189,3 +189,34 @@ The next implementation slice should be Milestone 1:
 
 It is the shortest path to aligning the new onboarding flow with the real
 product thesis.
+
+## Setup Track Addendum
+
+The chat-native setup track now has a concrete operator-facing foundation:
+
+- GitHub device auth can start from chat
+- chat can validate an existing repo or create a new repo
+- chat can run bootstrap and persist the result
+- chat can surface the first blueprint-alignment prompts
+
+The remaining setup-specific execution sequence should be:
+
+1. `new-project` blueprint-first chat flow
+   - capture goal, MVP, constraints, non-goals
+   - draft the initial blueprint before repo creation
+2. repo-name suggestion and choice
+   - derive 3-5 candidate names from the draft blueprint
+   - allow explicit operator override
+3. setup-aware blueprint agreement loop
+   - drive `/occode-goal`, `/occode-blueprint-edit`, and
+     `/occode-blueprint-agree` from the active setup session
+4. automatic post-blueprint progression
+   - refresh work items and stage gates
+   - surface the first executable next step in chat
+5. auto-bind and resilience
+   - reuse the active chat as the repo notification target when safe
+   - add cancel/retry/recovery controls for setup sessions
+
+This setup track should be treated as the operator-surface prerequisite for the
+later autonomous loop milestones, because it turns onboarding from a CLI-heavy
+handoff into a real chat-native control plane.
