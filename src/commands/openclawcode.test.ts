@@ -27,11 +27,16 @@ import {
   openclawCodeBlueprintSetStatusCommand,
   openclawCodeBlueprintShowCommand,
   openclawCodeListValidationIssuesCommand,
+  openclawCodeIssueMaterializeCommand,
+  openclawCodeIssueMaterializationShowCommand,
   openclawCodeNextWorkShowCommand,
+  openclawCodeAutonomousLoopRunCommand,
+  openclawCodeAutonomousLoopShowCommand,
   openclawCodePromotionGateRefreshCommand,
   openclawCodePromotionGateShowCommand,
   openclawCodePromotionReceiptRecordCommand,
   openclawCodePromotionReceiptShowCommand,
+  openclawCodeProjectProgressShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
   openclawCodeRollbackReceiptRecordCommand,
   openclawCodeRollbackReceiptShowCommand,
@@ -94,6 +99,23 @@ vi.mock("../openclawcode/index.js", async (importOriginal) => {
   };
 });
 
+vi.mock("../openclawcode/github/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../openclawcode/github/index.js")>();
+  class MockGitHubRestClient {
+    createIssue = mocks.createIssue;
+    listIssues = mocks.listIssues;
+    closeIssue = mocks.closeIssue;
+    ensureRepoWebhook = mocks.ensureRepoWebhook;
+    fetchAuthenticatedViewer = mocks.fetchAuthenticatedViewer;
+    listAccessibleRepositories = mocks.listAccessibleRepositories;
+    createRepository = mocks.createRepository;
+  }
+  return {
+    ...actual,
+    GitHubRestClient: MockGitHubRestClient,
+  };
+});
+
 describe("openclawCodeRunCommand", () => {
   const runtime = createTestRuntime();
 
@@ -110,6 +132,7 @@ describe("openclawCodeRunCommand", () => {
       labels: [],
       url: "https://github.com/openclaw/openclaw/issues/99",
     });
+    mocks.listIssues.mockResolvedValue([]);
     mocks.fetchAuthenticatedViewer.mockResolvedValue({ login: "acme" });
     mocks.listAccessibleRepositories.mockResolvedValue([]);
     mocks.createRepository.mockResolvedValue({
@@ -2743,6 +2766,261 @@ describe("openclawCodeRunCommand", () => {
       selectedFrom: "discovery",
       title: "Refresh the repo-local work-item inventory after blueprint changes.",
     });
+  });
+
+  it("materializes the selected work item into a GitHub issue artifact", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-issue-materialize-"));
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Issue Materialization Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Issue Materialization Blueprint",
+        "",
+        "## Goal",
+        "Create or reuse a GitHub issue for the selected work item.",
+        "",
+        "## Success Criteria",
+        "- The selected work item materializes into one GitHub issue artifact.",
+        "",
+        "## Scope",
+        "- In scope: issue materialization.",
+        "",
+        "## Non-Goals",
+        "- Execution.",
+        "",
+        "## Constraints",
+        "- Keep the mapping deterministic.",
+        "",
+        "## Risks",
+        "- Duplicate issues could appear without stable markers.",
+        "",
+        "## Assumptions",
+        "- GitHub auth is already available.",
+        "",
+        "## Human Gates",
+        "- Merge promotion: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Materialize the selected work item into a GitHub issue.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: issue materialization baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    mocks.createIssue.mockResolvedValueOnce({
+      owner: "openclaw",
+      repo: "openclaw",
+      number: 321,
+      title: "[Blueprint]: Materialize the selected work item into a GitHub issue.",
+      body: "Issue body",
+      labels: [],
+      url: "https://github.com/openclaw/openclaw/issues/321",
+    });
+    await openclawCodeBlueprintDecomposeCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    runtime.log.mockClear();
+    await openclawCodeIssueMaterializeCommand(
+      {
+        owner: "openclaw",
+        repo: "openclaw",
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      exists: true,
+      outcome: "created",
+      selectedWorkItemId: "planned-01-materialize-the-selected-work-item-into-a-github",
+      selectedIssueNumber: 321,
+      selectedIssueUrl: "https://github.com/openclaw/openclaw/issues/321",
+    });
+    expect(mocks.createIssue).toHaveBeenCalledTimes(1);
+
+    runtime.log.mockClear();
+    await openclawCodeIssueMaterializationShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const shown = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(shown.entries).toEqual([
+      expect.objectContaining({
+        workItemId: "planned-01-materialize-the-selected-work-item-into-a-github",
+        issueNumber: 321,
+        reusedExisting: false,
+        stale: false,
+      }),
+    ]);
+  });
+
+  it("summarizes project progress and the autonomous loop artifact", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-project-progress-"));
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Project Progress Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Project Progress Blueprint",
+        "",
+        "## Goal",
+        "Summarize blueprint-aware project progress.",
+        "",
+        "## Success Criteria",
+        "- Progress includes the selected work item and issue materialization result.",
+        "",
+        "## Scope",
+        "- In scope: progress and loop artifacts.",
+        "",
+        "## Non-Goals",
+        "- Real queue execution.",
+        "",
+        "## Constraints",
+        "- Keep the artifact machine-readable.",
+        "",
+        "## Risks",
+        "- Status could drift without a unified summary.",
+        "",
+        "## Assumptions",
+        "- The repository can resolve its GitHub remote.",
+        "",
+        "## Human Gates",
+        "- Merge promotion: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Show blueprint-aware progress in one artifact.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: progress baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    mocks.createIssue.mockResolvedValueOnce({
+      owner: "openclaw",
+      repo: "openclaw",
+      number: 654,
+      title: "[Blueprint]: Show blueprint-aware progress in one artifact.",
+      body: "Issue body",
+      labels: [],
+      url: "https://github.com/openclaw/openclaw/issues/654",
+    });
+    await openclawCodeBlueprintDecomposeCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    runtime.log.mockClear();
+    await openclawCodeProjectProgressShowCommand(
+      {
+        owner: "openclaw",
+        repo: "openclaw",
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const progress = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(progress).toMatchObject({
+      repoRoot,
+      exists: true,
+      nextWorkDecision: "ready-to-execute",
+      selectedWorkItemId: "planned-01-show-blueprint-aware-progress-in-one-artifact",
+      selectedIssueNumber: null,
+    });
+
+    runtime.log.mockClear();
+    await openclawCodeAutonomousLoopRunCommand(
+      {
+        owner: "openclaw",
+        repo: "openclaw",
+        repoRoot,
+        once: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    const loop = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(loop).toMatchObject({
+      repoRoot,
+      exists: true,
+      status: "materialized-only",
+      selectedWorkItemId: "planned-01-show-blueprint-aware-progress-in-one-artifact",
+      selectedIssueNumber: 654,
+    });
+
+    runtime.log.mockClear();
+    await openclawCodeAutonomousLoopShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const shown = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(shown.status).toBe("materialized-only");
+    expect(shown.selectedIssueNumber).toBe(654);
   });
 
   it("shows an empty operator status snapshot when no chatops state file exists", async () => {

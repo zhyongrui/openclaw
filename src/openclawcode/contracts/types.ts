@@ -174,6 +174,11 @@ export interface WorkflowRoleRouteSnapshot {
   source: string;
   configured: boolean;
   fallbackChain: string[];
+  runtimeCapable: boolean;
+  rerouteCapable: boolean;
+  resolvedBackend: string;
+  resolvedAgentId: string | null;
+  appliedSource: string;
 }
 
 export interface WorkflowRoleRoutingSnapshot {

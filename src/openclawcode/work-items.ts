@@ -6,6 +6,7 @@ import {
   type ProjectBlueprintRoleAssignments,
   type ProjectBlueprintStatus,
 } from "./blueprint.js";
+import { buildProjectWorkItemIssueMarkers } from "./issue-materialization.js";
 
 export const PROJECT_WORK_ITEM_SCHEMA_VERSION = 1;
 export const PROJECT_WORK_ITEM_STATUSES = [
@@ -104,6 +105,7 @@ function resolveProjectWorkItemIssueDraft(params: {
   blueprintTitle: string | null;
   blueprintGoal: string | null;
   blueprintRevisionId: string | null;
+  workItemId: string;
   workItem: string;
   acceptanceCriteria: string[];
   openQuestions: string[];
@@ -157,6 +159,11 @@ function resolveProjectWorkItemIssueDraft(params: {
       ...(providerLines.length > 0
         ? providerLines
         : ["- No explicit provider-role assignments recorded in PROJECT-BLUEPRINT.md."]),
+      "",
+      ...buildProjectWorkItemIssueMarkers({
+        workItemId: params.workItemId,
+        blueprintRevisionId: params.blueprintRevisionId,
+      }),
     ].join("\n"),
   };
 }
@@ -282,6 +289,7 @@ export async function deriveProjectWorkItemInventory(
         blueprintTitle: blueprint.title,
         blueprintGoal: blueprint.goalSummary,
         blueprintRevisionId: blueprint.revisionId,
+        workItemId: id,
         workItem: workstream,
         acceptanceCriteria,
         openQuestions,

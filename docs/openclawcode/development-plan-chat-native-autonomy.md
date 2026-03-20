@@ -97,6 +97,14 @@ Exit signal:
 
 - the system can create or reuse the correct issue for the selected work item
 
+Status:
+
+- landed on 2026-03-20 through
+  `openclaw code issue-materialize`,
+  `openclaw code issue-materialization-show`,
+  `.openclawcode/issue-materialization.json`,
+  and `/occode-materialize`
+
 ### Milestone 4: Role-Based Agent Routing
 
 Problem:
@@ -121,6 +129,12 @@ Exit signal:
 - one real workflow run can use different backends for different roles while
   remaining fully auditable
 
+Status:
+
+- partially landed on 2026-03-20 by extending role-routing artifacts and
+  workflow snapshots with runtime/reroute capability, resolved backend, and
+  resolved agent audit fields
+
 ### Milestone 5: Chat-Native Project Progress
 
 Problem:
@@ -142,6 +156,13 @@ Exit signal:
 
 - a user in chat can understand where the project stands without opening the
   repo or reading raw artifacts
+
+Status:
+
+- partially landed on 2026-03-20 through
+  `openclaw code project-progress-show`,
+  `.openclawcode/project-progress.json`,
+  and `/occode-progress`
 
 ### Milestone 6: Autonomous Progress Loop
 
@@ -170,6 +191,14 @@ Exit signal:
 - the operator can leave the system running and return to meaningful progress
   or a precise blocked state
 
+Status:
+
+- first loop-control slice landed on 2026-03-20 through
+  `openclaw code autonomous-loop-run --once`,
+  `openclaw code autonomous-loop-show`,
+  `.openclawcode/autonomous-loop.json`,
+  and `/occode-autopilot`
+
 ## Validation Strategy
 
 Each milestone should include:
@@ -192,15 +221,13 @@ The plan must preserve:
 
 ## Recommendation
 
-Milestones 1 and 2 are now complete.
+Milestones 1, 2, and 3 are now complete.
 
-The next implementation slice should be Milestone 3:
+The next implementation slice should deepen Milestones 4, 5, and 6:
 
-- issue materialization from work items
-
-That is now the shortest path from "the system can choose the next credible
-work item" to "the system can create or reuse the correct GitHub issue and
-keep moving without manual issue framing."
+- role-routing proof and operator docs
+- richer project-progress reporting during active runs
+- promoting the single-iteration loop into a repeatable supervised autopilot
 
 ## Setup Track Addendum
 
@@ -216,16 +243,22 @@ The chat-native setup track now has a concrete operator-facing foundation:
   first follow-up command
 - chat and CLI can now explain the next blueprint-backed work item through
   `/occode-next` and `openclaw code next-work-show`
+- chat and CLI can now create or reuse the GitHub issue for that selected work
+  item through `/occode-materialize` and `openclaw code issue-materialize`
+- chat and CLI can now persist a blueprint-aware progress summary through
+  `/occode-progress` and `openclaw code project-progress-show`
+- chat and CLI now expose the first supervised autopilot loop status through
+  `/occode-autopilot` and `openclaw code autonomous-loop-run --once`
 - bootstrap can auto-bind the active chat when safe
 - setup sessions now have cancel/retry controls and persisted failure context
 
 The remaining setup-specific hardening sequence should be:
 
 1. live-proof the full `new-project` flow on a real chat + GitHub operator host
-2. tighten recovery messaging for expired auth, repo-create failures,
-   bootstrap failures, and blueprint-sync failures
-3. feed the agreed blueprint/work-item/gate state directly into Milestone 3
-   issue materialization so setup hands off into autonomous execution cleanly
+2. live-proof the new recovery messaging for expired auth, repo-create
+   failures, bootstrap failures, and blueprint-sync failures
+3. extend the first `/occode-autopilot once` handoff into a repeatable
+   supervised loop after real operator proof
 
 This setup track remains the operator-surface prerequisite for the later
 autonomous loop milestones, because it turns onboarding from a CLI-heavy

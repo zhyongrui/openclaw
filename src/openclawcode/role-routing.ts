@@ -23,6 +23,11 @@ export interface ProjectRoleRoute {
   source: "blueprint" | "env-role-default" | "openclaw-default";
   configured: boolean;
   fallbackChain: string[];
+  runtimeCapable: boolean;
+  rerouteCapable: boolean;
+  resolvedBackend: string;
+  resolvedAgentId: string | null;
+  appliedSource: "blueprint" | "env-role-default" | "openclaw-default";
 }
 
 export interface ProjectRoleRoutingPlan {
@@ -75,6 +80,32 @@ function resolveRoleEnvVar(roleId: ProjectBlueprintRoleId): string {
       return "OPENCLAWCODE_ROLE_VERIFIER";
     case "docWriter":
       return "OPENCLAWCODE_ROLE_DOC_WRITER";
+  }
+}
+
+function resolveRoleAgentEnvVar(roleId: ProjectBlueprintRoleId): string | null {
+  switch (roleId) {
+    case "coder":
+      return "OPENCLAWCODE_ROLE_CODER_AGENT_ID";
+    case "verifier":
+      return "OPENCLAWCODE_ROLE_VERIFIER_AGENT_ID";
+    default:
+      return null;
+  }
+}
+
+function resolveAdapterAgentEnvVar(adapterId: ProjectRoleAdapterId): string | null {
+  switch (adapterId) {
+    case "codex":
+      return "OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID";
+    case "claude-code":
+      return "OPENCLAWCODE_ADAPTER_CLAUDE_CODE_AGENT_ID";
+    case "openclaw-default":
+      return "OPENCLAWCODE_ADAPTER_OPENCLAW_DEFAULT_AGENT_ID";
+    case "custom":
+      return "OPENCLAWCODE_ADAPTER_CUSTOM_AGENT_ID";
+    default:
+      return null;
   }
 }
 
@@ -184,13 +215,25 @@ export async function deriveProjectRoleRoutingPlan(
       roleId,
       blueprintAssignments: blueprint.providerRoleAssignments,
     });
+    const adapterId = normalizeRoleAdapter(assignment.rawAssignment);
+    const roleAgentEnvVar = resolveRoleAgentEnvVar(roleId);
+    const adapterAgentEnvVar = resolveAdapterAgentEnvVar(adapterId);
+    const resolvedAgentId =
+      process.env[roleAgentEnvVar ?? ""]?.trim() ||
+      process.env[adapterAgentEnvVar ?? ""]?.trim() ||
+      null;
     return {
       roleId,
       rawAssignment: assignment.rawAssignment,
-      adapterId: normalizeRoleAdapter(assignment.rawAssignment),
+      adapterId,
       source: assignment.source,
       configured: assignment.rawAssignment != null && assignment.rawAssignment.length > 0,
       fallbackChain,
+      runtimeCapable: roleId === "coder" || roleId === "verifier",
+      rerouteCapable: roleId === "coder" || roleId === "verifier",
+      resolvedBackend: assignment.rawAssignment?.trim() || adapterId,
+      resolvedAgentId,
+      appliedSource: assignment.source,
     };
   });
 

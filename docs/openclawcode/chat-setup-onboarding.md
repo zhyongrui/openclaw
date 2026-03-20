@@ -277,6 +277,8 @@ The setup flow now covers the first end-to-end operator path:
 7. refresh work items and stage gates
 8. auto-bind the active chat when safe
 9. surface the next suggested command and proof readiness directly in chat
+10. hand off into `/occode-materialize owner/repo` once the selected work item
+    is ready for issue projection
 
 ## Remaining Delivery Tasks
 
@@ -290,9 +292,14 @@ control-plane steps.
 
 ### 2. failure recovery polish
 
-- make expired GitHub auth failures explicit and recoverable
-- tighten repo-create and bootstrap failure messages
-- keep blueprint-sync failures actionable from chat
+- `/occode-setup-retry` now replays the current setup session instead of
+  forcing a fresh start
+- setup failures now report the failed step, reason, and retry command in chat
+- real operator proof is still needed for:
+  - expired GitHub auth
+  - repo-create failures on the host
+  - bootstrap failures
+  - blueprint-sync failures
 
 ### 3. handoff into autonomous progress
 
@@ -303,12 +310,19 @@ control-plane steps.
   - blocked on missing clarification
   - blocked on policy
 - `/occode-next owner/repo` now exposes the same decision in chat
-- the remaining handoff gap is issue materialization:
-  - setup can now point at the next work item
-  - it still cannot create or reuse the GitHub issue for that work item yet
+- `openclaw code issue-materialize` now persists
+  `.openclawcode/issue-materialization.json`
+- `/occode-materialize owner/repo` now creates or reuses the GitHub issue for
+  the selected work item and hands off into the existing gate/queue logic
+- `openclaw code project-progress-show` and `/occode-progress owner/repo` now
+  summarize blueprint status, selected work, issue state, routing, and queue
+  context in one place
+- `openclaw code autonomous-loop-run --once` and
+  `/occode-autopilot once owner/repo` now provide the first supervised
+  single-iteration autopilot slice
 
 ### Recommended build order
 
 1. live operator proof
-2. failure recovery polish
-3. handoff into issue materialization
+2. live-proof the new failure recovery paths
+3. extend the single-iteration autopilot into a repeatable supervised loop

@@ -251,6 +251,11 @@ function mapWorkflowRoleRoutingSnapshot(params: {
       source: route.source,
       configured: route.configured,
       fallbackChain: route.fallbackChain,
+      runtimeCapable: route.runtimeCapable,
+      rerouteCapable: route.rerouteCapable,
+      resolvedBackend: route.resolvedBackend,
+      resolvedAgentId: route.resolvedAgentId,
+      appliedSource: route.appliedSource,
     })),
   };
 }

@@ -6,11 +6,16 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OpenClawCodeChatopsStore } from "../../src/integrations/openclaw-plugin/index.js";
 import {
+  readProjectAutonomousLoopArtifact,
+} from "../../src/openclawcode/autonomous-loop.js";
+import {
   createProjectBlueprint,
   readProjectBlueprintDocument,
 } from "../../src/openclawcode/blueprint.js";
 import type { WorkflowRun } from "../../src/openclawcode/contracts/index.js";
 import { writeProjectDiscoveryInventory } from "../../src/openclawcode/discovery.js";
+import { readProjectIssueMaterializationArtifact } from "../../src/openclawcode/issue-materialization.js";
+import { readProjectProgressArtifact } from "../../src/openclawcode/project-progress.js";
 import {
   readProjectStageGateArtifact,
   writeProjectStageGateArtifact,
@@ -5979,6 +5984,207 @@ describe("openclawcode extension", () => {
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("creates the selected work-item issue through /occode-materialize", async () => {
+    const fixture = await registerPluginFixture({ triggerMode: "auto" });
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Materialize Chat Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-20T00:00:00.000Z",
+          "updatedAt: 2026-03-20T00:00:00.000Z",
+          "statusChangedAt: 2026-03-20T00:00:00.000Z",
+          "agreedAt: 2026-03-20T00:00:00.000Z",
+          "---",
+          "",
+          "# Materialize Chat Blueprint",
+          "",
+          "## Goal",
+          "Materialize the selected work item from chat.",
+          "",
+          "## Success Criteria",
+          "- /occode-materialize creates or reuses the next execution issue.",
+          "",
+          "## Scope",
+          "- In scope: issue materialization from chat.",
+          "",
+          "## Non-Goals",
+          "- Full execution.",
+          "",
+          "## Constraints",
+          "- Keep the issue mapping deterministic.",
+          "",
+          "## Risks",
+          "- Duplicate issues without stable markers.",
+          "",
+          "## Assumptions",
+          "- GitHub auth is available on the operator host.",
+          "",
+          "## Human Gates",
+          "- Merge promotion: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: Codex",
+          "- Doc-writer: Codex",
+          "",
+          "## Workstreams",
+          "- Create or reuse the selected execution issue from chat.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-20: materialize chat proof.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              number: 77,
+              title: "[Blueprint]: Create or reuse the selected execution issue from chat.",
+              body: "materialized body",
+              html_url: "https://github.com/zhyongrui/openclawcode/issues/77",
+              state: "open",
+              labels: [],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      vi.stubEnv("GH_TOKEN", "test-gh-token");
+
+      const result = await fixture.commands.get("occode-materialize")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-materialize",
+        args: "",
+        senderId: "user:operator",
+        config: {},
+      });
+
+      expect(result?.text).toContain("openclawcode issue materialization for zhyongrui/openclawcode");
+      expect(result?.text).toContain("Outcome: created");
+      expect(result?.text).toContain("Selected issue: #77");
+
+      const artifact = await readProjectIssueMaterializationArtifact(fixture.repoRoot);
+      expect(artifact.selectedIssueNumber).toBe(77);
+      expect(artifact.outcome).toBe("created");
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("shows project progress and autopilot state through chat commands", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Progress Chat Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-20T00:00:00.000Z",
+          "updatedAt: 2026-03-20T00:00:00.000Z",
+          "statusChangedAt: 2026-03-20T00:00:00.000Z",
+          "agreedAt: 2026-03-20T00:00:00.000Z",
+          "---",
+          "",
+          "# Progress Chat Blueprint",
+          "",
+          "## Goal",
+          "Show project progress and autopilot state in chat.",
+          "",
+          "## Success Criteria",
+          "- /occode-progress summarizes blueprint-aware progress.",
+          "",
+          "## Scope",
+          "- In scope: progress and autopilot status.",
+          "",
+          "## Non-Goals",
+          "- Full execution.",
+          "",
+          "## Constraints",
+          "- Keep the status concise.",
+          "",
+          "## Risks",
+          "- Operators could lose context without a single progress view.",
+          "",
+          "## Assumptions",
+          "- The blueprint is already agreed.",
+          "",
+          "## Human Gates",
+          "- Merge promotion: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: Codex",
+          "- Doc-writer: Codex",
+          "",
+          "## Workstreams",
+          "- Show project progress in chat.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-20: progress chat proof.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+
+      const progressResult = await fixture.commands.get("occode-progress")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-progress",
+        args: "",
+        config: {},
+      });
+      expect(progressResult?.text).toContain("openclawcode progress for zhyongrui/openclawcode");
+      expect(progressResult?.text).toContain("Next work: ready-to-execute");
+
+      const offResult = await fixture.commands.get("occode-autopilot")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-autopilot off",
+        args: "off",
+        config: {},
+      });
+      expect(offResult?.text).toContain("Status: disabled");
+
+      const artifact = await readProjectAutonomousLoopArtifact(fixture.repoRoot);
+      expect(artifact.status).toBe("disabled");
+      const progressArtifact = await readProjectProgressArtifact(fixture.repoRoot);
+      expect(progressArtifact.nextWorkDecision).toBe("ready-to-execute");
+    } finally {
+      await cleanupPluginFixture(fixture);
     }
   });
 

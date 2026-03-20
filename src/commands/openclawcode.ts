@@ -45,14 +45,17 @@ import {
   AgentBackedBuilder,
   AgentBackedVerifier,
   readProjectDiscoveryInventory,
+  readProjectIssueMaterializationArtifact,
   readProjectRoleRoutingPlan,
   readProjectPromotionGateArtifact,
   readProjectPromotionReceiptArtifact,
   readOpenClawCodeOperatorStatusSnapshot,
+  readProjectProgressArtifact,
   readProjectNextWorkSelection,
   readProjectRollbackReceiptArtifact,
   readProjectRollbackSuggestionArtifact,
   readProjectStageGateArtifact,
+  readProjectAutonomousLoopArtifact,
   readProjectWorkItemInventory,
   recordProjectStageGateDecision,
   resolveGitHubRepoFromGit,
@@ -69,8 +72,11 @@ import {
   writeProjectRollbackReceiptArtifact,
   writeProjectRollbackSuggestionArtifact,
   writeProjectRoleRoutingPlan,
+  writeProjectIssueMaterializationArtifact,
+  writeProjectProgressArtifact,
   writeProjectNextWorkSelection,
   writeProjectWorkItemInventory,
+  runProjectAutonomousLoopOnce,
   buildOpenClawCodePolicySnapshot,
   resolveAutoMergeDisposition,
   resolveAutoMergePolicy,
@@ -248,6 +254,40 @@ export interface OpenClawCodeStageGatesShowOpts {
 }
 
 export interface OpenClawCodeNextWorkShowOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeIssueMaterializeOpts {
+  owner?: string;
+  repo?: string;
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeIssueMaterializationShowOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeProjectProgressShowOpts {
+  owner?: string;
+  repo?: string;
+  repoRoot?: string;
+  stateDir?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeAutonomousLoopRunOpts {
+  owner?: string;
+  repo?: string;
+  repoRoot?: string;
+  stateDir?: string;
+  once?: boolean;
+  json?: boolean;
+}
+
+export interface OpenClawCodeAutonomousLoopShowOpts {
   repoRoot?: string;
   json?: boolean;
 }
@@ -1908,7 +1948,7 @@ function logProjectRoleRoutingPlan(params: {
   }
   for (const route of plan.routes) {
     runtime.log(
-      `- ${route.roleId}: ${route.rawAssignment ?? "openclaw-default"} (${route.adapterId}, ${route.source})`,
+      `- ${route.roleId}: ${route.rawAssignment ?? "openclaw-default"} (${route.adapterId}, ${route.source}, runtime=${route.runtimeCapable ? "yes" : "no"}, reroute=${route.rerouteCapable ? "yes" : "no"}, agent=${route.resolvedAgentId ?? "runner-default"})`,
     );
   }
 }
@@ -1980,6 +2020,113 @@ function logProjectNextWorkSelection(params: {
     for (const suggestion of selection.suggestions) {
       runtime.log(`- ${suggestion}`);
     }
+  }
+}
+
+function logProjectIssueMaterializationArtifact(params: {
+  artifact: Awaited<ReturnType<typeof readProjectIssueMaterializationArtifact>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { artifact, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(artifact, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${artifact.repoRoot}`);
+  runtime.log(`Issue-materialization path: ${artifact.artifactPath}`);
+  runtime.log(`Exists: ${artifact.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${artifact.generatedAt ?? "not yet generated"}`);
+  runtime.log(`Decision: ${artifact.nextWorkDecision}`);
+  runtime.log(`Outcome: ${artifact.outcome}`);
+  if (artifact.blockingGateId) {
+    runtime.log(`Blocking gate: ${artifact.blockingGateId}`);
+  }
+  if (artifact.selectedWorkItemId) {
+    runtime.log(`Selected work item: ${artifact.selectedWorkItemId}`);
+  }
+  if (artifact.selectedIssueNumber != null) {
+    runtime.log(`Selected issue: #${artifact.selectedIssueNumber} | ${artifact.selectedIssueTitle}`);
+    runtime.log(`Selected issue URL: ${artifact.selectedIssueUrl}`);
+  }
+  runtime.log(`Entries: ${artifact.entries.length}`);
+  for (const entry of artifact.entries.slice(0, 5)) {
+    runtime.log(
+      `- ${entry.workItemId}: #${entry.issueNumber} | ${entry.issueState} | ${entry.reusedExisting ? "reused" : "created"}${entry.stale ? " | stale" : ""}`,
+    );
+  }
+}
+
+function logProjectProgressArtifact(params: {
+  artifact: Awaited<ReturnType<typeof readProjectProgressArtifact>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { artifact, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(artifact, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${artifact.repoRoot}`);
+  runtime.log(`Project-progress path: ${artifact.artifactPath}`);
+  runtime.log(`Exists: ${artifact.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${artifact.generatedAt ?? "not yet generated"}`);
+  runtime.log(`Blueprint: ${artifact.blueprintStatus ?? "unknown"} | ${artifact.blueprintRevisionId ?? "unknown"}`);
+  runtime.log(`Next work: ${artifact.nextWorkDecision}`);
+  runtime.log(
+    `Signals: workItems=${artifact.workItemCount} | unresolvedRoles=${artifact.unresolvedRoleCount} | blockedGates=${artifact.blockedGateCount} | needsHuman=${artifact.needsHumanDecisionCount}`,
+  );
+  if (artifact.selectedWorkItemTitle) {
+    runtime.log(`Selected work item: ${artifact.selectedWorkItemTitle}`);
+  }
+  if (artifact.selectedIssueNumber != null) {
+    runtime.log(`Selected issue: #${artifact.selectedIssueNumber} | ${artifact.selectedIssueTitle}`);
+  }
+  runtime.log(
+    `Operator: available=${artifact.operator.available ? "yes" : "no"} | binding=${artifact.operator.bindingPresent ? "yes" : "no"} | pending=${artifact.operator.pendingApprovalCount} | queued=${artifact.operator.queuedRunCount} | current=${artifact.operator.currentRunCount} | pause=${artifact.operator.providerPauseActive ? "yes" : "no"}`,
+  );
+  if (artifact.nextSuggestedCommand) {
+    runtime.log(`Next suggested command: ${artifact.nextSuggestedCommand}`);
+  }
+}
+
+function logProjectAutonomousLoopArtifact(params: {
+  artifact: Awaited<ReturnType<typeof readProjectAutonomousLoopArtifact>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { artifact, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(artifact, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${artifact.repoRoot}`);
+  runtime.log(`Autonomous-loop path: ${artifact.artifactPath}`);
+  runtime.log(`Exists: ${artifact.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${artifact.generatedAt ?? "not yet generated"}`);
+  runtime.log(`Enabled: ${artifact.enabled ? "yes" : "no"}`);
+  runtime.log(`Mode: ${artifact.mode}`);
+  runtime.log(`Status: ${artifact.status}`);
+  runtime.log(`Next work: ${artifact.nextWorkDecision}`);
+  runtime.log(`Provider pause: ${artifact.providerPauseActive ? "yes" : "no"}`);
+  runtime.log(`Current run present: ${artifact.currentRunPresent ? "yes" : "no"}`);
+  if (artifact.selectedWorkItemId) {
+    runtime.log(`Selected work item: ${artifact.selectedWorkItemId}`);
+  }
+  if (artifact.selectedIssueNumber != null) {
+    runtime.log(`Selected issue: #${artifact.selectedIssueNumber}`);
+  }
+  if (artifact.queuedIssueKey) {
+    runtime.log(`Queued issue: ${artifact.queuedIssueKey}`);
+  }
+  if (artifact.stopReason) {
+    runtime.log(`Stop reason: ${artifact.stopReason}`);
+  }
+  if (artifact.message) {
+    runtime.log(`Message: ${artifact.message}`);
   }
 }
 
@@ -3719,6 +3866,108 @@ export async function openclawCodeNextWorkShowCommand(
   const selection = await writeProjectNextWorkSelection(repoRoot);
   logProjectNextWorkSelection({
     selection,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeIssueMaterializeCommand(
+  opts: OpenClawCodeIssueMaterializeOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const repoRef = await resolveRepoRef({
+    owner: opts.owner,
+    repo: opts.repo,
+    repoRoot,
+  });
+  const artifact = await writeProjectIssueMaterializationArtifact({
+    repoRoot,
+    owner: repoRef.owner,
+    repo: repoRef.repo,
+  });
+  logProjectIssueMaterializationArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeIssueMaterializationShowCommand(
+  opts: OpenClawCodeIssueMaterializationShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await readProjectIssueMaterializationArtifact(repoRoot);
+  logProjectIssueMaterializationArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeProjectProgressShowCommand(
+  opts: OpenClawCodeProjectProgressShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const repoRef = await resolveRepoRef({
+    owner: opts.owner,
+    repo: opts.repo,
+    repoRoot,
+  }).catch(() => undefined);
+  const operatorSnapshot = repoRef
+    ? await readOpenClawCodeOperatorStatusSnapshot(resolveOperatorStateDir(opts.stateDir)).catch(
+        () => undefined,
+      )
+    : undefined;
+  const artifact = await writeProjectProgressArtifact({
+    repoRoot,
+    repo: repoRef,
+    operatorSnapshot,
+  });
+  logProjectProgressArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeAutonomousLoopRunCommand(
+  opts: OpenClawCodeAutonomousLoopRunOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const repoRef = await resolveRepoRef({
+    owner: opts.owner,
+    repo: opts.repo,
+    repoRoot,
+  }).catch(() => undefined);
+  const operatorSnapshot = repoRef
+    ? await readOpenClawCodeOperatorStatusSnapshot(resolveOperatorStateDir(opts.stateDir)).catch(
+        () => undefined,
+      )
+    : undefined;
+  const artifact = await runProjectAutonomousLoopOnce({
+    repoRoot,
+    repo: repoRef,
+    operatorSnapshot,
+  });
+  logProjectAutonomousLoopArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeAutonomousLoopShowCommand(
+  opts: OpenClawCodeAutonomousLoopShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await readProjectAutonomousLoopArtifact(repoRoot);
+  logProjectAutonomousLoopArtifact({
+    artifact,
     runtime,
     json: Boolean(opts.json),
   });

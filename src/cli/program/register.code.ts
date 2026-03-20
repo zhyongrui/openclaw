@@ -12,14 +12,19 @@ import {
   openclawCodeBlueprintShowCommand,
   openclawCodeBlueprintStatusIds,
   openclawCodeDiscoverWorkItemsCommand,
+  openclawCodeIssueMaterializeCommand,
+  openclawCodeIssueMaterializationShowCommand,
   openclawCodeListValidationIssuesCommand,
   openclawCodeNextWorkShowCommand,
+  openclawCodeAutonomousLoopRunCommand,
+  openclawCodeAutonomousLoopShowCommand,
   openclawCodeOperatorStatusSnapshotShowCommand,
   openclawCodePolicyShowCommand,
   openclawCodePromotionGateRefreshCommand,
   openclawCodePromotionGateShowCommand,
   openclawCodePromotionReceiptRecordCommand,
   openclawCodePromotionReceiptShowCommand,
+  openclawCodeProjectProgressShowCommand,
   openclawCodeRoleRoutingRefreshCommand,
   openclawCodeRoleRoutingShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
@@ -106,6 +111,18 @@ ${formatHelpExamples([
   [
     "openclaw code next-work-show --json",
     "Explain the next blueprint-backed work item to execute or why the system is blocked.",
+  ],
+  [
+    "openclaw code issue-materialize --json",
+    "Create or reuse the GitHub issue for the selected blueprint-backed work item.",
+  ],
+  [
+    "openclaw code project-progress-show --json",
+    "Summarize blueprint-aware project progress and operator queue state.",
+  ],
+  [
+    "openclaw code autonomous-loop-run --once --json",
+    "Run one autonomous progress iteration and persist its result.",
   ],
   [
     "openclaw code role-routing-refresh --json",
@@ -461,6 +478,109 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .action(async (opts) => {
       await runCommandWithRuntime(defaultRuntime, async () => {
         await openclawCodeNextWorkShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("issue-materialize")
+    .description("Create or reuse the GitHub issue for the selected blueprint-backed work item")
+    .option("--owner <owner>", "GitHub repository owner")
+    .option("--repo <repo>", "GitHub repository name")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeIssueMaterializeCommand(
+          {
+            owner: opts.owner as string | undefined,
+            repo: opts.repo as string | undefined,
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("issue-materialization-show")
+    .description("Show the current issue-materialization artifact")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeIssueMaterializationShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("project-progress-show")
+    .description("Show the current blueprint-aware project progress artifact")
+    .option("--owner <owner>", "GitHub repository owner")
+    .option("--repo <repo>", "GitHub repository name")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--state-dir <dir>", "Operator state directory")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeProjectProgressShowCommand(
+          {
+            owner: opts.owner as string | undefined,
+            repo: opts.repo as string | undefined,
+            repoRoot: opts.repoRoot as string | undefined,
+            stateDir: opts.stateDir as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("autonomous-loop-run")
+    .description("Run one autonomous blueprint-backed progress iteration")
+    .option("--owner <owner>", "GitHub repository owner")
+    .option("--repo <repo>", "GitHub repository name")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--state-dir <dir>", "Operator state directory")
+    .option("--once", "Run a single iteration", false)
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeAutonomousLoopRunCommand(
+          {
+            owner: opts.owner as string | undefined,
+            repo: opts.repo as string | undefined,
+            repoRoot: opts.repoRoot as string | undefined,
+            stateDir: opts.stateDir as string | undefined,
+            once: Boolean(opts.once),
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("autonomous-loop-show")
+    .description("Show the current autonomous-loop artifact")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeAutonomousLoopShowCommand(
           {
             repoRoot: opts.repoRoot as string | undefined,
             json: Boolean(opts.json),

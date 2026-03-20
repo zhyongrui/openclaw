@@ -65,6 +65,20 @@ import {
   readProjectPromotionReceiptArtifact,
   readProjectRollbackReceiptArtifact,
 } from "../../src/openclawcode/promotion-artifacts.js";
+import { readOpenClawCodeOperatorStatusSnapshot } from "../../src/openclawcode/operator-status.js";
+import {
+  readProjectAutonomousLoopArtifact,
+  runProjectAutonomousLoopOnce,
+  setProjectAutonomousLoopDisabled,
+} from "../../src/openclawcode/autonomous-loop.js";
+import {
+  readProjectIssueMaterializationArtifact,
+  writeProjectIssueMaterializationArtifact,
+} from "../../src/openclawcode/issue-materialization.js";
+import {
+  readProjectProgressArtifact,
+  writeProjectProgressArtifact,
+} from "../../src/openclawcode/project-progress.js";
 import {
   readProjectNextWorkSelection,
   writeProjectNextWorkSelection,
@@ -239,13 +253,23 @@ function buildChatSetupFailedMessage(params: {
   reason: string;
   repoKey?: string;
   logTail?: string;
+  step?: "github-auth" | "repo-create" | "bootstrap" | "blueprint-sync";
+  retryCommand?: string;
+  needsOperatorAction?: boolean;
 }): string {
   return [
-    "OpenClaw Code setup is not authenticated yet.",
+    "OpenClaw Code setup hit a recoverable failure.",
+    params.step ? `Failed step: ${params.step}` : undefined,
     `Reason: ${params.reason}`,
     params.repoKey ? `Selected repo: ${params.repoKey}` : undefined,
     params.logTail ? `Recent gh output:\n${params.logTail}` : undefined,
-    "Start a fresh device login with /occode-setup.",
+    params.retryCommand
+      ? `Retry: ${params.retryCommand}`
+      : "Retry: /occode-setup-retry",
+    params.needsOperatorAction
+      ? "Operator action: fix the host-side problem first, then retry."
+      : undefined,
+    params.step === "github-auth" ? "If the device flow expired, start a fresh login with /occode-setup." : undefined,
   ]
     .filter(Boolean)
     .join("\n");
@@ -884,9 +908,13 @@ async function completeChatSetupBootstrap(params: {
   const nextSuggestedCommand =
     stageGates && (stageGates.blockedGateCount > 0 || stageGates.needsHumanDecisionCount > 0)
       ? (payload.handoff?.gatesCommand ?? null)
-      : (payload.handoff?.blueprintCommand ??
-          payload.handoff?.blueprintDecomposeCommand ??
-          null);
+      : workItems?.readyForIssueProjection &&
+            workItems.workItems.length > 0 &&
+            params.session.repoKey
+        ? `/occode-materialize ${params.session.repoKey}`
+        : (payload.handoff?.blueprintCommand ??
+            payload.handoff?.blueprintDecomposeCommand ??
+            null);
   const updated = {
     ...params.session,
     stage: "bootstrap-complete" as const,
@@ -1009,6 +1037,12 @@ async function continueChatSetupSession(params: {
         : synced.session.lastFailure?.reason ??
           "GitHub auth is still missing. Start with /occode-setup.",
     repoKey: synced.session.repoKey,
+    step: synced.session.lastFailure?.step,
+    retryCommand: "/occode-setup-retry",
+    needsOperatorAction:
+      synced.session.lastFailure?.step === "repo-create" ||
+      synced.session.lastFailure?.step === "bootstrap" ||
+      synced.session.lastFailure?.step === "blueprint-sync",
   });
 }
 
@@ -2058,6 +2092,152 @@ async function createAndHandleChatIntakeIssue(params: {
   };
 }
 
+async function materializeAndHandleNextWorkIssue(params: {
+  store: OpenClawCodeChatopsStore;
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  destination: {
+    channel: string;
+    target: string;
+  };
+}): Promise<{ text: string; shouldKickQueue: boolean }> {
+  const artifact = await writeProjectIssueMaterializationArtifact({
+    repoRoot: params.repoConfig.repoRoot,
+    owner: params.repoConfig.owner,
+    repo: params.repoConfig.repo,
+  });
+
+  if (artifact.selectedIssueNumber == null) {
+    return {
+      text: buildIssueMaterializationSummaryMessage({
+        repo: {
+          owner: params.repoConfig.owner,
+          repo: params.repoConfig.repo,
+        },
+        artifact,
+      }),
+      shouldKickQueue: false,
+    };
+  }
+
+  const issue = {
+    owner: params.repoConfig.owner,
+    repo: params.repoConfig.repo,
+    number: artifact.selectedIssueNumber,
+  };
+  const decision = decideIssueWebhookIntake({
+    event: buildSyntheticIssueWebhookEvent({
+      issue: {
+        ...issue,
+        title: artifact.selectedIssueTitle ?? "[Blueprint] materialized issue",
+      },
+    }),
+    config: {
+      ...params.repoConfig,
+      triggerLabels: [],
+      skipLabels: [],
+    },
+  });
+
+  if (!decision.accept || !decision.issue) {
+    return {
+      text: [
+        buildIssueMaterializationSummaryMessage({
+          repo: {
+            owner: params.repoConfig.owner,
+            repo: params.repoConfig.repo,
+          },
+          artifact,
+        }),
+        `Automatic intake was skipped: ${decision.reason}`,
+      ].join("\n"),
+      shouldKickQueue: false,
+    };
+  }
+
+  if (decision.precheck?.decision === "escalate") {
+    await recordPrecheckedEscalationSnapshot({
+      store: params.store,
+      issue: decision.issue,
+      destination: params.destination,
+      summary: decision.precheck.summary,
+      suitabilityDecision: decision.precheck.decision,
+    });
+    return {
+      text: [
+        buildIssueMaterializationSummaryMessage({
+          repo: {
+            owner: params.repoConfig.owner,
+            repo: params.repoConfig.repo,
+          },
+          artifact,
+        }),
+        `Suitability: escalate | ${decision.precheck.summary}`,
+      ].join("\n"),
+      shouldKickQueue: false,
+    };
+  }
+
+  const queued = await queueOrGateIssueExecution({
+    store: params.store,
+    repoConfig: params.repoConfig,
+    issue: decision.issue,
+    destination: params.destination,
+    queuedStatus: "Queued from blueprint issue materialization.",
+    gatedStatus: "Awaiting execution-start gate approval.",
+  });
+
+  if (queued.outcome === "queued") {
+    return {
+      text: [
+        buildIssueMaterializationSummaryMessage({
+          repo: {
+            owner: params.repoConfig.owner,
+            repo: params.repoConfig.repo,
+          },
+          artifact,
+        }),
+        `Queued ${formatRepoKey(decision.issue)}#${decision.issue.number}.`,
+      ].join("\n"),
+      shouldKickQueue: true,
+    };
+  }
+
+  if (queued.outcome === "gated") {
+    return {
+      text: [
+        buildIssueMaterializationSummaryMessage({
+          repo: {
+            owner: params.repoConfig.owner,
+            repo: params.repoConfig.repo,
+          },
+          artifact,
+        }),
+        buildExecutionStartGateDeferredMessage({
+          issue: decision.issue,
+          gate: queued.gate,
+          source: "issue-materialization",
+        }),
+      ].join("\n"),
+      shouldKickQueue: false,
+    };
+  }
+
+  return {
+    text: [
+      buildIssueMaterializationSummaryMessage({
+        repo: {
+          owner: params.repoConfig.owner,
+          repo: params.repoConfig.repo,
+        },
+        artifact,
+      }),
+      (await params.store.getStatus(formatIssueKey(issue))) ??
+        `${formatIssueKey(issue)} is already queued or running.`,
+    ].join("\n"),
+    shouldKickQueue: false,
+  };
+}
+
 function buildIntakeQueuedMessage(params: {
   issue: {
     owner: string;
@@ -2486,7 +2666,7 @@ function buildRoleRoutingSummaryMessage(params: {
   const routeLine = params.plan.routes
     .map((route) => {
       const role = route.roleId === "docWriter" ? "doc-writer" : route.roleId;
-      return `${role}=${route.adapterId}`;
+      return `${role}=${route.adapterId}${route.resolvedAgentId ? `@${route.resolvedAgentId}` : ""}`;
     })
     .join(", ");
   return [
@@ -2714,6 +2894,9 @@ function buildNextWorkSummaryMessage(params: {
   if (params.selection.selectedReason) {
     lines.push(`Reason: ${params.selection.selectedReason}`);
   }
+  if (params.selection.decision === "ready-to-execute") {
+    lines.push(`Use /occode-materialize ${formatRepoKey(params.repo)} to create or reuse the execution issue.`);
+  }
   for (const blocker of params.selection.blockers.slice(0, 3)) {
     lines.push(`- blocker: ${blocker}`);
   }
@@ -2722,6 +2905,127 @@ function buildNextWorkSummaryMessage(params: {
   }
 
   return lines.join("\n");
+}
+
+function buildIssueMaterializationSummaryMessage(params: {
+  repo: { owner: string; repo: string };
+  artifact: Awaited<ReturnType<typeof readProjectIssueMaterializationArtifact>>;
+}): string {
+  const lines = [`openclawcode issue materialization for ${formatRepoKey(params.repo)}`];
+  lines.push(`Decision: ${params.artifact.nextWorkDecision}`);
+  lines.push(`Outcome: ${params.artifact.outcome}`);
+  if (params.artifact.blockingGateId) {
+    lines.push(`Blocking gate: ${params.artifact.blockingGateId}`);
+  }
+  if (params.artifact.selectedWorkItemId) {
+    lines.push(`Selected work item: ${params.artifact.selectedWorkItemId}`);
+  }
+  if (params.artifact.selectedIssueNumber != null) {
+    lines.push(
+      `Selected issue: #${params.artifact.selectedIssueNumber} | ${params.artifact.selectedIssueTitle ?? "untitled"}`,
+    );
+    if (params.artifact.selectedIssueUrl) {
+      lines.push(params.artifact.selectedIssueUrl);
+    }
+    lines.push(`Use /occode-start ${formatRepoKey(params.repo)}#${params.artifact.selectedIssueNumber} for the first run.`);
+  }
+  for (const blocker of params.artifact.blockers.slice(0, 3)) {
+    lines.push(`- blocker: ${blocker}`);
+  }
+  for (const suggestion of params.artifact.suggestions.slice(0, 3)) {
+    lines.push(`- suggestion: ${suggestion}`);
+  }
+  return lines.join("\n");
+}
+
+function buildProjectProgressSummaryMessage(params: {
+  repo: { owner: string; repo: string };
+  artifact: Awaited<ReturnType<typeof readProjectProgressArtifact>>;
+}): string {
+  const lines = [`openclawcode progress for ${formatRepoKey(params.repo)}`];
+  lines.push(
+    `Blueprint: ${params.artifact.blueprintStatus ?? "unknown"} | ${params.artifact.blueprintRevisionId ?? "unknown"}`,
+  );
+  lines.push(`Next work: ${params.artifact.nextWorkDecision}`);
+  lines.push(
+    `Signals: workItems=${params.artifact.workItemCount} | unresolvedRoles=${params.artifact.unresolvedRoleCount} | blockedGates=${params.artifact.blockedGateCount} | needsHuman=${params.artifact.needsHumanDecisionCount}`,
+  );
+  if (params.artifact.selectedWorkItemTitle) {
+    lines.push(`Selected work item: ${params.artifact.selectedWorkItemTitle}`);
+  }
+  if (params.artifact.selectedIssueNumber != null) {
+    lines.push(
+      `Selected issue: #${params.artifact.selectedIssueNumber} | ${params.artifact.selectedIssueTitle ?? "untitled"}`,
+    );
+  }
+  lines.push(
+    `Operator: binding=${params.artifact.operator.bindingPresent ? "yes" : "no"} | pending=${params.artifact.operator.pendingApprovalCount} | queued=${params.artifact.operator.queuedRunCount} | current=${params.artifact.operator.currentRunCount} | pause=${params.artifact.operator.providerPauseActive ? "yes" : "no"}`,
+  );
+  if (params.artifact.operator.currentRunIssueKey) {
+    lines.push(`Current run: ${params.artifact.operator.currentRunIssueKey}`);
+  }
+  if (params.artifact.nextSuggestedCommand) {
+    lines.push(`Next: ${params.artifact.nextSuggestedCommand}`);
+  }
+  return lines.join("\n");
+}
+
+function buildAutonomousLoopSummaryMessage(params: {
+  repo: { owner: string; repo: string };
+  artifact: Awaited<ReturnType<typeof readProjectAutonomousLoopArtifact>>;
+}): string {
+  const lines = [`openclawcode autopilot for ${formatRepoKey(params.repo)}`];
+  lines.push(`Mode: ${params.artifact.mode}`);
+  lines.push(`Status: ${params.artifact.status}`);
+  lines.push(`Enabled: ${params.artifact.enabled ? "yes" : "no"}`);
+  lines.push(`Next work: ${params.artifact.nextWorkDecision}`);
+  lines.push(
+    `Operator: currentRun=${params.artifact.currentRunPresent ? "yes" : "no"} | pause=${params.artifact.providerPauseActive ? "yes" : "no"}`,
+  );
+  if (params.artifact.selectedWorkItemId) {
+    lines.push(`Selected work item: ${params.artifact.selectedWorkItemId}`);
+  }
+  if (params.artifact.selectedIssueNumber != null) {
+    lines.push(`Selected issue: #${params.artifact.selectedIssueNumber}`);
+  }
+  if (params.artifact.queuedIssueKey) {
+    lines.push(`Queued issue: ${params.artifact.queuedIssueKey}`);
+  }
+  if (params.artifact.stopReason) {
+    lines.push(`Stop reason: ${params.artifact.stopReason}`);
+  }
+  if (params.artifact.message) {
+    lines.push(`Message: ${params.artifact.message}`);
+  }
+  return lines.join("\n");
+}
+
+function parseAutopilotArgs(params: {
+  args: string;
+  defaults: { owner?: string; repo?: string };
+}):
+  | {
+      action: "once" | "status" | "off";
+      repo: { owner: string; repo: string };
+    }
+  | undefined {
+  const tokens = params.args
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  const actionToken = (tokens[0] ?? "status").toLowerCase();
+  if (actionToken !== "once" && actionToken !== "status" && actionToken !== "off") {
+    return undefined;
+  }
+  const repo = parseChatopsRepoReference(tokens.slice(1).join(" "), params.defaults) ??
+    parseChatopsRepoReference("", params.defaults);
+  if (!repo) {
+    return undefined;
+  }
+  return {
+    action: actionToken,
+    repo,
+  };
 }
 
 function parseStageGateDecisionArgs(params: {
@@ -6573,6 +6877,204 @@ export default {
               repo: repoConfig.repo,
             },
             selection,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-materialize",
+      description: "Create or reuse the GitHub issue for the selected blueprint-backed work item.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const repo = parseChatopsRepoReference(ctx.args ?? "", {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!repo) {
+          return {
+            text:
+              "Usage: /occode-materialize owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-materialize",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+        const notifyTarget = resolveCommandNotifyTarget(ctx);
+        if (!notifyTarget) {
+          return {
+            text: "This command needs a concrete chat target so any queued run can post updates here.",
+          };
+        }
+
+        const result = await materializeAndHandleNextWorkIssue({
+          store,
+          repoConfig,
+          destination: {
+            channel: ctx.channel,
+            target: notifyTarget,
+          },
+        });
+        if (result.shouldKickQueue) {
+          kickQueueDrain(api, store);
+        }
+        return {
+          text: result.text,
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-progress",
+      description: "Show the current blueprint-aware project progress summary for an openclawcode repo.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const repo = parseChatopsRepoReference(ctx.args ?? "", {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!repo) {
+          return {
+            text:
+              "Usage: /occode-progress owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-progress",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+        const operatorSnapshot = await readOpenClawCodeOperatorStatusSnapshot(
+          api.runtime.state.resolveStateDir(),
+        ).catch(() => undefined);
+        const artifact = await writeProjectProgressArtifact({
+          repoRoot: repoConfig.repoRoot,
+          repo: {
+            owner: repoConfig.owner,
+            repo: repoConfig.repo,
+          },
+          operatorSnapshot,
+        });
+        return {
+          text: buildProjectProgressSummaryMessage({
+            repo: {
+              owner: repoConfig.owner,
+              repo: repoConfig.repo,
+            },
+            artifact,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-autopilot",
+      description: "Run, inspect, or disable one autonomous blueprint-backed progress loop for an openclawcode repo.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const parsed = parseAutopilotArgs({
+          args: ctx.args ?? "",
+          defaults: {
+            owner: defaultRepo?.owner,
+            repo: defaultRepo?.repo,
+          },
+        });
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-autopilot <once|status|off> owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-autopilot <once|status|off>",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.repo.owner}/${parsed.repo.repo}.`,
+          };
+        }
+        if (parsed.action === "off") {
+          const artifact = await setProjectAutonomousLoopDisabled({
+            repoRoot: repoConfig.repoRoot,
+            repo: parsed.repo,
+          });
+          return {
+            text: buildAutonomousLoopSummaryMessage({
+              repo: parsed.repo,
+              artifact,
+            }),
+          };
+        }
+        if (parsed.action === "status") {
+          const artifact = await readProjectAutonomousLoopArtifact(repoConfig.repoRoot);
+          return {
+            text: buildAutonomousLoopSummaryMessage({
+              repo: parsed.repo,
+              artifact,
+            }),
+          };
+        }
+        const notifyTarget = resolveCommandNotifyTarget(ctx);
+        const operatorSnapshot = await readOpenClawCodeOperatorStatusSnapshot(
+          api.runtime.state.resolveStateDir(),
+        ).catch(() => undefined);
+        const artifact = await runProjectAutonomousLoopOnce({
+          repoRoot: repoConfig.repoRoot,
+          repo: parsed.repo,
+          operatorSnapshot,
+          queueIssue:
+            notifyTarget == null
+              ? undefined
+              : async ({ issueNumber }) => {
+                  const queued = await queueOrGateIssueExecution({
+                    store,
+                    repoConfig,
+                    issue: {
+                      owner: repoConfig.owner,
+                      repo: repoConfig.repo,
+                      number: issueNumber,
+                    },
+                    destination: {
+                      channel: ctx.channel,
+                      target: notifyTarget,
+                    },
+                    queuedStatus: "Queued from /occode-autopilot once.",
+                    gatedStatus: "Awaiting execution-start gate approval.",
+                  });
+                  if (queued.outcome === "queued") {
+                    kickQueueDrain(api, store);
+                    return {
+                      queued: true,
+                      issueKey: queued.queuedRun.issueKey,
+                    };
+                  }
+                  return {
+                    queued: false,
+                    issueKey:
+                      queued.outcome === "already-tracked"
+                        ? `${repoConfig.owner}/${repoConfig.repo}#${issueNumber}`
+                        : null,
+                  };
+                },
+        });
+        return {
+          text: buildAutonomousLoopSummaryMessage({
+            repo: parsed.repo,
+            artifact,
           }),
         };
       },
