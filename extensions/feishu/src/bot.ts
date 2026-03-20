@@ -25,6 +25,10 @@ import {
   matchPluginCommand,
   normalizePluginCommandBody,
 } from "../../../src/plugins/commands.js";
+import {
+  buildPairingCommandRetryReply,
+  buildPairingReply,
+} from "../../../src/pairing/pairing-messages.js";
 import { resolveFeishuAccount } from "./accounts.js";
 import {
   checkBotMentioned,
@@ -478,6 +482,7 @@ export async function handleFeishuMessage(params: {
       commandProbeBody,
       cfg,
     );
+    const pluginMatch = matchPluginCommand(commandProbeBody);
     const storeAllowFrom =
       !isGroup &&
       dmPolicy !== "allowlist" &&
@@ -494,27 +499,42 @@ export async function handleFeishuMessage(params: {
 
     if (isDirect && dmPolicy !== "open" && !dmAllowed) {
       if (dmPolicy === "pairing") {
-        await pairing.issueChallenge({
-          senderId: ctx.senderOpenId,
-          senderIdLine: `Your Feishu user id: ${ctx.senderOpenId}`,
+        const senderIdLine = `Your Feishu user id: ${ctx.senderOpenId}`;
+        const pairingResult = await pairing.upsertPairingRequest({
+          id: ctx.senderOpenId,
           meta: { name: ctx.senderName },
-          onCreated: () => {
-            log(`feishu[${account.accountId}]: pairing request sender=${ctx.senderOpenId}`);
-          },
-          sendPairingReply: async (text) => {
+        });
+        if (pairingResult.created) {
+          log(`feishu[${account.accountId}]: pairing request sender=${ctx.senderOpenId}`);
+        }
+        const shouldSendPairingReply = pairingResult.created || pluginMatch !== null;
+        if (shouldSendPairingReply && pairingResult.code) {
+          const text =
+            pluginMatch !== null
+              ? buildPairingCommandRetryReply({
+                  channel: "feishu",
+                  idLine: senderIdLine,
+                  code: pairingResult.code,
+                  commandBody: commandProbeBody,
+                })
+              : buildPairingReply({
+                  channel: "feishu",
+                  idLine: senderIdLine,
+                  code: pairingResult.code,
+                });
+          try {
             await sendMessageFeishu({
               cfg,
               to: `chat:${ctx.chatId}`,
               text,
               accountId: account.accountId,
             });
-          },
-          onReplyError: (err) => {
+          } catch (err) {
             log(
               `feishu[${account.accountId}]: pairing reply failed for ${ctx.senderOpenId}: ${String(err)}`,
             );
-          },
-        });
+          }
+        }
       } else {
         log(
           `feishu[${account.accountId}]: blocked unauthorized sender ${ctx.senderOpenId} (dmPolicy=${dmPolicy})`,
@@ -974,7 +994,6 @@ export async function handleFeishuMessage(params: {
       isTopicSession || configReplyInThread ? (ctx.rootId ?? ctx.messageId) : ctx.messageId;
     const threadReply = isGroup ? (groupSession?.threadReply ?? false) : false;
 
-    const pluginMatch = matchPluginCommand(commandProbeBody);
     if (pluginMatch) {
       const { dispatcher, markDispatchIdle } = createFeishuReplyDispatcher({
         cfg,

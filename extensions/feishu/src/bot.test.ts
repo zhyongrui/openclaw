@@ -940,6 +940,66 @@ describe("handleFeishuMessage command authorization", () => {
     expect(mockDispatchReplyFromConfig).not.toHaveBeenCalled();
   });
 
+  it("replies with pairing guidance for blocked plugin commands even when a pairing request already exists", async () => {
+    mockShouldComputeCommandAuthorized.mockReturnValue(true);
+    mockReadAllowFromStore.mockResolvedValue([]);
+    mockUpsertPairingRequest.mockResolvedValue({ code: "ABCDEFGH", created: false });
+    mockMatchPluginCommand.mockReturnValue({
+      command: {
+        name: "occode-setup",
+        description: "Start setup",
+        pluginId: "openclawcode",
+        acceptsArgs: true,
+        handler: vi.fn(),
+      },
+      args: "",
+    });
+
+    const cfg: ClawdbotConfig = {
+      channels: {
+        feishu: {
+          dmPolicy: "pairing",
+          allowFrom: [],
+        },
+      },
+    } as ClawdbotConfig;
+
+    const event: FeishuMessageEvent = {
+      sender: {
+        sender_id: {
+          open_id: "ou-unapproved",
+        },
+      },
+      message: {
+        message_id: "msg-pairing-plugin-reminder",
+        chat_id: "oc-dm",
+        chat_type: "p2p",
+        message_type: "text",
+        content: JSON.stringify({ text: "/occode-setup" }),
+      },
+    };
+
+    await dispatchMessage({ cfg, event });
+
+    expect(mockSendMessageFeishu).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "chat:oc-dm",
+        text: expect.stringContaining("This chat command is blocked until pairing is approved."),
+        accountId: "default",
+      }),
+    );
+    expect(mockSendMessageFeishu).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "chat:oc-dm",
+        text: expect.stringContaining("After approval, resend:\n/occode-setup"),
+        accountId: "default",
+      }),
+    );
+    expect(mockExecutePluginCommand).not.toHaveBeenCalled();
+    expect(mockFinalizeInboundContext).not.toHaveBeenCalled();
+    expect(mockDispatchReplyFromConfig).not.toHaveBeenCalled();
+  });
+
   it("computes group command authorization from group allowFrom", async () => {
     mockShouldComputeCommandAuthorized.mockReturnValue(true);
     mockResolveCommandAuthorizedFromAuthorizers.mockReturnValue(false);
