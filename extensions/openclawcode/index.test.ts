@@ -6451,6 +6451,7 @@ describe("openclawcode extension", () => {
       expect(onceResult?.text).toContain(
         "Primary blocker: The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
       );
+      expect(onceResult?.text).toContain(`Next: openclaw code stage-gates-show --repo-root ${fixture.repoRoot}`);
     } finally {
       await cleanupPluginFixture(fixture);
     }
@@ -6565,6 +6566,7 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain("Iterations: 2/2");
       expect(result?.text).toContain("Operator: queued=1 | currentRun=no | pause=no");
       expect(result?.text).toContain("Stop reason: A run is already queued for this repository.");
+      expect(result?.text).toContain(`Next: openclaw code project-progress-show --repo-root ${fixture.repoRoot}`);
       expect(result?.text).toContain(
         "- iteration 1: materialized-and-queued | ready-to-execute | #88 | zhyongrui/openclawcode#88",
       );

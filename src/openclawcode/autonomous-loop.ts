@@ -52,6 +52,7 @@ export interface ProjectAutonomousLoopArtifact {
   nextWorkDecision: string;
   nextWorkBlockingGateId: string | null;
   nextWorkPrimaryBlocker: string | null;
+  nextSuggestedCommand: string | null;
   selectedWorkItemId: string | null;
   selectedWorkItemExecutionMode: string | null;
   roleRouteSummary: string[];
@@ -95,6 +96,7 @@ export async function setProjectAutonomousLoopDisabled(params: {
     nextWorkDecision: "no-actionable-work-item",
     nextWorkBlockingGateId: null,
     nextWorkPrimaryBlocker: null,
+    nextSuggestedCommand: null,
     selectedWorkItemId: null,
     selectedWorkItemExecutionMode: null,
     roleRouteSummary: [],
@@ -144,6 +146,7 @@ export async function readProjectAutonomousLoopArtifact(
       nextWorkDecision: "no-actionable-work-item",
       nextWorkBlockingGateId: null,
       nextWorkPrimaryBlocker: null,
+      nextSuggestedCommand: null,
       selectedWorkItemId: null,
       selectedWorkItemExecutionMode: null,
       roleRouteSummary: [],
@@ -188,6 +191,7 @@ export async function readProjectAutonomousLoopArtifact(
     nextWorkDecision: parsed.nextWorkDecision ?? "no-actionable-work-item",
     nextWorkBlockingGateId: parsed.nextWorkBlockingGateId ?? null,
     nextWorkPrimaryBlocker: parsed.nextWorkPrimaryBlocker ?? null,
+    nextSuggestedCommand: parsed.nextSuggestedCommand ?? null,
     selectedWorkItemId: parsed.selectedWorkItemId ?? null,
     selectedWorkItemExecutionMode: parsed.selectedWorkItemExecutionMode ?? null,
     roleRouteSummary: Array.isArray(parsed.roleRouteSummary) ? parsed.roleRouteSummary : [],
@@ -221,6 +225,7 @@ async function runProjectAutonomousLoopIteration(params: {
   const queuedRunCount = progress.operator.queuedRunCount;
   const currentRunPresent = progress.operator.currentRunCount > 0;
   const providerPauseActive = progress.operator.providerPauseActive;
+  let nextSuggestedCommand: string | null = null;
 
   let status: ProjectAutonomousLoopArtifact["status"] = "blocked";
   let stopReason: string | null = null;
@@ -232,12 +237,16 @@ async function runProjectAutonomousLoopIteration(params: {
     stopReason = "Resolve the GitHub owner/repo before autonomous issue materialization can continue.";
   } else if (providerPauseActive) {
     stopReason = "Provider pause is active.";
+    nextSuggestedCommand = `openclaw code project-progress-show --repo-root ${repoRoot}`;
   } else if (queuedRunCount > 0) {
     stopReason = "A run is already queued for this repository.";
+    nextSuggestedCommand = `openclaw code project-progress-show --repo-root ${repoRoot}`;
   } else if (currentRunPresent) {
     stopReason = "A run is already active for this repository.";
+    nextSuggestedCommand = `openclaw code project-progress-show --repo-root ${repoRoot}`;
   } else if (progress.nextWorkDecision !== "ready-to-execute") {
     stopReason = `Autonomous progress is blocked at ${progress.nextWorkDecision}.`;
+    nextSuggestedCommand = progress.nextSuggestedCommand;
   } else {
     const issueMaterialization = await writeProjectIssueMaterializationArtifact({
       repoRoot,
@@ -252,14 +261,20 @@ async function runProjectAutonomousLoopIteration(params: {
       if (queued.outcome === "queued") {
         status = "materialized-and-queued";
         message = `Queued ${queued.issueKey} after issue materialization.`;
+        nextSuggestedCommand = `openclaw code project-progress-show --repo-root ${repoRoot}`;
       } else {
         status = "blocked";
         stopReason = "The selected issue is already queued or running for this repository.";
         message = "Selected issue was already tracked, so queue state stayed unchanged.";
+        nextSuggestedCommand = `openclaw code project-progress-show --repo-root ${repoRoot}`;
       }
     } else {
       status = "materialized-only";
       message = "Materialized the next issue.";
+      if (issueMaterialization.selectedIssueNumber != null) {
+        nextSuggestedCommand =
+          `openclaw code run --issue ${issueMaterialization.selectedIssueNumber} --repo-root ${repoRoot}`;
+      }
     }
     const artifact: ProjectAutonomousLoopArtifact = {
       repoRoot,
@@ -278,6 +293,7 @@ async function runProjectAutonomousLoopIteration(params: {
       nextWorkDecision: progress.nextWorkDecision,
       nextWorkBlockingGateId: progress.nextWorkBlockingGateId,
       nextWorkPrimaryBlocker: progress.nextWorkPrimaryBlocker,
+      nextSuggestedCommand,
       selectedWorkItemId: issueMaterialization.selectedWorkItemId,
       selectedWorkItemExecutionMode: issueMaterialization.selectedWorkItemExecutionMode,
       roleRouteSummary: progress.roleRouteSummary,
@@ -315,6 +331,7 @@ async function runProjectAutonomousLoopIteration(params: {
     nextWorkDecision: progress.nextWorkDecision,
     nextWorkBlockingGateId: progress.nextWorkBlockingGateId,
     nextWorkPrimaryBlocker: progress.nextWorkPrimaryBlocker,
+    nextSuggestedCommand,
     selectedWorkItemId: progress.selectedWorkItemId,
     selectedWorkItemExecutionMode: progress.selectedWorkItemExecutionMode,
     roleRouteSummary: progress.roleRouteSummary,

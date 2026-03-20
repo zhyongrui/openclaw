@@ -2181,6 +2181,9 @@ function logProjectAutonomousLoopArtifact(params: {
   if (artifact.message) {
     runtime.log(`Message: ${artifact.message}`);
   }
+  if (artifact.nextSuggestedCommand) {
+    runtime.log(`Next suggested command: ${artifact.nextSuggestedCommand}`);
+  }
   if (artifact.iterations.length > 0) {
     runtime.log("Iteration history:");
     for (const iteration of artifact.iterations.slice(0, 5)) {

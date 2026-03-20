@@ -3143,6 +3143,9 @@ function buildAutonomousLoopSummaryMessage(params: {
   if (params.artifact.message) {
     lines.push(`Message: ${params.artifact.message}`);
   }
+  if (params.artifact.nextSuggestedCommand) {
+    lines.push(`Next: ${params.artifact.nextSuggestedCommand}`);
+  }
   for (const iteration of params.artifact.iterations.slice(0, 3)) {
     lines.push(
       `- iteration ${iteration.iteration}: ${iteration.status} | ${iteration.nextWorkDecision}${iteration.selectedIssueNumber != null ? ` | #${iteration.selectedIssueNumber}` : ""}${iteration.queuedIssueKey ? ` | ${iteration.queuedIssueKey}` : ""}`,

@@ -3183,6 +3183,8 @@ describe("openclawCodeRunCommand", () => {
       requestedIterationCount: 1,
       completedIterationCount: 1,
       nextWorkDecision: "ready-to-execute",
+      nextSuggestedCommand:
+        `openclaw code run --issue 654 --repo-root ${repoRoot}`,
       selectedWorkItemId: "planned-01-show-blueprint-aware-progress-in-one-artifact",
       selectedWorkItemExecutionMode: "feature",
       selectedIssueNumber: 654,
@@ -3300,6 +3302,9 @@ describe("openclawCodeRunCommand", () => {
     expect(loop.nextWorkPrimaryBlocker).toBe(
       "The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
     );
+    expect(loop.nextSuggestedCommand).toBe(
+      `openclaw code stage-gates-show --repo-root ${repoRoot}`,
+    );
   });
 
   it("records repeat-loop iteration history when no queue handoff is configured", async () => {
@@ -3386,6 +3391,8 @@ describe("openclawCodeRunCommand", () => {
       stopReason:
         "Autonomous loop stopped after materialization because no queue handoff is configured.",
     });
+    expect(loop.nextSuggestedCommand).toContain(`openclaw code run --issue `);
+    expect(loop.nextSuggestedCommand).toContain(` --repo-root ${repoRoot}`);
     expect(loop.iterations).toEqual([
       expect.objectContaining({
         iteration: 1,
