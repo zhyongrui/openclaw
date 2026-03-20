@@ -30,11 +30,16 @@ export interface ProjectAutonomousLoopArtifact {
   nextWorkPrimaryBlocker: string | null;
   selectedWorkItemId: string | null;
   selectedWorkItemExecutionMode: string | null;
+  roleRouteSummary: string[];
   selectedIssueNumber: number | null;
   selectedIssueUrl: string | null;
   queuedIssueKey: string | null;
   providerPauseActive: boolean;
   currentRunPresent: boolean;
+  currentRunStage: string | null;
+  currentRunBranchName: string | null;
+  currentRunPullRequestNumber: number | null;
+  currentRunPullRequestUrl: string | null;
   message: string | null;
 }
 
@@ -64,11 +69,16 @@ export async function setProjectAutonomousLoopDisabled(params: {
     nextWorkPrimaryBlocker: null,
     selectedWorkItemId: null,
     selectedWorkItemExecutionMode: null,
+    roleRouteSummary: [],
     selectedIssueNumber: null,
     selectedIssueUrl: null,
     queuedIssueKey: null,
     providerPauseActive: false,
     currentRunPresent: false,
+    currentRunStage: null,
+    currentRunBranchName: null,
+    currentRunPullRequestNumber: null,
+    currentRunPullRequestUrl: null,
     message: "Autonomous loop disabled.",
   };
   await mkdir(path.dirname(artifactPath), { recursive: true });
@@ -104,11 +114,16 @@ export async function readProjectAutonomousLoopArtifact(
       nextWorkPrimaryBlocker: null,
       selectedWorkItemId: null,
       selectedWorkItemExecutionMode: null,
+      roleRouteSummary: [],
       selectedIssueNumber: null,
       selectedIssueUrl: null,
       queuedIssueKey: null,
       providerPauseActive: false,
       currentRunPresent: false,
+      currentRunStage: null,
+      currentRunBranchName: null,
+      currentRunPullRequestNumber: null,
+      currentRunPullRequestUrl: null,
       message: null,
     };
   }
@@ -180,11 +195,16 @@ export async function runProjectAutonomousLoopOnce(params: {
       nextWorkPrimaryBlocker: progress.nextWorkPrimaryBlocker,
       selectedWorkItemId: issueMaterialization.selectedWorkItemId,
       selectedWorkItemExecutionMode: issueMaterialization.selectedWorkItemExecutionMode,
+      roleRouteSummary: progress.roleRouteSummary,
       selectedIssueNumber: issueMaterialization.selectedIssueNumber,
       selectedIssueUrl: issueMaterialization.selectedIssueUrl,
       queuedIssueKey,
       providerPauseActive,
       currentRunPresent,
+      currentRunStage: progress.operator.currentRunStage,
+      currentRunBranchName: progress.operator.currentRunBranchName,
+      currentRunPullRequestNumber: progress.operator.currentRunPullRequestNumber,
+      currentRunPullRequestUrl: progress.operator.currentRunPullRequestUrl,
       message,
     };
     await mkdir(path.dirname(artifactPath), { recursive: true });
@@ -208,11 +228,16 @@ export async function runProjectAutonomousLoopOnce(params: {
     nextWorkPrimaryBlocker: progress.nextWorkPrimaryBlocker,
     selectedWorkItemId: progress.selectedWorkItemId,
     selectedWorkItemExecutionMode: progress.selectedWorkItemExecutionMode,
+    roleRouteSummary: progress.roleRouteSummary,
     selectedIssueNumber: progress.selectedIssueNumber,
     selectedIssueUrl: progress.selectedIssueUrl,
     queuedIssueKey,
     providerPauseActive,
     currentRunPresent,
+    currentRunStage: progress.operator.currentRunStage,
+    currentRunBranchName: progress.operator.currentRunBranchName,
+    currentRunPullRequestNumber: progress.operator.currentRunPullRequestNumber,
+    currentRunPullRequestUrl: progress.operator.currentRunPullRequestUrl,
     message,
   };
   await mkdir(path.dirname(artifactPath), { recursive: true });

@@ -231,13 +231,24 @@ The project-progress artifact now also carries:
 - `nextWorkBlockingGateId`
 - `nextWorkPrimaryBlocker`
 - `selectedWorkItemExecutionMode`
+- `roleRouteSummary`
+- `operator.currentRunStage`
+- `operator.currentRunBranchName`
+- `operator.currentRunPullRequestNumber`
+- `operator.currentRunPullRequestUrl`
+- `operator.currentRunStatusUpdatedAt`
 
 The autonomous-loop artifact now also carries:
 
 - `nextWorkBlockingGateId`
 - `nextWorkPrimaryBlocker`
 - `selectedWorkItemExecutionMode`
+- `roleRouteSummary`
+- `currentRunStage`
+- `currentRunBranchName`
+- `currentRunPullRequestNumber`
+- `currentRunPullRequestUrl`
 
 This lets `/occode-progress`, `/occode-autopilot`, and the CLI summaries answer
-the operator question "what is waiting, and why?" without reopening the stage
-gate artifact manually.
+the operator questions "what is waiting, why, and who is doing what now?"
+without reopening the stage-gate artifact or raw run status manually.

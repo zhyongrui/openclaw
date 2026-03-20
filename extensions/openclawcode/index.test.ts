@@ -6456,6 +6456,158 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("shows active-run stage and role routing through progress and autopilot chat commands", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      vi.stubEnv("OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID", "codex-main");
+      vi.stubEnv("OPENCLAWCODE_ADAPTER_CLAUDE_CODE_AGENT_ID", "claude-main");
+
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Active Run Chat Progress Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-20T00:00:00.000Z",
+          "updatedAt: 2026-03-20T00:00:00.000Z",
+          "statusChangedAt: 2026-03-20T00:00:00.000Z",
+          "agreedAt: 2026-03-20T00:00:00.000Z",
+          "---",
+          "",
+          "# Active Run Chat Progress Blueprint",
+          "",
+          "## Goal",
+          "Show active-run stage and role routing in chat progress surfaces.",
+          "",
+          "## Success Criteria",
+          "- /occode-progress shows the current run stage and roles.",
+          "",
+          "## Scope",
+          "- In scope: project-level chat progress context.",
+          "",
+          "## Non-Goals",
+          "- Real workflow execution.",
+          "",
+          "## Constraints",
+          "- Keep the status concise.",
+          "",
+          "## Risks",
+          "- Active work may be opaque without a project-level summary.",
+          "",
+          "## Assumptions",
+          "- The blueprint is already agreed.",
+          "",
+          "## Human Gates",
+          "- Merge promotion: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: Codex",
+          "- Doc-writer: Codex",
+          "",
+          "## Workstreams",
+          "- Show active-run progress in chat.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-20: active-run chat proof.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      await fixture.store.enqueue(
+        {
+          issueKey: "zhyongrui/openclawcode#910",
+          notifyChannel: "telegram",
+          notifyTarget: "chat:primary",
+          request: {
+            owner: "zhyongrui",
+            repo: "openclawcode",
+            issueNumber: 910,
+            repoRoot: fixture.repoRoot,
+            baseBranch: "main",
+            branchName: "openclawcode/issue-910",
+            builderAgent: "codex-main",
+            verifierAgent: "claude-main",
+            testCommands: ["pnpm test"],
+            openPullRequest: true,
+            mergeOnApprove: false,
+          },
+        },
+        "Queued.",
+      );
+      await fixture.store.startNext("Running.");
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#910",
+        status: "openclawcode status for zhyongrui/openclawcode#910\nStage: Building",
+        stage: "building",
+        runId: "run-910",
+        updatedAt: "2026-03-20T08:20:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 910,
+        branchName: "openclawcode/issue-910",
+        pullRequestNumber: 9910,
+        pullRequestUrl: "https://github.com/zhyongrui/openclawcode/pull/9910",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+      });
+
+      const progressResult = await fixture.commands.get("occode-progress")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-progress",
+        args: "",
+        config: {},
+      });
+      expect(progressResult?.text).toContain(
+        "Roles: planner=Claude Code@claude-main, coder=Codex@codex-main, reviewer=Claude Code@claude-main, verifier=Codex@codex-main, doc-writer=Codex@codex-main",
+      );
+      expect(progressResult?.text).toContain("Current run: zhyongrui/openclawcode#910");
+      expect(progressResult?.text).toContain("Current run stage: building");
+      expect(progressResult?.text).toContain("Current run branch: openclawcode/issue-910");
+      expect(progressResult?.text).toContain("Current run PR: #9910");
+
+      const onceResult = await fixture.commands.get("occode-autopilot")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-autopilot once",
+        args: "once",
+        config: {},
+      });
+      expect(onceResult?.text).toContain("Status: blocked");
+      expect(onceResult?.text).toContain(
+        "Roles: planner=Claude Code@claude-main, coder=Codex@codex-main, reviewer=Claude Code@claude-main, verifier=Codex@codex-main, doc-writer=Codex@codex-main",
+      );
+      expect(onceResult?.text).toContain("Current run stage: building");
+      expect(onceResult?.text).toContain("Current run branch: openclawcode/issue-910");
+      expect(onceResult?.text).toContain("Current run PR: #9910");
+      expect(onceResult?.text).toContain("Stop reason: A run is already active for this repository.");
+
+      const progressArtifact = await readProjectProgressArtifact(fixture.repoRoot);
+      expect(progressArtifact.roleRouteSummary).toEqual([
+        "planner=Claude Code@claude-main",
+        "coder=Codex@codex-main",
+        "reviewer=Claude Code@claude-main",
+        "verifier=Codex@codex-main",
+        "doc-writer=Codex@codex-main",
+      ]);
+      expect(progressArtifact.operator.currentRunStage).toBe("building");
+
+      const loopArtifact = await readProjectAutonomousLoopArtifact(fixture.repoRoot);
+      expect(loopArtifact.currentRunStage).toBe("building");
+      expect(loopArtifact.roleRouteSummary).toEqual(progressArtifact.roleRouteSummary);
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
   it("records a stage-gate decision through /occode-gate-decide", async () => {
     const fixture = await registerPluginFixture();
     try {

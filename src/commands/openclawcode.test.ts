@@ -3292,6 +3292,172 @@ describe("openclawCodeRunCommand", () => {
     );
   });
 
+  it("surfaces active-run stage and role routing through project progress and autopilot artifacts", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-project-progress-active-run-"));
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "openclawcode-project-progress-active-run-state-"));
+    const store = OpenClawCodeChatopsStore.fromStateDir(stateDir);
+
+    vi.stubEnv("OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID", "codex-main");
+    vi.stubEnv("OPENCLAWCODE_ADAPTER_CLAUDE_CODE_AGENT_ID", "claude-main");
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Active Run Progress Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Active Run Progress Blueprint",
+        "",
+        "## Goal",
+        "Expose active-run progress context through project-level status surfaces.",
+        "",
+        "## Success Criteria",
+        "- Project progress shows the current run stage and role routing.",
+        "",
+        "## Scope",
+        "- In scope: active-run progress context.",
+        "",
+        "## Non-Goals",
+        "- Real workflow execution.",
+        "",
+        "## Constraints",
+        "- Keep the summary concise and machine-readable.",
+        "",
+        "## Risks",
+        "- Operators may lose track of the live run without a project view.",
+        "",
+        "## Assumptions",
+        "- The blueprint is already agreed.",
+        "",
+        "## Human Gates",
+        "- Merge promotion: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Show active-run stage and role routing in project progress.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: active-run progress baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    await store.setRepoBinding({
+      repoKey: "openclaw/openclawcode",
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+    });
+    await store.enqueue(
+      {
+        issueKey: "openclaw/openclawcode#910",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+        request: {
+          owner: "openclaw",
+          repo: "openclawcode",
+          issueNumber: 910,
+          repoRoot,
+          baseBranch: "main",
+          branchName: "openclawcode/issue-910",
+          builderAgent: "codex-main",
+          verifierAgent: "claude-main",
+          testCommands: ["pnpm test"],
+          openPullRequest: true,
+          mergeOnApprove: false,
+        },
+      },
+      "Queued.",
+    );
+    await store.startNext("Running.");
+    await store.setStatusSnapshot({
+      issueKey: "openclaw/openclawcode#910",
+      status: "openclawcode status for openclaw/openclawcode#910\nStage: Building",
+      stage: "building",
+      runId: "run-910",
+      updatedAt: "2026-03-20T08:20:00.000Z",
+      owner: "openclaw",
+      repo: "openclawcode",
+      issueNumber: 910,
+      branchName: "openclawcode/issue-910",
+      pullRequestNumber: 9910,
+      pullRequestUrl: "https://github.com/openclaw/openclawcode/pull/9910",
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+    });
+
+    runtime.log.mockClear();
+    await openclawCodeProjectProgressShowCommand(
+      {
+        owner: "openclaw",
+        repo: "openclawcode",
+        repoRoot,
+        stateDir,
+        json: true,
+      },
+      runtime,
+    );
+
+    const progress = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(progress.roleRouteSummary).toEqual([
+      "planner=Claude Code@claude-main",
+      "coder=Codex@codex-main",
+      "reviewer=Claude Code@claude-main",
+      "verifier=Codex@codex-main",
+      "doc-writer=Codex@codex-main",
+    ]);
+    expect(progress.operator).toMatchObject({
+      currentRunIssueKey: "openclaw/openclawcode#910",
+      currentRunStage: "building",
+      currentRunBranchName: "openclawcode/issue-910",
+      currentRunPullRequestNumber: 9910,
+      currentRunPullRequestUrl: "https://github.com/openclaw/openclawcode/pull/9910",
+      currentRunStatusUpdatedAt: "2026-03-20T08:20:00.000Z",
+    });
+
+    runtime.log.mockClear();
+    await openclawCodeAutonomousLoopRunCommand(
+      {
+        owner: "openclaw",
+        repo: "openclawcode",
+        repoRoot,
+        stateDir,
+        once: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    const loop = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(loop).toMatchObject({
+      status: "blocked",
+      stopReason: "A run is already active for this repository.",
+      currentRunPresent: true,
+      currentRunStage: "building",
+      currentRunBranchName: "openclawcode/issue-910",
+      currentRunPullRequestNumber: 9910,
+      currentRunPullRequestUrl: "https://github.com/openclaw/openclawcode/pull/9910",
+    });
+    expect(loop.roleRouteSummary).toEqual(progress.roleRouteSummary);
+  });
+
   it("shows an empty operator status snapshot when no chatops state file exists", async () => {
     const stateDir = await mkdtemp(path.join(os.tmpdir(), "openclawcode-operator-state-missing-"));
 

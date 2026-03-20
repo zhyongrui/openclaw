@@ -3070,11 +3070,23 @@ function buildProjectProgressSummaryMessage(params: {
   if (params.artifact.nextWorkPrimaryBlocker) {
     lines.push(`Primary blocker: ${params.artifact.nextWorkPrimaryBlocker}`);
   }
+  if (params.artifact.roleRouteSummary.length > 0) {
+    lines.push(`Roles: ${params.artifact.roleRouteSummary.join(", ")}`);
+  }
   lines.push(
     `Operator: binding=${params.artifact.operator.bindingPresent ? "yes" : "no"} | pending=${params.artifact.operator.pendingApprovalCount} | queued=${params.artifact.operator.queuedRunCount} | current=${params.artifact.operator.currentRunCount} | pause=${params.artifact.operator.providerPauseActive ? "yes" : "no"}`,
   );
   if (params.artifact.operator.currentRunIssueKey) {
     lines.push(`Current run: ${params.artifact.operator.currentRunIssueKey}`);
+  }
+  if (params.artifact.operator.currentRunStage) {
+    lines.push(`Current run stage: ${params.artifact.operator.currentRunStage}`);
+  }
+  if (params.artifact.operator.currentRunBranchName) {
+    lines.push(`Current run branch: ${params.artifact.operator.currentRunBranchName}`);
+  }
+  if (params.artifact.operator.currentRunPullRequestNumber != null) {
+    lines.push(`Current run PR: #${params.artifact.operator.currentRunPullRequestNumber}`);
   }
   if (params.artifact.nextSuggestedCommand) {
     lines.push(`Next: ${params.artifact.nextSuggestedCommand}`);
@@ -3103,11 +3115,23 @@ function buildAutonomousLoopSummaryMessage(params: {
   if (params.artifact.selectedWorkItemExecutionMode) {
     lines.push(`Execution mode: ${params.artifact.selectedWorkItemExecutionMode}`);
   }
+  if (params.artifact.roleRouteSummary.length > 0) {
+    lines.push(`Roles: ${params.artifact.roleRouteSummary.join(", ")}`);
+  }
   if (params.artifact.selectedIssueNumber != null) {
     lines.push(`Selected issue: #${params.artifact.selectedIssueNumber}`);
   }
   if (params.artifact.queuedIssueKey) {
     lines.push(`Queued issue: ${params.artifact.queuedIssueKey}`);
+  }
+  if (params.artifact.currentRunStage) {
+    lines.push(`Current run stage: ${params.artifact.currentRunStage}`);
+  }
+  if (params.artifact.currentRunBranchName) {
+    lines.push(`Current run branch: ${params.artifact.currentRunBranchName}`);
+  }
+  if (params.artifact.currentRunPullRequestNumber != null) {
+    lines.push(`Current run PR: #${params.artifact.currentRunPullRequestNumber}`);
   }
   if (params.artifact.stopReason) {
     lines.push(`Stop reason: ${params.artifact.stopReason}`);

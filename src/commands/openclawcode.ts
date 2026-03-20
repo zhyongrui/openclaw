@@ -2098,9 +2098,24 @@ function logProjectProgressArtifact(params: {
   if (artifact.nextWorkPrimaryBlocker) {
     runtime.log(`Primary blocker: ${artifact.nextWorkPrimaryBlocker}`);
   }
+  if (artifact.roleRouteSummary.length > 0) {
+    runtime.log(`Roles: ${artifact.roleRouteSummary.join(", ")}`);
+  }
   runtime.log(
     `Operator: available=${artifact.operator.available ? "yes" : "no"} | binding=${artifact.operator.bindingPresent ? "yes" : "no"} | pending=${artifact.operator.pendingApprovalCount} | queued=${artifact.operator.queuedRunCount} | current=${artifact.operator.currentRunCount} | pause=${artifact.operator.providerPauseActive ? "yes" : "no"}`,
   );
+  if (artifact.operator.currentRunIssueKey) {
+    runtime.log(`Current run: ${artifact.operator.currentRunIssueKey}`);
+  }
+  if (artifact.operator.currentRunStage) {
+    runtime.log(`Current run stage: ${artifact.operator.currentRunStage}`);
+  }
+  if (artifact.operator.currentRunBranchName) {
+    runtime.log(`Current run branch: ${artifact.operator.currentRunBranchName}`);
+  }
+  if (artifact.operator.currentRunPullRequestNumber != null) {
+    runtime.log(`Current run PR: #${artifact.operator.currentRunPullRequestNumber}`);
+  }
   if (artifact.nextSuggestedCommand) {
     runtime.log(`Next suggested command: ${artifact.nextSuggestedCommand}`);
   }
@@ -2136,11 +2151,23 @@ function logProjectAutonomousLoopArtifact(params: {
   if (artifact.selectedWorkItemExecutionMode) {
     runtime.log(`Execution mode: ${artifact.selectedWorkItemExecutionMode}`);
   }
+  if (artifact.roleRouteSummary.length > 0) {
+    runtime.log(`Roles: ${artifact.roleRouteSummary.join(", ")}`);
+  }
   if (artifact.selectedIssueNumber != null) {
     runtime.log(`Selected issue: #${artifact.selectedIssueNumber}`);
   }
   if (artifact.queuedIssueKey) {
     runtime.log(`Queued issue: ${artifact.queuedIssueKey}`);
+  }
+  if (artifact.currentRunStage) {
+    runtime.log(`Current run stage: ${artifact.currentRunStage}`);
+  }
+  if (artifact.currentRunBranchName) {
+    runtime.log(`Current run branch: ${artifact.currentRunBranchName}`);
+  }
+  if (artifact.currentRunPullRequestNumber != null) {
+    runtime.log(`Current run PR: #${artifact.currentRunPullRequestNumber}`);
   }
   if (artifact.stopReason) {
     runtime.log(`Stop reason: ${artifact.stopReason}`);

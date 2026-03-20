@@ -22,6 +22,11 @@ export interface ProjectProgressOperatorSummary {
   queuedRunCount: number;
   currentRunCount: number;
   currentRunIssueKey: string | null;
+  currentRunStage: string | null;
+  currentRunBranchName: string | null;
+  currentRunPullRequestNumber: number | null;
+  currentRunPullRequestUrl: string | null;
+  currentRunStatusUpdatedAt: string | null;
   providerPauseActive: boolean;
 }
 
@@ -48,6 +53,7 @@ export interface ProjectProgressArtifact {
   selectedIssueTitle: string | null;
   issueMaterializationOutcome: string | null;
   roleRoutingMixedMode: boolean;
+  roleRouteSummary: string[];
   unresolvedRoleCount: number;
   blockedGateCount: number;
   needsHumanDecisionCount: number;
@@ -72,6 +78,11 @@ function buildOperatorSummary(params: {
       queuedRunCount: 0,
       currentRunCount: 0,
       currentRunIssueKey: null,
+      currentRunStage: null,
+      currentRunBranchName: null,
+      currentRunPullRequestNumber: null,
+      currentRunPullRequestUrl: null,
+      currentRunStatusUpdatedAt: null,
       providerPauseActive: false,
     };
   }
@@ -84,6 +95,9 @@ function buildOperatorSummary(params: {
     params.snapshot.currentRun.request.repo === params.repo.repo
       ? `${params.snapshot.currentRun.request.owner}/${params.snapshot.currentRun.request.repo}#${params.snapshot.currentRun.request.issueNumber}`
       : null;
+  const currentRunSnapshot = currentRunIssueKey
+    ? params.snapshot.issueSnapshots.find((entry) => entry.issueKey === currentRunIssueKey) ?? null
+    : null;
 
   return {
     available: true,
@@ -93,6 +107,12 @@ function buildOperatorSummary(params: {
     queuedRunCount: repoSummary?.queuedRunCount ?? 0,
     currentRunCount: repoSummary?.currentRunCount ?? 0,
     currentRunIssueKey,
+    currentRunStage: currentRunSnapshot?.stage ?? null,
+    currentRunBranchName:
+      currentRunSnapshot?.branchName ?? params.snapshot.currentRun?.request.branchName ?? null,
+    currentRunPullRequestNumber: currentRunSnapshot?.pullRequestNumber ?? null,
+    currentRunPullRequestUrl: currentRunSnapshot?.pullRequestUrl ?? null,
+    currentRunStatusUpdatedAt: currentRunSnapshot?.updatedAt ?? null,
     providerPauseActive: params.snapshot.providerPauseActive,
   };
 }
@@ -118,6 +138,10 @@ export async function writeProjectProgressArtifact(params: {
           repo: params.repo.repo,
         })
       : await readProjectIssueMaterializationArtifact(repoRoot);
+  const roleRouteSummary = roleRouting.routes.map((route) => {
+    const roleLabel = route.roleId === "docWriter" ? "doc-writer" : route.roleId;
+    return `${roleLabel}=${route.resolvedBackend}${route.resolvedAgentId ? `@${route.resolvedAgentId}` : ""}`;
+  });
 
   const nextSuggestedCommand = nextWork.decision === "ready-to-execute"
     ? params.repo
@@ -150,6 +174,7 @@ export async function writeProjectProgressArtifact(params: {
     selectedIssueTitle: issueMaterialization.selectedIssueTitle,
     issueMaterializationOutcome: issueMaterialization.outcome,
     roleRoutingMixedMode: roleRouting.mixedMode,
+    roleRouteSummary,
     unresolvedRoleCount: roleRouting.unresolvedRoleCount,
     blockedGateCount: stageGates.blockedGateCount,
     needsHumanDecisionCount: stageGates.needsHumanDecisionCount,
@@ -201,6 +226,7 @@ export async function readProjectProgressArtifact(
       selectedIssueTitle: null,
       issueMaterializationOutcome: null,
       roleRoutingMixedMode: false,
+      roleRouteSummary: [],
       unresolvedRoleCount: 0,
       blockedGateCount: 0,
       needsHumanDecisionCount: 0,

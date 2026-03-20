@@ -163,6 +163,11 @@ Status:
   `openclaw code project-progress-show`,
   `.openclawcode/project-progress.json`,
   and `/occode-progress`
+- active-run context was deepened later the same day so progress/autopilot now
+  also expose:
+  - current run stage
+  - current run branch / PR
+  - resolved role-route summary
 
 ### Milestone 6: Autonomous Progress Loop
 
