@@ -6448,7 +6448,7 @@ describe("openclawcode extension", () => {
       );
       expect(progressResult?.text).toContain("Execution mode: refactor");
       expect(progressResult?.text).toContain(
-        "Primary blocker: The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
+        "Primary blocker: Selected refactor slice requires explicit execution-start approval: Refactor chat progress formatting into a dedicated presenter.",
       );
 
       const onceResult = await fixture.commands.get("occode-autopilot")?.handler({
@@ -6456,6 +6456,7 @@ describe("openclawcode extension", () => {
         isAuthorizedSender: true,
         commandBody: "/occode-autopilot once",
         args: "once",
+        senderId: "user:operator",
         config: {},
       });
       expect(onceResult?.text).toContain("Status: blocked");
@@ -6465,9 +6466,139 @@ describe("openclawcode extension", () => {
       );
       expect(onceResult?.text).toContain("Execution mode: refactor");
       expect(onceResult?.text).toContain(
-        "Primary blocker: The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
+        "Primary blocker: Selected refactor slice requires explicit execution-start approval: Refactor chat progress formatting into a dedicated presenter.",
       );
       expect(onceResult?.text).toContain(`Next: /occode-gates zhyongrui/openclawcode`);
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("unblocks refactor progress and autopilot after execution-start approval in chat", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Refactor Progress Approved Chat Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-20T00:00:00.000Z",
+          "updatedAt: 2026-03-20T00:00:00.000Z",
+          "statusChangedAt: 2026-03-20T00:00:00.000Z",
+          "agreedAt: 2026-03-20T00:00:00.000Z",
+          "---",
+          "",
+          "# Refactor Progress Approved Chat Blueprint",
+          "",
+          "## Goal",
+          "Allow chat-side refactor progress once execution-start is approved.",
+          "",
+          "## Success Criteria",
+          "- /occode-progress shows ready-to-execute after approval.",
+          "- /occode-autopilot once materializes the approved refactor issue.",
+          "",
+          "## Scope",
+          "- In scope: chat progress alignment with execution-start decisions.",
+          "",
+          "## Non-Goals",
+          "- Full execution.",
+          "",
+          "## Constraints",
+          "- Keep the status concise.",
+          "",
+          "## Risks",
+          "- Approved refactor work may still look blocked if progress ignores gate state.",
+          "",
+          "## Assumptions",
+          "- The blueprint is already agreed.",
+          "",
+          "## Human Gates",
+          "- Execution start: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: Codex",
+          "- Doc-writer: Codex",
+          "",
+          "## Workstreams",
+          "- Refactor chat progress formatting into a dedicated presenter.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-20: approved refactor progress chat proof.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+
+      const decision = await fixture.commands.get("occode-gate-decide")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-gate-decide execution-start approved Accepted for this run",
+        args: "execution-start approved Accepted for this run",
+        senderId: "user:operator",
+        config: {},
+      });
+      expect(decision?.text).toContain("Decision: approved");
+      expect(decision?.text).toContain("Readiness: ready");
+
+      const progressResult = await fixture.commands.get("occode-progress")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-progress",
+        args: "",
+        config: {},
+      });
+      expect(progressResult?.text).toContain("Next work: ready-to-execute");
+      expect(progressResult?.text).toContain("Execution mode: refactor");
+      expect(progressResult?.text).toContain("Next: /occode-materialize zhyongrui/openclawcode");
+
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              number: 207,
+              title: "[Blueprint]: Refactor chat progress formatting into a dedicated presenter.",
+              body: "materialized body",
+              html_url: "https://github.com/zhyongrui/openclawcode/issues/207",
+              state: "open",
+              labels: [],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      vi.stubEnv("GH_TOKEN", "test-gh-token");
+
+      const onceResult = await fixture.commands.get("occode-autopilot")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-autopilot once",
+        args: "once",
+        senderId: "user:operator",
+        config: {},
+      });
+      expect(onceResult?.text).toContain("Status: materialized-and-queued");
+      expect(onceResult?.text).toContain("Next work: ready-to-execute");
+      expect(onceResult?.text).toContain("Execution mode: refactor");
+      expect(onceResult?.text).toContain("Queued issue: zhyongrui/openclawcode#207");
     } finally {
       await cleanupPluginFixture(fixture);
     }

@@ -2766,8 +2766,100 @@ describe("openclawCodeRunCommand", () => {
       title: "Refactor role-routing orchestration into a dedicated planning module.",
     });
     expect(payload.blockers).toContain(
-      "The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
+      "Selected refactor slice requires explicit execution-start approval: Refactor role-routing orchestration into a dedicated planning module.",
     );
+  });
+
+  it("unblocks refactor next-work selection after execution-start approval is recorded", async () => {
+    const repoRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-next-work-refactor-approved-"),
+    );
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Next Work Refactor Approval Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Next Work Refactor Approval Blueprint",
+        "",
+        "## Goal",
+        "Allow autonomous progress after execution-start is explicitly approved.",
+        "",
+        "## Success Criteria",
+        "- Refactor work becomes ready-to-execute once execution-start is approved.",
+        "",
+        "## Scope",
+        "- In scope: next-work alignment with stage-gate decisions.",
+        "",
+        "## Non-Goals",
+        "- Live execution.",
+        "",
+        "## Constraints",
+        "- Keep the selected work item deterministic.",
+        "",
+        "## Risks",
+        "- Approved work could still appear blocked if next-work ignores gate state.",
+        "",
+        "## Assumptions",
+        "- The blueprint is already agreed.",
+        "",
+        "## Human Gates",
+        "- Execution start: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Refactor role-routing orchestration into a dedicated planning module.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: next-work approval alignment baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    await openclawCodeStageGatesDecideCommand(
+      {
+        repoRoot,
+        gate: "execution-start",
+        decision: "approved",
+        actor: "operator",
+        note: "Accepted for this run.",
+        json: true,
+      },
+      runtime,
+    );
+    runtime.log.mockClear();
+
+    await openclawCodeNextWorkShowCommand({ repoRoot, json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.decision).toBe("ready-to-execute");
+    expect(payload.blockingGateId).toBeNull();
+    expect(payload.canContinueAutonomously).toBe(true);
+    expect(payload.selectedWorkItem).toMatchObject({
+      executionMode: "refactor",
+      workstreamIndex: 1,
+      title: "Refactor role-routing orchestration into a dedicated planning module.",
+    });
+    expect(payload.suggestions).toContain("Accepted for this run.");
   });
 
   it("surfaces missing clarification as the reason autonomous progress cannot continue", async () => {
@@ -3356,7 +3448,7 @@ describe("openclawCodeRunCommand", () => {
       "refactor-autonomous-loop-queue-handoff-into-a-de",
     );
     expect(loop.nextWorkPrimaryBlocker).toBe(
-      "The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
+      "Selected refactor slice requires explicit execution-start approval: Refactor autonomous-loop queue handoff into a dedicated coordinator.",
     );
     expect(loop.nextSuggestedCommand).toBe(
       `openclaw code stage-gates-show --repo-root ${repoRoot}`,
@@ -3365,6 +3457,117 @@ describe("openclawCodeRunCommand", () => {
     expect(loop.activeWorkstreamSummary).toBe(
       "Workstream 1/1 | Refactor autonomous-loop queue handoff into a dedicated coordinator.",
     );
+  });
+
+  it("allows autonomous loop materialization after execution-start approval for refactor work", async () => {
+    const repoRoot = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-autonomous-loop-refactor-approved-"),
+    );
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Refactor Loop Approved Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Refactor Loop Approved Blueprint",
+        "",
+        "## Goal",
+        "Allow refactor autopilot progress after execution-start is approved.",
+        "",
+        "## Success Criteria",
+        "- The autonomous loop materializes the refactor issue after approval.",
+        "",
+        "## Scope",
+        "- In scope: autonomous-loop alignment with stage-gate decisions.",
+        "",
+        "## Non-Goals",
+        "- Real queue execution.",
+        "",
+        "## Constraints",
+        "- Keep the stop reason machine-readable.",
+        "",
+        "## Risks",
+        "- Approved refactor work could still appear blocked if the loop ignores gate state.",
+        "",
+        "## Assumptions",
+        "- The repository can resolve its GitHub remote.",
+        "",
+        "## Human Gates",
+        "- Execution start: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Refactor autonomous-loop queue handoff into a dedicated coordinator.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: approved refactor autopilot baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    mocks.createIssue.mockResolvedValueOnce({
+      owner: "openclaw",
+      repo: "openclaw",
+      number: 811,
+      title: "[Blueprint]: Refactor autonomous-loop queue handoff into a dedicated coordinator.",
+      body: "Issue body",
+      labels: [],
+      url: "https://github.com/openclaw/openclaw/issues/811",
+    });
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    await openclawCodeStageGatesDecideCommand(
+      {
+        repoRoot,
+        gate: "execution-start",
+        decision: "approved",
+        actor: "operator",
+        note: "Accepted for this run.",
+        json: true,
+      },
+      runtime,
+    );
+    runtime.log.mockClear();
+
+    await openclawCodeAutonomousLoopRunCommand(
+      {
+        owner: "openclaw",
+        repo: "openclaw",
+        repoRoot,
+        once: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    const loop = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(loop).toMatchObject({
+      status: "materialized-only",
+      nextWorkDecision: "ready-to-execute",
+      nextWorkBlockingGateId: null,
+      selectedWorkItemExecutionMode: "refactor",
+      selectedIssueNumber: 811,
+      stopReason: null,
+      message: "Materialized the next issue.",
+    });
   });
 
   it("records repeat-loop iteration history when no queue handoff is configured", async () => {

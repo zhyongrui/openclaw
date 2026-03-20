@@ -11,6 +11,7 @@ import {
   deriveProjectRoleRoutingPlan,
   readProjectRoleRoutingPlan,
 } from "./role-routing.js";
+import { deriveProjectStageGateArtifact } from "./stage-gates.js";
 import type { ProjectStageGateId } from "./stage-gates.js";
 import {
   deriveProjectWorkItemInventory,
@@ -152,12 +153,6 @@ function toSelectedWorkItem(
   };
 }
 
-function requiresExecutionStartApprovalForMode(
-  executionMode: ProjectWorkItemExecutionMode,
-): boolean {
-  return executionMode === "refactor" || executionMode === "research";
-}
-
 function buildExecutionModeGuidance(
   executionMode: ProjectWorkItemExecutionMode,
 ): { blockers: string[]; suggestions: string[] } {
@@ -271,7 +266,14 @@ export async function deriveProjectNextWorkSelection(
   const roleRouting = storedRoleRouting.exists
     ? storedRoleRouting
     : await deriveProjectRoleRoutingPlan(repoRoot);
+  const stageGates = await deriveProjectStageGateArtifact(repoRoot);
   const selection = pickSelectedWorkItem({ discovery, workItems });
+  const goalAgreementGate = stageGates.gates.find((gate) => gate.gateId === "goal-agreement");
+  const workItemProjectionGate = stageGates.gates.find(
+    (gate) => gate.gateId === "work-item-projection",
+  );
+  const executionRoutingGate = stageGates.gates.find((gate) => gate.gateId === "execution-routing");
+  const executionStartGate = stageGates.gates.find((gate) => gate.gateId === "execution-start");
 
   let decision: ProjectNextWorkDecisionId;
   let blockingGateId: ProjectStageGateId | null = null;
@@ -283,44 +285,26 @@ export async function deriveProjectNextWorkSelection(
     blockingGateId = "work-item-projection";
     blockers = [...clarification.questions];
     suggestions = [...clarification.suggestions];
-  } else if (!blueprint.hasAgreementCheckpoint) {
+  } else if (goalAgreementGate && goalAgreementGate.readiness !== "ready") {
     decision = "blocked-on-human";
     blockingGateId = "goal-agreement";
-    blockers = [
-      "Record blueprint agreement with `openclaw code blueprint-set-status --status agreed`.",
-    ];
-    suggestions = ["Clarify the blueprint and record the agreement checkpoint once the team aligns."];
-  } else if (!workItems.readyForIssueProjection) {
-    decision = classifyWorkItemProjectionBlockers(workItems.blockers);
+    blockers = [...goalAgreementGate.blockers];
+    suggestions = [...goalAgreementGate.suggestions];
+  } else if (workItemProjectionGate && workItemProjectionGate.readiness !== "ready") {
+    decision = classifyWorkItemProjectionBlockers(workItemProjectionGate.blockers);
     blockingGateId = "work-item-projection";
-    blockers = [...workItems.blockers];
-    suggestions = [...workItems.suggestions];
-  } else if (discovery.evidenceCount > 0) {
-    decision = "blocked-on-human";
-    blockingGateId = "execution-start";
-    blockers = [...discovery.blockers];
-    suggestions = [
-      ...discovery.evidence.map((entry) => `${entry.source}: ${entry.summary}`),
-      "Record or accept the execution-start decision before continuing autonomous execution.",
-    ];
-  } else if (roleRouting.unresolvedRoleCount > 0) {
+    blockers = [...workItemProjectionGate.blockers];
+    suggestions = [...workItemProjectionGate.suggestions];
+  } else if (executionRoutingGate && executionRoutingGate.readiness !== "ready") {
     decision = "blocked-on-policy";
     blockingGateId = "execution-routing";
-    blockers = [...roleRouting.blockers];
-    suggestions = [...roleRouting.suggestions];
-  } else if (
-    selection.selectedWorkItem &&
-    requiresExecutionStartApprovalForMode(selection.selectedWorkItem.executionMode)
-  ) {
+    blockers = [...executionRoutingGate.blockers];
+    suggestions = [...executionRoutingGate.suggestions];
+  } else if (executionStartGate && executionStartGate.readiness !== "ready") {
     decision = "blocked-on-human";
     blockingGateId = "execution-start";
-    const modeGuidance = buildExecutionModeGuidance(selection.selectedWorkItem.executionMode);
-    blockers = [...modeGuidance.blockers];
-    suggestions = [
-      `Selected work item execution mode: ${selection.selectedWorkItem.executionMode}.`,
-      ...modeGuidance.suggestions,
-      `Draft GitHub issue title: ${selection.selectedWorkItem.githubIssueDraftTitle}`,
-    ];
+    blockers = [...executionStartGate.blockers];
+    suggestions = [...executionStartGate.suggestions];
   } else if (selection.selectedWorkItem) {
     const modeGuidance = buildExecutionModeGuidance(selection.selectedWorkItem.executionMode);
     decision = "ready-to-execute";
@@ -328,6 +312,7 @@ export async function deriveProjectNextWorkSelection(
       "Use the selected work item as the next issue-materialization candidate.",
       `Selected work item execution mode: ${selection.selectedWorkItem.executionMode}.`,
       ...modeGuidance.suggestions,
+      ...(executionStartGate?.suggestions ?? []),
       `Draft GitHub issue title: ${selection.selectedWorkItem.githubIssueDraftTitle}`,
     ];
   } else {
@@ -351,18 +336,6 @@ export async function deriveProjectNextWorkSelection(
       ? ["Resolve the role-routing or policy blocker before continuing autonomous execution."]
       : []),
   ]);
-
-  const blockedGateCount = Number(!workItems.readyForIssueProjection);
-  const needsHumanDecisionCount =
-    Number(!blueprint.hasAgreementCheckpoint) +
-    Number(discovery.evidenceCount > 0) +
-    Number(roleRouting.unresolvedRoleCount > 0) +
-    Number(
-      selection.selectedWorkItem
-        ? requiresExecutionStartApprovalForMode(selection.selectedWorkItem.executionMode)
-        : false,
-    ) +
-    1;
 
   return {
     repoRoot,
@@ -390,8 +363,8 @@ export async function deriveProjectNextWorkSelection(
     plannedWorkItemCount: workItems.plannedWorkItemCount,
     discoveredWorkItemCount:
       workItems.discoveredWorkItemCount + discovery.discoveredWorkItemCount,
-    blockedGateCount,
-    needsHumanDecisionCount,
+    blockedGateCount: stageGates.blockedGateCount,
+    needsHumanDecisionCount: stageGates.needsHumanDecisionCount,
     unresolvedRoleCount: roleRouting.unresolvedRoleCount,
   };
 }
