@@ -4923,6 +4923,142 @@ describe("openclawCodeRunCommand", () => {
     ).toBe(true);
   });
 
+  it("discovers setup-check regressions, provider pauses, and upstream sync drift", async () => {
+    const repoRoot = await createPromotionArtifactRepoRoot();
+    const setupCheckPath = path.join(repoRoot, "scripts", "openclawcode-setup-check.sh");
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "openclawcode-discovery-state-"));
+    vi.stubEnv("OPENCLAW_STATE_DIR", stateDir);
+
+    runGitTestCommand(repoRoot, ["remote", "add", "origin", "git@github.com:openclaw/openclaw.git"]);
+    await attachUpstreamDriftFixture(repoRoot);
+
+    await openclawCodeBlueprintDecomposeCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    await writeFile(
+      setupCheckPath,
+      `#!/usr/bin/env bash
+set -euo pipefail
+cat <<'EOF'
+{
+  "ok": false,
+  "strict": false,
+  "repoRoot": ${JSON.stringify(repoRoot)},
+  "operatorRoot": "/tmp/openclaw-operator",
+  "readiness": {
+    "basic": true,
+    "strict": false,
+    "lowRiskProofReady": false,
+    "fallbackProofReady": false,
+    "promotionReady": false,
+    "gatewayReachable": true,
+    "routeProbeReady": false,
+    "routeProbeSkipped": false,
+    "builtStartupProofRequested": true,
+    "builtStartupProofReady": false,
+    "nextAction": "fix-setup-check"
+  },
+  "summary": {
+    "pass": 9,
+    "warn": 1,
+    "fail": 3
+  }
+}
+EOF
+`,
+      "utf8",
+    );
+
+    const statePath = path.join(stateDir, "plugins", "openclawcode", "chatops-state.json");
+    await mkdir(path.dirname(statePath), { recursive: true });
+    await writeFile(
+      statePath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          pendingApprovals: [],
+          pendingIntakeDrafts: [],
+          setupSessions: [],
+          manualTakeovers: [],
+          deferredRuntimeReroutes: [],
+          queue: [],
+          statusByIssue: {},
+          statusSnapshotsByIssue: {},
+          repoBindingsByRepo: {
+            "openclaw/openclaw": {
+              repoKey: "openclaw/openclaw",
+              notifyChannel: "feishu",
+              notifyTarget: "occode-test",
+              updatedAt: "2026-03-20T00:00:00.000Z",
+            },
+          },
+          githubDeliveriesById: {},
+          recentProviderFailures: [],
+          providerPause: {
+            until: "2026-03-20T00:15:00.000Z",
+            triggeredAt: "2026-03-20T00:05:00.000Z",
+            lastFailureAt: "2026-03-20T00:04:00.000Z",
+            failureCount: 2,
+            reason: "HTTP 400: Internal server error",
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    runtime.log.mockClear();
+    await openclawCodeDiscoverWorkItemsCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.evidenceCount).toBe(3);
+    expect(payload.highestPriority).toBe("high");
+    expect(payload.evidence.map((entry: { source: string }) => entry.source)).toEqual(
+      expect.arrayContaining([
+        "setup-check-regression",
+        "provider-pause-active",
+        "upstream-sync-drift",
+      ]),
+    );
+    expect(payload.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "setup-check-regression",
+          discoveredWorkItem: expect.objectContaining({
+            class: "validation",
+            executionMode: "bugfix",
+          }),
+        }),
+        expect.objectContaining({
+          source: "provider-pause-active",
+          discoveredWorkItem: expect.objectContaining({
+            class: "incident",
+            executionMode: "bugfix",
+          }),
+        }),
+        expect.objectContaining({
+          source: "upstream-sync-drift",
+          discoveredWorkItem: expect.objectContaining({
+            class: "sync",
+            executionMode: "feature",
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("persists a provider-neutral role routing plan with mixed Codex and Claude assignments", async () => {
     const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-role-routing-"));
     const previousDefault = process.env.OPENCLAWCODE_ROLE_DEFAULT;
@@ -6985,6 +7121,27 @@ EOF
     "utf8",
   );
   return repoRoot;
+}
+
+async function attachUpstreamDriftFixture(repoRoot: string): Promise<void> {
+  const upstreamBare = path.join(
+    await mkdtemp(path.join(os.tmpdir(), "openclawcode-upstream-bare-")),
+    "upstream.git",
+  );
+  const upstreamWork = await mkdtemp(path.join(os.tmpdir(), "openclawcode-upstream-work-"));
+
+  runGitTestCommand(repoRoot, ["clone", "--bare", repoRoot, upstreamBare]);
+  runGitTestCommand(path.dirname(upstreamWork), ["clone", upstreamBare, upstreamWork]);
+  runGitTestCommand(upstreamWork, ["config", "user.email", "test@example.com"]);
+  runGitTestCommand(upstreamWork, ["config", "user.name", "OpenClawCode Test"]);
+  runGitTestCommand(upstreamWork, ["checkout", "main"]);
+  await writeFile(path.join(upstreamWork, "UPSTREAM.md"), "upstream drift\n", "utf8");
+  runGitTestCommand(upstreamWork, ["add", "UPSTREAM.md"]);
+  runGitTestCommand(upstreamWork, ["commit", "-m", "upstream drift"]);
+  runGitTestCommand(upstreamWork, ["push", "origin", "main"]);
+
+  runGitTestCommand(repoRoot, ["remote", "add", "upstream", upstreamBare]);
+  runGitTestCommand(repoRoot, ["fetch", "upstream", "main"]);
 }
 
 function createRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {

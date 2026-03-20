@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { readProjectBlueprintDocument } from "./blueprint.js";
-import { readProjectDiscoveryInventory } from "./discovery.js";
+import { deriveProjectDiscoveryInventory, readProjectDiscoveryInventory } from "./discovery.js";
 import { deriveProjectRoleRoutingPlan, readProjectRoleRoutingPlan } from "./role-routing.js";
 import {
   readProjectWorkItemInventory,
@@ -272,7 +272,7 @@ export async function deriveProjectStageGateArtifact(
   const existing = await readProjectStageGateArtifact(repoRoot);
   const blueprint = await readProjectBlueprintDocument(repoRoot);
   const workItems = await readProjectWorkItemInventory(repoRoot);
-  const discovery = await readProjectDiscoveryInventory(repoRoot);
+  const discovery = await deriveProjectDiscoveryInventory(repoRoot);
   const storedRoleRouting = await readProjectRoleRoutingPlan(repoRoot);
   const roleRouting = storedRoleRouting.exists
     ? storedRoleRouting

@@ -1,10 +1,15 @@
+import { spawnSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveConfigDir } from "../utils.js";
 import {
   inspectProjectBlueprintClarifications,
   readProjectBlueprintDocument,
   type ProjectBlueprintRoleAssignments,
 } from "./blueprint.js";
+import { resolveGitHubRepoFromGit } from "./github/index.js";
+import { readOpenClawCodeOperatorStatusSnapshot } from "./operator-status.js";
+import { readProjectPromotionGateArtifact } from "./promotion-artifacts.js";
 import { readProjectWorkItemInventory, type ProjectWorkItem } from "./work-items.js";
 
 export const PROJECT_DISCOVERY_SCHEMA_VERSION = 1;
@@ -13,11 +18,18 @@ export const PROJECT_DISCOVERY_PRIORITIES = ["low", "medium", "high"] as const;
 
 export type ProjectDiscoverySeverity = (typeof PROJECT_DISCOVERY_SEVERITIES)[number];
 export type ProjectDiscoveryPriority = (typeof PROJECT_DISCOVERY_PRIORITIES)[number];
+export type ProjectDiscoverySource =
+  | "blueprint-open-questions"
+  | "work-item-artifact-missing"
+  | "work-item-artifact-stale"
+  | "setup-check-regression"
+  | "provider-pause-active"
+  | "upstream-sync-drift";
 
 export interface ProjectDiscoveryEvidence {
   id: string;
   dedupeKey: string;
-  source: "blueprint-open-questions" | "work-item-artifact-missing" | "work-item-artifact-stale";
+  source: ProjectDiscoverySource;
   severity: ProjectDiscoverySeverity;
   priority: ProjectDiscoveryPriority;
   summary: string;
@@ -105,14 +117,8 @@ function makeDiscoveredWorkItem(params: {
   priority: ProjectDiscoveryPriority;
   dedupeKey: string;
 }): ProjectWorkItem {
-  const executionMode =
-    params.source === "blueprint-open-questions"
-      ? "research"
-      : "feature";
-  const workItemClass =
-    params.source === "work-item-artifact-missing" || params.source === "work-item-artifact-stale"
-      ? "sync"
-      : "feature";
+  const executionMode = resolveDiscoveryExecutionMode(params.source);
+  const workItemClass = resolveDiscoveryWorkItemClass(params.source);
   return {
     id: params.id,
     kind: "discovered",
@@ -147,6 +153,210 @@ function makeDiscoveredWorkItem(params: {
       history: [],
     },
   };
+}
+
+function resolveDiscoveryExecutionMode(
+  source: ProjectDiscoverySource,
+): ProjectWorkItem["executionMode"] {
+  switch (source) {
+    case "blueprint-open-questions":
+      return "research";
+    case "setup-check-regression":
+    case "provider-pause-active":
+      return "bugfix";
+    default:
+      return "feature";
+  }
+}
+
+function resolveDiscoveryWorkItemClass(
+  source: ProjectDiscoverySource,
+): ProjectWorkItem["class"] {
+  switch (source) {
+    case "work-item-artifact-missing":
+    case "work-item-artifact-stale":
+    case "upstream-sync-drift":
+      return "sync";
+    case "setup-check-regression":
+      return "validation";
+    case "provider-pause-active":
+      return "incident";
+    default:
+      return "feature";
+  }
+}
+
+function runGitCommand(repoRoot: string, args: string[]): string | null {
+  const result = spawnSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    return null;
+  }
+  const stdout = result.stdout.trim();
+  return stdout.length > 0 ? stdout : null;
+}
+
+function resolveUpstreamBranchRef(repoRoot: string): { ref: string; label: string } | null {
+  const remoteHead = runGitCommand(repoRoot, ["symbolic-ref", "--short", "refs/remotes/upstream/HEAD"]);
+  if (remoteHead?.startsWith("upstream/")) {
+    return {
+      ref: `refs/remotes/${remoteHead}`,
+      label: remoteHead,
+    };
+  }
+  for (const candidate of ["main", "master"]) {
+    const ref = `refs/remotes/upstream/${candidate}`;
+    if (runGitCommand(repoRoot, ["rev-parse", "--verify", ref])) {
+      return {
+        ref,
+        label: `upstream/${candidate}`,
+      };
+    }
+  }
+  return null;
+}
+
+function readUpstreamSyncStatus(repoRoot: string): {
+  currentBranch: string;
+  upstreamLabel: string;
+  ahead: number;
+  behind: number;
+} | null {
+  const currentBranch = runGitCommand(repoRoot, ["branch", "--show-current"]);
+  const upstream = resolveUpstreamBranchRef(repoRoot);
+  if (!currentBranch || !upstream) {
+    return null;
+  }
+  const counts = runGitCommand(repoRoot, ["rev-list", "--left-right", "--count", `HEAD...${upstream.ref}`]);
+  if (!counts) {
+    return null;
+  }
+  const match = /^(\d+)\s+(\d+)$/.exec(counts);
+  if (!match) {
+    return null;
+  }
+  return {
+    currentBranch,
+    upstreamLabel: upstream.label,
+    ahead: Number.parseInt(match[1] ?? "0", 10),
+    behind: Number.parseInt(match[2] ?? "0", 10),
+  };
+}
+
+async function collectRuntimeDiscoveryEvidence(params: {
+  repoRoot: string;
+  blueprintPath: string;
+  blueprintRevisionId: string | null;
+  providerRoleAssignments: ProjectBlueprintRoleAssignments;
+}): Promise<ProjectDiscoveryEvidence[]> {
+  const evidence: ProjectDiscoveryEvidence[] = [];
+  const promotion = await readProjectPromotionGateArtifact(params.repoRoot);
+  if (
+    promotion.setupCheckAvailable &&
+    (promotion.setupCheckOk === false || promotion.promotionReady === false)
+  ) {
+    const dedupeKey = `setup-check-regression:${promotion.branchName ?? "unknown"}:${promotion.nextAction ?? "unknown"}:${promotion.summaryFail ?? 0}`;
+    evidence.push({
+      id: "discovery-setup-check-regression",
+      dedupeKey,
+      source: "setup-check-regression",
+      severity: "high",
+      priority: "high",
+      summary: "Fix the operator setup-check regression before continued blueprint execution.",
+      detail:
+        `The repo-local promotion gate reports setup-check regression state (ok=${promotion.setupCheckOk ?? "unknown"}, promotionReady=${promotion.promotionReady ?? "unknown"}, nextAction=${promotion.nextAction ?? "unknown"}).`,
+      discoveredWorkItem: makeDiscoveredWorkItem({
+        id: "discovered-fix-setup-check-regression",
+        title: "Fix the operator setup-check regression before continued blueprint execution.",
+        summary:
+          "Inspect the failing setup-check, restore strict readiness, and bring promotion gating back to a passing state.",
+        source: "setup-check-regression",
+        blueprintPath: params.blueprintPath,
+        blueprintRevisionId: params.blueprintRevisionId,
+        providerRoleAssignments: params.providerRoleAssignments,
+        detail:
+          `The repo-local promotion gate reports setup-check regression state (ok=${promotion.setupCheckOk ?? "unknown"}, promotionReady=${promotion.promotionReady ?? "unknown"}, nextAction=${promotion.nextAction ?? "unknown"}).`,
+        severity: "high",
+        priority: "high",
+        dedupeKey,
+      }),
+    });
+  }
+
+  const stateDir = resolveConfigDir();
+  const operator = await readOpenClawCodeOperatorStatusSnapshot(stateDir).catch(() => null);
+  const repoRef = await resolveGitHubRepoFromGit(params.repoRoot).catch(() => null);
+  const repoKey = repoRef ? `${repoRef.owner}/${repoRef.repo}` : null;
+  if (operator?.exists && operator.providerPauseActive && repoKey) {
+    const trackedRepo = operator.repos.find((entry) => entry.repoKey === repoKey);
+    if (trackedRepo) {
+      const dedupeKey = `provider-pause-active:${repoKey}:${operator.providerPause?.until ?? "unknown"}:${operator.providerPause?.reason ?? "unknown"}`;
+      evidence.push({
+        id: "discovery-provider-pause-active",
+        dedupeKey,
+        source: "provider-pause-active",
+        severity: "high",
+        priority: "high",
+        summary: "Investigate the active provider pause before autonomous execution resumes.",
+        detail:
+          `The operator state for ${repoKey} currently has an active provider pause (reason=${operator.providerPause?.reason ?? "unknown"}, until=${operator.providerPause?.until ?? "unknown"}).`,
+        discoveredWorkItem: makeDiscoveredWorkItem({
+          id: "discovered-investigate-provider-pause",
+          title: "Investigate the active provider pause before autonomous execution resumes.",
+          summary:
+            "Review the paused provider state, confirm the triggering failure, and decide whether to clear, reroute, or keep the pause in place.",
+          source: "provider-pause-active",
+          blueprintPath: params.blueprintPath,
+          blueprintRevisionId: params.blueprintRevisionId,
+          providerRoleAssignments: params.providerRoleAssignments,
+          detail:
+            `The operator state for ${repoKey} currently has an active provider pause (reason=${operator.providerPause?.reason ?? "unknown"}, until=${operator.providerPause?.until ?? "unknown"}).`,
+          severity: "high",
+          priority: "high",
+          dedupeKey,
+        }),
+      });
+    }
+  }
+
+  const syncStatus = readUpstreamSyncStatus(params.repoRoot);
+  if (
+    syncStatus &&
+    ((syncStatus.currentBranch.startsWith("sync/") && (syncStatus.ahead > 0 || syncStatus.behind > 0)) ||
+      ((syncStatus.currentBranch === "main" || syncStatus.currentBranch === "master") &&
+        syncStatus.behind > 0))
+  ) {
+    const dedupeKey = `upstream-sync-drift:${syncStatus.currentBranch}:${syncStatus.upstreamLabel}:${syncStatus.ahead}:${syncStatus.behind}`;
+    evidence.push({
+      id: "discovery-upstream-sync-drift",
+      dedupeKey,
+      source: "upstream-sync-drift",
+      severity: syncStatus.behind > 0 ? "high" : "medium",
+      priority: "high",
+      summary: "Refresh the current branch against upstream before continuing blueprint execution.",
+      detail:
+        `The current branch ${syncStatus.currentBranch} differs from ${syncStatus.upstreamLabel} (ahead=${syncStatus.ahead}, behind=${syncStatus.behind}).`,
+      discoveredWorkItem: makeDiscoveredWorkItem({
+        id: "discovered-refresh-upstream-sync-drift",
+        title: "Refresh the current branch against upstream before continuing blueprint execution.",
+        summary:
+          `Reconcile ${syncStatus.currentBranch} with ${syncStatus.upstreamLabel} so blueprint-backed work resumes from a current upstream baseline.`,
+        source: "upstream-sync-drift",
+        blueprintPath: params.blueprintPath,
+        blueprintRevisionId: params.blueprintRevisionId,
+        providerRoleAssignments: params.providerRoleAssignments,
+        detail:
+          `The current branch ${syncStatus.currentBranch} differs from ${syncStatus.upstreamLabel} (ahead=${syncStatus.ahead}, behind=${syncStatus.behind}).`,
+        severity: syncStatus.behind > 0 ? "high" : "medium",
+        priority: "high",
+        dedupeKey,
+      }),
+    });
+  }
+
+  return evidence;
 }
 
 function emptyProjectDiscoveryInventory(params: {
@@ -294,6 +504,15 @@ export async function deriveProjectDiscoveryInventory(
       }),
     });
   }
+
+  evidence.push(
+    ...(await collectRuntimeDiscoveryEvidence({
+      repoRoot,
+      blueprintPath: blueprint.blueprintPath,
+      blueprintRevisionId: blueprint.revisionId,
+      providerRoleAssignments: blueprint.providerRoleAssignments,
+    })),
+  );
 
   return {
     repoRoot,
