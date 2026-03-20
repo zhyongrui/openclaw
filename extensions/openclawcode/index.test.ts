@@ -407,6 +407,7 @@ function createWorkflowRun(params: {
   updatedAt?: string;
   failureDiagnostics?: WorkflowRun["failureDiagnostics"];
   suitability?: WorkflowRun["suitability"];
+  rerunContext?: WorkflowRun["rerunContext"];
 }): WorkflowRun {
   const updatedAt = params.updatedAt ?? "2026-03-12T12:00:00.000Z";
   return {
@@ -452,6 +453,7 @@ function createWorkflowRun(params: {
       missingCoverage: [],
       followUps: [],
     },
+    rerunContext: params.rerunContext,
     suitability: params.suitability,
     failureDiagnostics: params.failureDiagnostics,
   };
@@ -5613,6 +5615,83 @@ describe("openclawcode extension", () => {
         manualTakeoverWorktreePath: "/tmp/openclawcode-242",
         manualResumeNote: "rerun after human edits",
       });
+
+      const inbox = await fixture.commands.get("occode-inbox")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-inbox",
+        args: "",
+        to: "user:takeover-chat",
+        config: {},
+      });
+
+      expect(inbox?.text).toContain(
+        "  manual-resume: actor=user:takeover-chat | requestedAt=2026-03-16T12:00:00.000Z",
+      );
+      expect(inbox?.text).toContain("  manual-worktree: /tmp/openclawcode-242");
+      expect(inbox?.text).toContain("  manual-note: rerun after human edits");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows rerun review and manual resume lineage through /occode-status", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 243,
+          stage: "ready-for-human-review",
+          rerunContext: {
+            reason: "Address GitHub review feedback",
+            requestedAt: "2026-03-16T12:05:00.000Z",
+            priorRunId: "run-242",
+            priorStage: "changes-requested",
+            reviewDecision: "changes-requested",
+            reviewSubmittedAt: "2026-03-16T12:00:00.000Z",
+            reviewSummary: "Please add a regression test for the rerun path.",
+            reviewUrl: "https://github.com/zhyongrui/openclawcode/pull/243#pullrequestreview-2",
+            manualTakeoverRequestedAt: "2026-03-16T11:50:00.000Z",
+            manualTakeoverActor: "user:takeover-chat",
+            manualTakeoverWorktreePath: "/tmp/openclawcode-243",
+            manualResumeNote: "rerun after human edits",
+          },
+        }),
+        "openclawcode status for zhyongrui/openclawcode#243\nStage: Ready For Human Review",
+        {
+          notifyChannel: "telegram",
+          notifyTarget: "user:takeover-chat",
+        },
+      );
+
+      const status = await fixture.commands.get("occode-status")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-status #243",
+        args: "#243",
+        to: "user:takeover-chat",
+        config: {},
+      });
+
+      expect(status?.text).toContain(
+        "Rerun: run-242 | from Changes Requested | 2026-03-16T12:05:00.000Z",
+      );
+      expect(status?.text).toContain("Rerun reason: Address GitHub review feedback");
+      expect(status?.text).toContain(
+        "Rerun review: Changes Requested | 2026-03-16T12:00:00.000Z",
+      );
+      expect(status?.text).toContain(
+        "Rerun review summary: Please add a regression test for the rerun path.",
+      );
+      expect(status?.text).toContain(
+        "Rerun review URL: https://github.com/zhyongrui/openclawcode/pull/243#pullrequestreview-2",
+      );
+      expect(status?.text).toContain(
+        "Manual resume: actor=user:takeover-chat | requestedAt=2026-03-16T11:50:00.000Z",
+      );
+      expect(status?.text).toContain("Manual worktree: /tmp/openclawcode-243");
+      expect(status?.text).toContain("Manual note: rerun after human edits");
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });

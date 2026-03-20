@@ -1495,26 +1495,56 @@ function resolveFinalDisposition(params: {
   }
 }
 
+function formatReviewDecisionLabel(decision: "approved" | "changes-requested"): string {
+  return decision === "approved" ? "Approved" : "Changes Requested";
+}
+
 function buildRerunLedgerLines(params: {
   priorRunId?: string;
   priorStage?: string;
   requestedAt?: string;
   reason?: string;
+  reviewDecision?: "approved" | "changes-requested";
+  reviewSubmittedAt?: string;
+  reviewSummary?: string;
+  reviewUrl?: string;
   requestedCoderAgentId?: string;
   requestedVerifierAgentId?: string;
+  manualTakeoverRequestedAt?: string;
+  manualTakeoverActor?: string;
+  manualTakeoverWorktreePath?: string;
+  manualResumeNote?: string;
+  topLevel?: boolean;
 }): string[] {
   if (
     !params.priorRunId &&
     !params.priorStage &&
     !params.requestedAt &&
     !params.reason &&
+    !params.reviewDecision &&
+    !params.reviewSubmittedAt &&
+    !params.reviewSummary &&
+    !params.reviewUrl &&
     !params.requestedCoderAgentId &&
-    !params.requestedVerifierAgentId
+    !params.requestedVerifierAgentId &&
+    !params.manualTakeoverRequestedAt &&
+    !params.manualTakeoverActor &&
+    !params.manualTakeoverWorktreePath &&
+    !params.manualResumeNote
   ) {
     return [];
   }
 
-  const line = `  rerun: ${[
+  const rerunLabel = params.topLevel ? "Rerun" : "  rerun";
+  const reasonLabel = params.topLevel ? "Rerun reason" : "  reason";
+  const rerouteLabel = params.topLevel ? "Reroute" : "  reroute";
+  const reviewLabel = params.topLevel ? "Rerun review" : "  review";
+  const reviewSummaryLabel = params.topLevel ? "Rerun review summary" : "  review-summary";
+  const reviewUrlLabel = params.topLevel ? "Rerun review URL" : "  review-url";
+  const manualResumeLabel = params.topLevel ? "Manual resume" : "  manual-resume";
+  const manualWorktreeLabel = params.topLevel ? "Manual worktree" : "  manual-worktree";
+  const manualNoteLabel = params.topLevel ? "Manual note" : "  manual-note";
+  const line = `${rerunLabel}: ${[
     params.priorRunId ?? "prior run unknown",
     params.priorStage ? `from ${formatStageLabel(params.priorStage)}` : "from unknown stage",
     params.requestedAt,
@@ -1522,16 +1552,38 @@ function buildRerunLedgerLines(params: {
     .filter(Boolean)
     .join(" | ")}`;
   const reason = trimToSingleLine(params.reason);
+  const reviewLine = [
+    params.reviewDecision ? formatReviewDecisionLabel(params.reviewDecision) : undefined,
+    params.reviewSubmittedAt,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  const reviewSummary = trimToSingleLine(params.reviewSummary);
+  const reviewUrl = trimToSingleLine(params.reviewUrl);
   const runtimeReroute = [
     params.requestedCoderAgentId ? `coder=${params.requestedCoderAgentId}` : undefined,
     params.requestedVerifierAgentId ? `verifier=${params.requestedVerifierAgentId}` : undefined,
   ]
     .filter(Boolean)
     .join(", ");
+  const manualResumeLine = [
+    params.manualTakeoverActor ? `actor=${params.manualTakeoverActor}` : undefined,
+    params.manualTakeoverRequestedAt ? `requestedAt=${params.manualTakeoverRequestedAt}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  const manualWorktree = trimToSingleLine(params.manualTakeoverWorktreePath);
+  const manualNote = trimToSingleLine(params.manualResumeNote);
   return [
     line,
-    ...(reason ? [`  reason: ${reason}`] : []),
-    ...(runtimeReroute ? [`  reroute: ${runtimeReroute}`] : []),
+    ...(reason ? [`${reasonLabel}: ${reason}`] : []),
+    ...(reviewLine ? [`${reviewLabel}: ${reviewLine}`] : []),
+    ...(reviewSummary ? [`${reviewSummaryLabel}: ${reviewSummary}`] : []),
+    ...(reviewUrl ? [`${reviewUrlLabel}: ${reviewUrl}`] : []),
+    ...(runtimeReroute ? [`${rerouteLabel}: ${runtimeReroute}`] : []),
+    ...(manualResumeLine ? [`${manualResumeLabel}: ${manualResumeLine}`] : []),
+    ...(manualWorktree ? [`${manualWorktreeLabel}: ${manualWorktree}`] : []),
+    ...(manualNote ? [`${manualNoteLabel}: ${manualNote}`] : []),
   ];
 }
 
@@ -3599,8 +3651,16 @@ function buildInboxMessage(params: {
           priorStage: entry.request.rerunContext?.priorStage,
           requestedAt: entry.request.rerunContext?.requestedAt,
           reason: entry.request.rerunContext?.reason,
+          reviewDecision: entry.request.rerunContext?.reviewDecision,
+          reviewSubmittedAt: entry.request.rerunContext?.reviewSubmittedAt,
+          reviewSummary: entry.request.rerunContext?.reviewSummary,
+          reviewUrl: entry.request.rerunContext?.reviewUrl,
           requestedCoderAgentId: entry.request.rerunContext?.requestedCoderAgentId,
           requestedVerifierAgentId: entry.request.rerunContext?.requestedVerifierAgentId,
+          manualTakeoverRequestedAt: entry.request.rerunContext?.manualTakeoverRequestedAt,
+          manualTakeoverActor: entry.request.rerunContext?.manualTakeoverActor,
+          manualTakeoverWorktreePath: entry.request.rerunContext?.manualTakeoverWorktreePath,
+          manualResumeNote: entry.request.rerunContext?.manualResumeNote,
         }),
       );
     }
@@ -3620,8 +3680,16 @@ function buildInboxMessage(params: {
           priorStage: entry.request.rerunContext?.priorStage,
           requestedAt: entry.request.rerunContext?.requestedAt,
           reason: entry.request.rerunContext?.reason,
+          reviewDecision: entry.request.rerunContext?.reviewDecision,
+          reviewSubmittedAt: entry.request.rerunContext?.reviewSubmittedAt,
+          reviewSummary: entry.request.rerunContext?.reviewSummary,
+          reviewUrl: entry.request.rerunContext?.reviewUrl,
           requestedCoderAgentId: entry.request.rerunContext?.requestedCoderAgentId,
           requestedVerifierAgentId: entry.request.rerunContext?.requestedVerifierAgentId,
+          manualTakeoverRequestedAt: entry.request.rerunContext?.manualTakeoverRequestedAt,
+          manualTakeoverActor: entry.request.rerunContext?.manualTakeoverActor,
+          manualTakeoverWorktreePath: entry.request.rerunContext?.manualTakeoverWorktreePath,
+          manualResumeNote: entry.request.rerunContext?.manualResumeNote,
         }),
       );
     }
@@ -3664,8 +3732,16 @@ function buildInboxMessage(params: {
           priorStage: entry.rerunPriorStage,
           requestedAt: entry.rerunRequestedAt,
           reason: entry.rerunReason,
+          reviewDecision: entry.latestReviewDecision,
+          reviewSubmittedAt: entry.latestReviewSubmittedAt,
+          reviewSummary: entry.latestReviewSummary,
+          reviewUrl: entry.latestReviewUrl,
           requestedCoderAgentId: entry.rerunRequestedCoderAgentId,
           requestedVerifierAgentId: entry.rerunRequestedVerifierAgentId,
+          manualTakeoverRequestedAt: entry.rerunManualTakeoverRequestedAt,
+          manualTakeoverActor: entry.rerunManualTakeoverActor,
+          manualTakeoverWorktreePath: entry.rerunManualTakeoverWorktreePath,
+          manualResumeNote: entry.rerunManualResumeNote,
         }),
       );
       lines.push(...buildProviderFailureContextLines({ snapshot: entry }));
@@ -6402,6 +6478,25 @@ export default {
             : resolvedStatusText;
         const resolvedWithOperatorContext = [
           resolvedWithProvider,
+          ...(currentSnapshot
+            ? buildRerunLedgerLines({
+                priorRunId: currentSnapshot.rerunPriorRunId,
+                priorStage: currentSnapshot.rerunPriorStage,
+                requestedAt: currentSnapshot.rerunRequestedAt,
+                reason: currentSnapshot.rerunReason,
+                reviewDecision: currentSnapshot.latestReviewDecision,
+                reviewSubmittedAt: currentSnapshot.latestReviewSubmittedAt,
+                reviewSummary: currentSnapshot.latestReviewSummary,
+                reviewUrl: currentSnapshot.latestReviewUrl,
+                requestedCoderAgentId: currentSnapshot.rerunRequestedCoderAgentId,
+                requestedVerifierAgentId: currentSnapshot.rerunRequestedVerifierAgentId,
+                manualTakeoverRequestedAt: currentSnapshot.rerunManualTakeoverRequestedAt,
+                manualTakeoverActor: currentSnapshot.rerunManualTakeoverActor,
+                manualTakeoverWorktreePath: currentSnapshot.rerunManualTakeoverWorktreePath,
+                manualResumeNote: currentSnapshot.rerunManualResumeNote,
+                topLevel: true,
+              })
+            : []),
           ...buildManualTakeoverLines(manualTakeover),
           ...buildDeferredRuntimeRerouteLines({
             record: deferredRuntimeReroute,

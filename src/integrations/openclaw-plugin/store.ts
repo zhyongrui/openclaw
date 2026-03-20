@@ -176,6 +176,10 @@ export interface OpenClawCodeIssueStatusSnapshot {
   rerunPriorStage?: WorkflowStage;
   rerunRequestedCoderAgentId?: string;
   rerunRequestedVerifierAgentId?: string;
+  rerunManualTakeoverRequestedAt?: string;
+  rerunManualTakeoverActor?: string;
+  rerunManualTakeoverWorktreePath?: string;
+  rerunManualResumeNote?: string;
   suitabilityDecision?: SuitabilityDecision;
   suitabilitySummary?: string;
   suitabilityAllowlisted?: boolean;
@@ -780,6 +784,22 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
       typeof candidate.rerunRequestedVerifierAgentId === "string"
         ? candidate.rerunRequestedVerifierAgentId
         : undefined,
+    rerunManualTakeoverRequestedAt:
+      typeof candidate.rerunManualTakeoverRequestedAt === "string"
+        ? candidate.rerunManualTakeoverRequestedAt
+        : undefined,
+    rerunManualTakeoverActor:
+      typeof candidate.rerunManualTakeoverActor === "string"
+        ? candidate.rerunManualTakeoverActor
+        : undefined,
+    rerunManualTakeoverWorktreePath:
+      typeof candidate.rerunManualTakeoverWorktreePath === "string"
+        ? candidate.rerunManualTakeoverWorktreePath
+        : undefined,
+    rerunManualResumeNote:
+      typeof candidate.rerunManualResumeNote === "string"
+        ? candidate.rerunManualResumeNote
+        : undefined,
     suitabilityDecision:
       candidate.suitabilityDecision === "auto-run" ||
       candidate.suitabilityDecision === "needs-human-review" ||
@@ -1045,6 +1065,10 @@ function buildStatusSnapshot(params: {
     rerunPriorStage: params.run.rerunContext?.priorStage,
     rerunRequestedCoderAgentId: params.run.rerunContext?.requestedCoderAgentId,
     rerunRequestedVerifierAgentId: params.run.rerunContext?.requestedVerifierAgentId,
+    rerunManualTakeoverRequestedAt: params.run.rerunContext?.manualTakeoverRequestedAt,
+    rerunManualTakeoverActor: params.run.rerunContext?.manualTakeoverActor,
+    rerunManualTakeoverWorktreePath: params.run.rerunContext?.manualTakeoverWorktreePath,
+    rerunManualResumeNote: params.run.rerunContext?.manualResumeNote,
     suitabilityDecision: params.run.suitability?.decision,
     suitabilitySummary: params.run.suitability?.summary,
     suitabilityAllowlisted: params.run.suitability?.allowlisted,
