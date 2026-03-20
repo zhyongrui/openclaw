@@ -2035,6 +2035,49 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("shows the current pending chat intake draft through /occode-intake-preview", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      await fixture.commands.get("occode-intake")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: [
+          "/occode-intake",
+          "Expose issueCount and issueRepo in openclaw code run --json output",
+        ].join("\n"),
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      const preview = await fixture.commands.get("occode-intake-preview")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-intake-preview",
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      expect(preview?.text).toContain(
+        "openclawcode is holding a pending chat intake draft for zhyongrui/openclawcode.",
+      );
+      expect(preview?.text).toContain(
+        "Title: Expose issueCount and issueRepo in openclaw code run --json output",
+      );
+      expect(preview?.text).toContain("Body preview:");
+      expect(preview?.text).toContain("Scoped drafts: 2");
+      expect(preview?.text).toContain("Use /occode-intake-preview zhyongrui/openclawcode");
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("offers multiple scoped drafts for ambiguous one-line intake requests", async () => {
     const fixture = await registerPluginFixture();
     try {

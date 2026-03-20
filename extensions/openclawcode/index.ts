@@ -2502,9 +2502,11 @@ function buildPendingIntakeDraftMessage(params: {
     }>;
   };
   clarification: ChatIntakeClarificationReport;
+  introLine?: string;
 }): string {
   return [
-    `openclawcode drafted a chat intake issue for ${formatRepoKey(params.repo)} but is waiting for confirmation.`,
+    params.introLine ??
+      `openclawcode drafted a chat intake issue for ${formatRepoKey(params.repo)} but is waiting for confirmation.`,
     `Intake mode: ${params.clarification.kind}`,
     `Title: ${params.draft.title}`,
     `Body source: ${params.draft.bodySynthesized ? "generated from one-line intake" : "edited draft"}`,
@@ -2526,6 +2528,7 @@ function buildPendingIntakeDraftMessage(params: {
           `Use /occode-intake-choose ${formatRepoKey(params.repo)} <index> to replace the pending draft with one scoped variant.`,
         ]
       : []),
+    `Use /occode-intake-preview ${formatRepoKey(params.repo)} to review the pending draft again before creation.`,
     `Use /occode-intake-edit ${formatRepoKey(params.repo)} <title>\\n<body...> to refine the draft.`,
     `Use /occode-intake-confirm ${formatRepoKey(params.repo)} when the draft is ready to create on GitHub.`,
     `Use /occode-intake-reject ${formatRepoKey(params.repo)} [reason] to discard the pending draft.`,
@@ -5010,6 +5013,74 @@ export default {
               scopedDrafts: [],
             },
             clarification,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-intake-preview",
+      description: "Show the current pending chat-native intake draft before creating the GitHub issue.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const repo = parseChatopsRepoReference(ctx.args ?? "", {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!repo) {
+          return {
+            text:
+              "Usage: /occode-intake-preview owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-intake-preview",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+
+        const binding = await store.getRepoBinding(formatRepoKey(repo));
+        const destination = resolveInteractiveNotificationDestination({
+          ctx,
+          repoConfig,
+          binding,
+        });
+        const draftHandle = {
+          repoKey: formatRepoKey(repo),
+          notifyChannel: destination.channel,
+          notifyTarget: destination.target,
+        };
+        const draft = await store.getPendingIntakeDraft(draftHandle);
+        if (!draft) {
+          return {
+            text: [
+              `No pending intake draft found for ${formatRepoKey(repo)} in this chat.`,
+              `Use /occode-intake ${formatRepoKey(repo)} <request> to create one first.`,
+            ].join("\n"),
+          };
+        }
+
+        const clarification = analyzeChatIntakeDraft({
+          title: draft.title,
+          body: draft.body,
+          bodySynthesized: draft.bodySynthesized,
+        });
+        return {
+          text: buildPendingIntakeDraftMessage({
+            repo,
+            draft: {
+              title: draft.title,
+              body: draft.body,
+              bodySynthesized: draft.bodySynthesized,
+              scopedDrafts: draft.scopedDrafts,
+            },
+            clarification,
+            introLine: `openclawcode is holding a pending chat intake draft for ${formatRepoKey(repo)}.`,
           }),
         };
       },

@@ -66,6 +66,7 @@ clarification prompts shown in chat.
 When a one-line intake request is obviously mixed-scope, the current flow can
 also propose multiple scoped variants. In chat, the operator can:
 
+- reopen the current pending draft with `/occode-intake-preview owner/repo`
 - inspect the suggested variants in the pending draft message
 - pick one with `/occode-intake-choose owner/repo <index>`
 - keep refining with `/occode-intake-edit`
