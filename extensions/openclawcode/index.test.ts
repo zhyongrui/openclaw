@@ -4527,6 +4527,90 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("shows repo-level policy guidance through /occode-policy", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      const result = await fixture.commands.get("occode-policy")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-policy",
+        args: "",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "openclawcode policy for zhyongrui/openclawcode",
+          "Policy contract version: 1",
+          "Suitability allowlist labels: cli, json, command-layer, docs, operator-docs, validation",
+          "Suitability denylist labels: auth, authentication, billing, database, infra, migration, permissions, rbac, secret, secrets, security",
+          "Build guardrails: lines>=300 | files>=12 | fan-out files>=8 | dirs>=4",
+          "Provider auto-pause classes: provider-internal-error",
+          "Suitability override path: /occode-start-override zhyongrui/openclawcode#123",
+          "Merge override path: /occode-gate-decide zhyongrui/openclawcode merge-promotion approved [note]",
+          "Use /occode-status owner/repo#issue to inspect the latest tracked policy decision for a specific run.",
+        ].join("\n"),
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("shows issue-specific policy context through /occode-policy", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 6627,
+          stage: "ready-for-human-review",
+          suitability: {
+            decision: "auto-run",
+            summary: "Suitability override accepted for this run.",
+            reasons: ["Operator approved a narrow exception."],
+            classification: "mixed",
+            riskLevel: "medium",
+            evaluatedAt: "2026-03-17T10:00:00.000Z",
+            allowlisted: false,
+            denylisted: false,
+            originalDecision: "needs-human-review",
+            overrideApplied: true,
+            overrideActor: "user:operator",
+            overrideReason: "Approved for this one run.",
+          },
+        }),
+        "Verification approved the run for human review.",
+      );
+
+      const result = await fixture.commands.get("occode-policy")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-policy #6627",
+        args: "#6627",
+        config: {},
+      });
+
+      expect(result).toEqual({
+        text: [
+          "openclawcode policy for zhyongrui/openclawcode",
+          "Issue: zhyongrui/openclawcode#6627",
+          "Policy contract version: 1",
+          "Suitability allowlist labels: cli, json, command-layer, docs, operator-docs, validation",
+          "Suitability denylist labels: auth, authentication, billing, database, infra, migration, permissions, rbac, secret, secrets, security",
+          "Build guardrails: lines>=300 | files>=12 | fan-out files>=8 | dirs>=4",
+          "Provider auto-pause classes: provider-internal-error",
+          "Current suitability: auto-run | Suitability override accepted for this run.",
+          "Current suitability override: applied | Approved for this one run.",
+          "Current auto-merge: blocked | Not eligible for auto-merge: manual suitability overrides still require a human merge decision.",
+          "Suitability override path: /occode-start-override zhyongrui/openclawcode#6627",
+          "Merge override path: /occode-gate-decide zhyongrui/openclawcode merge-promotion approved [note]",
+          "Use /occode-status owner/repo#issue to inspect the latest tracked policy decision for a specific run.",
+        ].join("\n"),
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
   it("shows auto-merge policy explanation through /occode-status when auto-merge is disallowed", async () => {
     const fixture = await registerPluginFixture();
     try {

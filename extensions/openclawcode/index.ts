@@ -103,6 +103,7 @@ import {
   readProjectWorkItemInventory,
   writeProjectWorkItemInventory,
 } from "../../src/openclawcode/work-items.js";
+import { buildOpenClawCodePolicySnapshot } from "../../src/openclawcode/policy.js";
 
 const DEFAULT_POLL_INTERVAL_MS = 3_000;
 const DEFAULT_RUN_TIMEOUT_MS = 30 * 60_000;
@@ -3004,6 +3005,90 @@ function parseIssueCommandWithOptionalNote(params: {
     issue: command.issue,
     note: note.length > 0 ? note : null,
   };
+}
+
+function parsePolicyArgs(params: {
+  args: string;
+  defaults: { owner?: string; repo?: string };
+}):
+  | {
+      repo: { owner: string; repo: string };
+      issue?:
+        | {
+            owner: string;
+            repo: string;
+            number: number;
+          }
+        | undefined;
+    }
+  | undefined {
+  const trimmed = params.args.trim();
+  if (!trimmed) {
+    const repo = parseChatopsRepoReference("", params.defaults);
+    return repo ? { repo } : undefined;
+  }
+
+  const issueCommand = parseChatopsCommand(`/occode-status ${trimmed}`, params.defaults);
+  if (issueCommand) {
+    return {
+      repo: {
+        owner: issueCommand.issue.owner,
+        repo: issueCommand.issue.repo,
+      },
+      issue: issueCommand.issue,
+    };
+  }
+
+  const repo = parseChatopsRepoReference(trimmed, params.defaults);
+  return repo ? { repo } : undefined;
+}
+
+function buildPolicySnapshotMessage(params: {
+  repo: { owner: string; repo: string };
+  snapshot?: OpenClawCodeIssueStatusSnapshot;
+  issueKey?: string;
+}): string {
+  const policy = buildOpenClawCodePolicySnapshot();
+  const lines = [`openclawcode policy for ${formatRepoKey(params.repo)}`];
+  if (params.issueKey) {
+    lines.push(`Issue: ${params.issueKey}`);
+  }
+  lines.push(`Policy contract version: ${policy.contractVersion}`);
+  lines.push(`Suitability allowlist labels: ${policy.suitability.lowRiskLabels.join(", ")}`);
+  lines.push(`Suitability denylist labels: ${policy.suitability.highRiskLabels.join(", ")}`);
+  lines.push(
+    `Build guardrails: lines>=${policy.buildGuardrails.largeDiffLineThreshold} | files>=${policy.buildGuardrails.largeDiffFileThreshold} | fan-out files>=${policy.buildGuardrails.broadFanOutFileThreshold} | dirs>=${policy.buildGuardrails.broadFanOutDirectoryThreshold}`,
+  );
+  lines.push(
+    `Provider auto-pause classes: ${policy.providerFailureHandling.autoPauseClasses.join(", ")}`,
+  );
+  if (params.snapshot?.suitabilityDecision && params.snapshot.suitabilitySummary) {
+    lines.push(
+      `Current suitability: ${params.snapshot.suitabilityDecision} | ${trimToSingleLine(params.snapshot.suitabilitySummary)}`,
+    );
+  }
+  if (params.snapshot?.suitabilityOverrideApplied) {
+    lines.push(
+      `Current suitability override: applied${params.snapshot.suitabilityOverrideReason ? ` | ${trimToSingleLine(params.snapshot.suitabilityOverrideReason)}` : ""}`,
+    );
+  }
+  if (params.snapshot?.autoMergePolicyEligible === false && params.snapshot.autoMergePolicyReason) {
+    lines.push(
+      `Current auto-merge: blocked | ${trimToSingleLine(params.snapshot.autoMergePolicyReason)}`,
+    );
+  }
+  lines.push(
+    params.issueKey
+      ? `Suitability override path: /occode-start-override ${params.issueKey}`
+      : `Suitability override path: /occode-start-override ${formatRepoKey(params.repo)}#123`,
+  );
+  lines.push(
+    `Merge override path: /occode-gate-decide ${formatRepoKey(params.repo)} merge-promotion approved [note]`,
+  );
+  lines.push(
+    "Use /occode-status owner/repo#issue to inspect the latest tracked policy decision for a specific run.",
+  );
+  return lines.join("\n");
 }
 
 function buildBlueprintSummaryMessage(params: {
@@ -6659,6 +6744,49 @@ export default {
           text: await continueChatSetupSession({
             store,
             session: existing,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-policy",
+      description: "Show openclawcode safety and override policy for a repo or tracked issue.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const parsed = parsePolicyArgs({
+          args: ctx.args ?? "",
+          defaults: {
+            owner: defaultRepo?.owner,
+            repo: defaultRepo?.repo,
+          },
+        });
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-policy owner/repo\n" +
+              "   or: /occode-policy owner/repo#123\n" +
+              "Or, when exactly one repo is configured: /occode-policy\n" +
+              "   or: /occode-policy #123",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.repo.owner}/${parsed.repo.repo}.`,
+          };
+        }
+
+        const issueKey = parsed.issue ? formatIssueKey(parsed.issue) : undefined;
+        const snapshot = issueKey ? await store.getStatusSnapshot(issueKey) : undefined;
+        return {
+          text: buildPolicySnapshotMessage({
+            repo: parsed.repo,
+            snapshot,
+            issueKey,
           }),
         };
       },
