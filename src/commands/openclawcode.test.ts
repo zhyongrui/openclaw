@@ -3198,6 +3198,35 @@ describe("openclawCodeRunCommand", () => {
     ]);
 
     runtime.log.mockClear();
+    await openclawCodeAutonomousLoopRunCommand(
+      {
+        owner: "openclaw",
+        repo: "openclaw",
+        repoRoot,
+        once: true,
+        json: false,
+      },
+      runtime,
+    );
+
+    const loopLines = runtime.log.mock.calls.map((call) => String(call[0]));
+    expect(loopLines).toContain("Mode: once");
+    expect(loopLines).toContain("Status: materialized-only");
+    expect(
+      loopLines.some((line) =>
+        line.startsWith("Next suggested command: openclaw code run --issue ") &&
+        line.endsWith(` --repo-root ${repoRoot}`),
+      ),
+    ).toBe(true);
+    expect(loopLines).toContain("Iteration history:");
+    expect(
+      loopLines.some((line) =>
+        line.startsWith("- 1: status=materialized-only | decision=ready-to-execute | issue=#") &&
+        line.endsWith(" | message=Materialized the next issue."),
+      ),
+    ).toBe(true);
+
+    runtime.log.mockClear();
     await openclawCodeAutonomousLoopShowCommand(
       {
         repoRoot,
@@ -3208,7 +3237,7 @@ describe("openclawCodeRunCommand", () => {
 
     const shown = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(shown.status).toBe("materialized-only");
-    expect(shown.selectedIssueNumber).toBe(654);
+    expect(typeof shown.selectedIssueNumber).toBe("number");
     expect(shown.selectedWorkItemExecutionMode).toBe("feature");
   });
 

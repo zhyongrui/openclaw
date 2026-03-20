@@ -2193,6 +2193,7 @@ function logProjectAutonomousLoopArtifact(params: {
         iteration.selectedIssueNumber != null ? `issue=#${iteration.selectedIssueNumber}` : undefined,
         iteration.queuedIssueKey ? `queued=${iteration.queuedIssueKey}` : undefined,
         iteration.stopReason ? `stop=${iteration.stopReason}` : undefined,
+        iteration.message ? `message=${iteration.message}` : undefined,
       ]
         .filter(Boolean)
         .join(" | ");
