@@ -31,7 +31,7 @@ export interface ProjectAutonomousLoopIteration {
 }
 
 export interface ProjectAutonomousLoopQueueIssueResult {
-  outcome: "queued" | "already-tracked";
+  outcome: "queued" | "gated" | "already-tracked";
   issueKey: string | null;
 }
 
@@ -294,6 +294,11 @@ async function runProjectAutonomousLoopIteration(params: {
         status = "materialized-and-queued";
         message = `Queued ${queued.issueKey} after issue materialization.`;
         nextSuggestedCommand = `openclaw code project-progress-show --repo-root ${repoRoot}`;
+      } else if (queued.outcome === "gated") {
+        status = "blocked";
+        stopReason = "Execution-start gate approval is still required for this repository.";
+        message = "Held by execution-start gate.";
+        nextSuggestedCommand = `openclaw code stage-gates-show --repo-root ${repoRoot}`;
       } else {
         status = "blocked";
         stopReason = "The selected issue is already queued or running for this repository.";

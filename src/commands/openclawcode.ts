@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   OpenClawCodeChatopsStore,
+  buildRunRequestFromCommand,
   resolveOpenClawCodePluginConfig,
   type OpenClawCodeChatopsRepoConfig,
   type OpenClawCodeRepoNotificationBinding,
@@ -472,6 +473,76 @@ async function resolveOperatorRepoConfig(params: {
     ) ??
     null
   );
+}
+
+async function readCliExecutionStartGate(repoRoot: string): Promise<
+  | {
+      artifact: Awaited<ReturnType<typeof writeProjectStageGateArtifact>>;
+      gate: NonNullable<Awaited<ReturnType<typeof writeProjectStageGateArtifact>>["gates"][number]>;
+    }
+  | undefined
+> {
+  const artifact = await writeProjectStageGateArtifact(repoRoot);
+  const gate = artifact.gates.find((entry) => entry.gateId === "execution-start");
+  if (!gate) {
+    return undefined;
+  }
+  return { artifact, gate };
+}
+
+async function queueCliAutonomousLoopIssueExecution(params: {
+  operatorStateDir: string;
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  issueNumber: number;
+  queuedStatus: string;
+  gatedStatus?: string;
+}): Promise<{ outcome: "queued" | "gated" | "already-tracked"; issueKey: string | null }> {
+  const store = OpenClawCodeChatopsStore.fromStateDir(params.operatorStateDir);
+  const issueKey = `${params.repoConfig.owner}/${params.repoConfig.repo}#${params.issueNumber}`;
+  const executionStartGate = await readCliExecutionStartGate(params.repoConfig.repoRoot);
+  if (executionStartGate && executionStartGate.gate.readiness !== "ready") {
+    const held = await store.upsertPendingApproval(
+      {
+        issueKey,
+        notifyChannel: params.repoConfig.notifyChannel,
+        notifyTarget: params.repoConfig.notifyTarget,
+        approvalKind: "execution-start-gated",
+      },
+      params.gatedStatus ?? "Awaiting execution-start gate approval.",
+    );
+    return {
+      outcome: held === "already-tracked" ? "already-tracked" : "gated",
+      issueKey,
+    };
+  }
+
+  const queued = await store.promotePendingApprovalToQueue({
+    issueKey,
+    request: buildRunRequestFromCommand({
+      command: {
+        action: "start",
+        issue: {
+          owner: params.repoConfig.owner,
+          repo: params.repoConfig.repo,
+          number: params.issueNumber,
+        },
+      },
+      config: params.repoConfig,
+    }),
+    fallbackNotifyChannel: params.repoConfig.notifyChannel,
+    fallbackNotifyTarget: params.repoConfig.notifyTarget,
+    status: params.queuedStatus,
+  });
+  if (!queued) {
+    return {
+      outcome: "already-tracked",
+      issueKey,
+    };
+  }
+  return {
+    outcome: "queued",
+    issueKey: queued.issueKey,
+  };
 }
 
 const OPENCLAWCODE_BOOTSTRAP_CONTRACT_VERSION = 1;
@@ -4034,6 +4105,13 @@ export async function openclawCodeAutonomousLoopRunCommand(
   const operatorSnapshot = repoRef
     ? await readOpenClawCodeOperatorStatusSnapshot(stateDir).catch(() => undefined)
     : undefined;
+  const repoConfig = repoRef
+    ? await resolveOperatorRepoConfig({
+        operatorStateDir: stateDir,
+        repoRoot,
+        repoRef,
+      }).catch(() => null)
+    : null;
   const artifact = await runProjectAutonomousLoop({
     repoRoot,
     repo: repoRef,
@@ -4041,6 +4119,20 @@ export async function openclawCodeAutonomousLoopRunCommand(
     readOperatorSnapshot: repoRef
       ? async () => await readOpenClawCodeOperatorStatusSnapshot(stateDir).catch(() => undefined)
       : undefined,
+    queueIssue:
+      repoConfig && repoRef
+        ? async ({ issueNumber }) =>
+            await queueCliAutonomousLoopIssueExecution({
+              operatorStateDir: stateDir,
+              repoConfig,
+              issueNumber,
+              queuedStatus:
+                (opts.iterations ?? 1) > 1
+                  ? "Queued from openclaw code autonomous-loop-run --iterations."
+                  : "Queued from openclaw code autonomous-loop-run --once.",
+              gatedStatus: "Awaiting execution-start gate approval.",
+            })
+        : undefined,
     maxIterations: Math.max(1, Math.trunc(opts.iterations ?? (opts.once ? 1 : 1))),
   });
   logProjectAutonomousLoopArtifact({

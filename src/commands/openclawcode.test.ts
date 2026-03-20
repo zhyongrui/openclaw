@@ -3469,6 +3469,160 @@ describe("openclawCodeRunCommand", () => {
     ]);
   });
 
+  it("queues CLI autopilot work through the operator store when repo config exists", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-autonomous-loop-cli-queue-"));
+    const stateDir = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-autonomous-loop-cli-queue-state-"),
+    );
+    const store = OpenClawCodeChatopsStore.fromStateDir(stateDir);
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: CLI Queue Autopilot Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# CLI Queue Autopilot Blueprint",
+        "",
+        "## Goal",
+        "Let CLI autopilot queue the selected issue when operator config exists.",
+        "",
+        "## Success Criteria",
+        "- `openclaw code autonomous-loop-run --once` queues the materialized issue.",
+        "",
+        "## Scope",
+        "- In scope: CLI autopilot queue handoff through operator state.",
+        "",
+        "## Non-Goals",
+        "- Real execution.",
+        "",
+        "## Constraints",
+        "- Reuse the same queue contract as chat autopilot.",
+        "",
+        "## Risks",
+        "- CLI autopilot could stall at materialization even when the operator queue is available.",
+        "",
+        "## Assumptions",
+        "- The repository can resolve its GitHub remote.",
+        "",
+        "## Human Gates",
+        "- Merge promotion: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Queue CLI autopilot output through the operator store.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: CLI autopilot queue baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await writeFile(
+      path.join(stateDir, "openclaw.json"),
+      JSON.stringify(
+        {
+          plugins: {
+            entries: {
+              openclawcode: {
+                config: {
+                  repos: [
+                    {
+                      owner: "openclaw",
+                      repo: "openclaw",
+                      repoRoot,
+                      baseBranch: "main",
+                      notifyChannel: "telegram",
+                      notifyTarget: "chat:primary",
+                      builderAgent: "main",
+                      verifierAgent: "main",
+                      testCommands: ["pnpm test"],
+                      openPullRequest: true,
+                      mergeOnApprove: false,
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    mocks.createIssue.mockResolvedValueOnce({
+      owner: "openclaw",
+      repo: "openclaw",
+      number: 777,
+      title: "[Blueprint]: Queue CLI autopilot output through the operator store.",
+      body: "Issue body",
+      labels: [],
+      url: "https://github.com/openclaw/openclaw/issues/777",
+    });
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeAutonomousLoopRunCommand(
+      {
+        owner: "openclaw",
+        repo: "openclaw",
+        repoRoot,
+        stateDir,
+        once: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    const loop = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(loop).toMatchObject({
+      mode: "once",
+      status: "materialized-and-queued",
+      selectedIssueNumber: 777,
+      queuedIssueKey: "openclaw/openclaw#777",
+      nextSuggestedCommand: `openclaw code project-progress-show --repo-root ${repoRoot}`,
+      nextSuggestedChatCommand: "/occode-progress openclaw/openclaw",
+      message: "Queued openclaw/openclaw#777 after issue materialization.",
+    });
+
+    const snapshot = await store.snapshot();
+    expect(snapshot.queue).toHaveLength(1);
+    expect(snapshot.queue[0]).toMatchObject({
+      issueKey: "openclaw/openclaw#777",
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+    });
+    expect(snapshot.queue[0]?.request).toMatchObject({
+      owner: "openclaw",
+      repo: "openclaw",
+      issueNumber: 777,
+      repoRoot,
+      baseBranch: "main",
+    });
+    expect(await store.getStatus("openclaw/openclaw#777")).toBe(
+      "Queued from openclaw code autonomous-loop-run --once.",
+    );
+  });
+
   it("surfaces active-run stage and role routing through project progress and autopilot artifacts", async () => {
     const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-project-progress-active-run-"));
     const stateDir = await mkdtemp(path.join(os.tmpdir(), "openclawcode-project-progress-active-run-state-"));

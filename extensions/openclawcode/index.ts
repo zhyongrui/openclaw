@@ -7263,6 +7263,12 @@ export default {
                       issueKey: queued.queuedRun.issueKey,
                     };
                   }
+                  if (queued.outcome === "gated") {
+                    return {
+                      outcome: "gated" as const,
+                      issueKey: `${repoConfig.owner}/${repoConfig.repo}#${issueNumber}`,
+                    };
+                  }
                   return {
                     outcome: "already-tracked" as const,
                     issueKey:
