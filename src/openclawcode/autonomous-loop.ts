@@ -25,6 +25,11 @@ export interface ProjectAutonomousLoopIteration {
   message: string | null;
 }
 
+export interface ProjectAutonomousLoopQueueIssueResult {
+  outcome: "queued" | "already-tracked";
+  issueKey: string | null;
+}
+
 export interface ProjectAutonomousLoopArtifact {
   repoRoot: string;
   artifactPath: string;
@@ -204,7 +209,7 @@ async function runProjectAutonomousLoopIteration(params: {
   repoRoot: string;
   repo?: RepoRef;
   operatorSnapshot?: OpenClawCodeOperatorStatusSnapshot;
-  queueIssue?: (args: { issueNumber: number }) => Promise<{ queued: boolean; issueKey: string | null }>;
+  queueIssue?: (args: { issueNumber: number }) => Promise<ProjectAutonomousLoopQueueIssueResult>;
 }): Promise<ProjectAutonomousLoopArtifact> {
   const repoRoot = path.resolve(params.repoRoot);
   const artifactPath = resolveProjectAutonomousLoopArtifactPath(repoRoot);
@@ -243,11 +248,15 @@ async function runProjectAutonomousLoopIteration(params: {
       const queued = await params.queueIssue({
         issueNumber: issueMaterialization.selectedIssueNumber,
       });
-      status = queued.queued ? "materialized-and-queued" : "materialized-only";
       queuedIssueKey = queued.issueKey;
-      message = queued.queued
-        ? `Queued ${queued.issueKey} after issue materialization.`
-        : "Materialized the next issue, but left queue state unchanged.";
+      if (queued.outcome === "queued") {
+        status = "materialized-and-queued";
+        message = `Queued ${queued.issueKey} after issue materialization.`;
+      } else {
+        status = "blocked";
+        stopReason = "The selected issue is already queued or running for this repository.";
+        message = "Selected issue was already tracked, so queue state stayed unchanged.";
+      }
     } else {
       status = "materialized-only";
       message = "Materialized the next issue.";
@@ -364,7 +373,7 @@ export async function runProjectAutonomousLoop(params: {
   repo?: RepoRef;
   operatorSnapshot?: OpenClawCodeOperatorStatusSnapshot;
   readOperatorSnapshot?: () => Promise<OpenClawCodeOperatorStatusSnapshot | undefined>;
-  queueIssue?: (args: { issueNumber: number }) => Promise<{ queued: boolean; issueKey: string | null }>;
+  queueIssue?: (args: { issueNumber: number }) => Promise<ProjectAutonomousLoopQueueIssueResult>;
   maxIterations?: number;
 }): Promise<ProjectAutonomousLoopArtifact> {
   const repoRoot = path.resolve(params.repoRoot);
@@ -446,7 +455,7 @@ export async function runProjectAutonomousLoopOnce(params: {
   repoRoot: string;
   repo?: RepoRef;
   operatorSnapshot?: OpenClawCodeOperatorStatusSnapshot;
-  queueIssue?: (args: { issueNumber: number }) => Promise<{ queued: boolean; issueKey: string | null }>;
+  queueIssue?: (args: { issueNumber: number }) => Promise<ProjectAutonomousLoopQueueIssueResult>;
 }): Promise<ProjectAutonomousLoopArtifact> {
   return await runProjectAutonomousLoop({
     ...params,

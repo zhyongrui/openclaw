@@ -6602,6 +6602,137 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("stops autopilot cleanly when queued work already exists for the repository", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Queued Work Autopilot Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-20T00:00:00.000Z",
+          "updatedAt: 2026-03-20T00:00:00.000Z",
+          "statusChangedAt: 2026-03-20T00:00:00.000Z",
+          "agreedAt: 2026-03-20T00:00:00.000Z",
+          "---",
+          "",
+          "# Queued Work Autopilot Blueprint",
+          "",
+          "## Goal",
+          "Stop autopilot with a precise reason when queued work already exists.",
+          "",
+          "## Success Criteria",
+          "- /occode-autopilot explains that a queued run already exists.",
+          "",
+          "## Scope",
+          "- In scope: already-tracked queue handoff behavior.",
+          "",
+          "## Non-Goals",
+          "- Full execution.",
+          "",
+          "## Constraints",
+          "- Keep the stop reason explicit.",
+          "",
+          "## Risks",
+          "- Existing queued work could be hidden without a clear stop reason.",
+          "",
+          "## Assumptions",
+          "- The blueprint is already agreed.",
+          "",
+          "## Human Gates",
+          "- Merge promotion: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: Codex",
+          "- Doc-writer: Codex",
+          "",
+          "## Workstreams",
+          "- Stop autopilot when queued work already exists.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-20: queued-work autopilot proof.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      await fixture.store.enqueue(
+        {
+          issueKey: "zhyongrui/openclawcode#89",
+          notifyChannel: "telegram",
+          notifyTarget: "chat:primary",
+          request: {
+            owner: "zhyongrui",
+            repo: "openclawcode",
+            issueNumber: 89,
+            repoRoot: fixture.repoRoot,
+            baseBranch: "main",
+            branchName: "openclawcode/issue-89",
+            builderAgent: "main",
+            verifierAgent: "main",
+            testCommands: ["pnpm test"],
+            openPullRequest: true,
+            mergeOnApprove: false,
+          },
+        },
+        "Queued from test.",
+      );
+
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify([
+              {
+                number: 89,
+                title: "[Blueprint]: Stop autopilot when queued work already exists.",
+                body: "materialized body",
+                html_url: "https://github.com/zhyongrui/openclawcode/issues/89",
+                state: "open",
+                labels: [],
+              },
+            ]),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      vi.stubEnv("GH_TOKEN", "test-gh-token");
+
+      const result = await fixture.commands.get("occode-autopilot")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-autopilot once",
+        args: "once",
+        senderId: "user:operator",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Status: blocked");
+      expect(result?.text).toContain("Stop reason: A run is already queued for this repository.");
+
+      const artifact = await readProjectAutonomousLoopArtifact(fixture.repoRoot);
+      expect(artifact).toMatchObject({
+        status: "blocked",
+        selectedIssueNumber: null,
+        queuedIssueKey: null,
+        stopReason: "A run is already queued for this repository.",
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
   it("shows active-run stage and role routing through progress and autopilot chat commands", async () => {
     const fixture = await registerPluginFixture();
     try {

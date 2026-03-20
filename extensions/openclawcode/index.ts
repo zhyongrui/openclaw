@@ -7230,12 +7230,12 @@ export default {
                   if (queued.outcome === "queued") {
                     kickQueueDrain(api, store);
                     return {
-                      queued: true,
+                      outcome: "queued" as const,
                       issueKey: queued.queuedRun.issueKey,
                     };
                   }
                   return {
-                    queued: false,
+                    outcome: "already-tracked" as const,
                     issueKey:
                       queued.outcome === "already-tracked"
                         ? `${repoConfig.owner}/${repoConfig.repo}#${issueNumber}`
