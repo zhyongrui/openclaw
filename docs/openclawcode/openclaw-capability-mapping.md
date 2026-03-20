@@ -401,7 +401,7 @@ Tasks:
 - `[x]` add a stable machine-readable blueprint contract
 - `[x]` persist blueprint fingerprints or content hashes
 - `[x]` persist blueprint revision metadata into work items and workflow runs
-- `[ ]` add validation for incomplete or contradictory blueprint states
+- `[x]` add validation for incomplete or contradictory blueprint states
 
 Acceptance:
 
@@ -414,18 +414,18 @@ Acceptance:
 Status:
 
 - `[x]` repo-local clarification reporting exists
-- `[ ]` chat-native discussion loop
-- `[ ]` write-back from discussion into blueprint sections
-- `[ ]` final confirmation before work decomposition
+- `[x]` chat-native discussion loop
+- `[x]` write-back from discussion into blueprint sections
+- `[x]` final confirmation before work decomposition
 
 Tasks:
 
 - `[x]` add deterministic clarification questions from the blueprint scaffold
 - `[x]` add deterministic proactive suggestions from the blueprint scaffold
-- `[ ]` add a chat-facing discussion command or flow before issue creation
-- `[ ]` let the system update blueprint sections from accepted clarifications
-- `[ ]` support explicit user confirmation that the blueprint is now agreed
-- `[ ]` keep an auditable history of clarifications that changed the blueprint
+- `[x]` add a chat-facing discussion command or flow before issue creation
+- `[x]` let the system update blueprint sections from accepted clarifications
+- `[x]` support explicit user confirmation that the blueprint is now agreed
+- `[x]` keep an auditable history of clarifications that changed the blueprint
 
 Acceptance:
 
@@ -558,10 +558,10 @@ Tasks:
 - `[x]` allow structured rerun-time coder/verifier overrides from chat and CLI
 - `[ ]` allow plan approval before code execution
 - `[ ]` allow plan editing before code execution
-- `[ ]` allow manual worktree takeover
+- `[x]` allow manual worktree takeover
 - `[ ]` allow provider switching after a failed or paused stage
-- `[ ]` allow structured resume after manual edits
-- `[ ]` allow explicit override of suitability and merge-policy decisions
+- `[x]` allow structured resume after manual edits
+- `[x]` allow explicit override of suitability and merge-policy decisions
 - `[ ]` persist all handoff and override decisions in workflow run artifacts
 
 Acceptance:

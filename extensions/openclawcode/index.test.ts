@@ -12,6 +12,7 @@ import {
   createProjectBlueprint,
   readProjectBlueprintDocument,
 } from "../../src/openclawcode/blueprint.js";
+import { readProjectBlueprintDiscussionArtifact } from "../../src/openclawcode/blueprint-discussion.js";
 import type { WorkflowRun } from "../../src/openclawcode/contracts/index.js";
 import { writeProjectDiscoveryInventory } from "../../src/openclawcode/discovery.js";
 import { readProjectIssueMaterializationArtifact } from "../../src/openclawcode/issue-materialization.js";
@@ -5588,13 +5589,61 @@ describe("openclawcode extension", () => {
   it("marks the blueprint as agreed from chat", async () => {
     const fixture = await registerPluginFixture();
     try {
-      await fixture.commands.get("occode-goal")?.handler({
-        channel: "telegram",
-        isAuthorizedSender: true,
-        commandBody: "/occode-goal Deliver blueprint-first releases safely.",
-        args: "Deliver blueprint-first releases safely.",
-        config: {},
-      });
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Agreement Blueprint",
+          "status: clarified",
+          "createdAt: 2026-03-20T00:00:00.000Z",
+          "updatedAt: 2026-03-20T00:00:00.000Z",
+          "statusChangedAt: 2026-03-20T00:00:00.000Z",
+          "---",
+          "",
+          "# Agreement Blueprint",
+          "",
+          "## Goal",
+          "Deliver blueprint-first releases safely.",
+          "",
+          "## Success Criteria",
+          "- Operators can mark the blueprint as agreed from chat.",
+          "",
+          "## Scope",
+          "- In scope: repo-local agreement and gate refresh.",
+          "- Out of scope: external live proof.",
+          "",
+          "## Non-Goals",
+          "- Replace the existing issue runner.",
+          "",
+          "## Constraints",
+          "- Keep the change in chat-facing control paths.",
+          "",
+          "## Risks",
+          "- Agreement may happen before validation is complete.",
+          "",
+          "## Assumptions",
+          "- Operators will resolve placeholders first.",
+          "",
+          "## Human Gates",
+          "- Goal agreement: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Codex",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: Codex",
+          "- Doc-writer: Codex",
+          "",
+          "## Workstreams",
+          "- [ ] Mark the blueprint as agreed from chat.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
 
       const result = await fixture.commands.get("occode-blueprint-agree")?.handler({
         channel: "telegram",
@@ -5612,6 +5661,28 @@ describe("openclawcode extension", () => {
       );
       expect(content).toContain("status: agreed");
       expect(content).toContain("agreedAt:");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks /occode-blueprint-agree when blueprint validation errors remain", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await createProjectBlueprint({
+        repoRoot: fixture.repoRoot,
+        title: "Blocked Agreement Blueprint",
+      });
+      const result = await fixture.commands.get("occode-blueprint-agree")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-blueprint-agree",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Cannot mark the blueprint as agreed");
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -5693,6 +5764,35 @@ describe("openclawcode extension", () => {
         "utf8",
       );
       expect(content).toContain("## Open Questions\n- None.");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("answers one blueprint clarification from chat and records history", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      const result = await fixture.commands.get("occode-blueprint-answer")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-blueprint-answer 1 Ship a chat-native blueprint agreement loop.",
+        args: "1 Ship a chat-native blueprint agreement loop.",
+        config: {},
+        senderId: "user:operator",
+        to: "chat:blueprint",
+      });
+
+      expect(result?.text).toContain("Applied blueprint answer 1 to `Goal`");
+      expect(result?.text).toContain("Clarification history: 1");
+      const blueprint = await readProjectBlueprintDocument(fixture.repoRoot);
+      expect(blueprint.goalSummary).toBe("Ship a chat-native blueprint agreement loop.");
+      const discussion = await readProjectBlueprintDiscussionArtifact(fixture.repoRoot);
+      expect(discussion.entryCount).toBe(1);
+      expect(discussion.entries[0]).toMatchObject({
+        appliedSection: "Goal",
+        actor: "chat:blueprint",
+      });
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });

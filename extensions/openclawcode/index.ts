@@ -48,6 +48,7 @@ import {
   type OnboardingProjectMode,
   type OnboardingGitHubCliDeviceLoginStatus,
 } from "../../src/wizard/setup.code.js";
+import { appendProjectBlueprintDiscussionEntry } from "../../src/openclawcode/blueprint-discussion.js";
 import {
   PROJECT_BLUEPRINT_REQUIRED_SECTIONS,
   inspectProjectBlueprintClarifications,
@@ -2717,6 +2718,113 @@ function parseIntakeAnswerArgs(params: {
   };
 }
 
+function parseBlueprintAnswerArgs(params: {
+  commandBody: string;
+  defaults: { owner?: string; repo?: string };
+}):
+  | {
+      repo: { owner: string; repo: string };
+      questionIndex: number;
+      answer: string;
+    }
+  | undefined {
+  const parsed = parseRepoScopedMultilineBody({
+    commandBody: params.commandBody,
+    commandName: "occode-blueprint-answer",
+    defaults: params.defaults,
+  });
+  if (!parsed) {
+    return undefined;
+  }
+  const body = parsed.body.trim();
+  if (!body) {
+    return undefined;
+  }
+  const indexedAnswerMatch = /^(\d+)(?:\s+|\n+)([\s\S]+)$/.exec(body);
+  if (indexedAnswerMatch) {
+    return {
+      repo: parsed.repo,
+      questionIndex: Number.parseInt(indexedAnswerMatch[1] ?? "1", 10),
+      answer: (indexedAnswerMatch[2] ?? "").trim(),
+    };
+  }
+  return {
+    repo: parsed.repo,
+    questionIndex: 1,
+    answer: body,
+  };
+}
+
+function normalizeBlueprintAnswerListBody(answer: string): string {
+  const trimmed = answer.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  if (/^[-*]\s+/m.test(trimmed) || /^\d+\.\s+/m.test(trimmed)) {
+    return trimmed;
+  }
+  if (trimmed.includes("\n")) {
+    return trimmed
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => (line.startsWith("- ") ? line : `- ${line}`))
+      .join("\n");
+  }
+  return `- ${trimmed}`;
+}
+
+function resolveBlueprintAnswerTarget(params: {
+  question: string;
+  blueprint: Awaited<ReturnType<typeof readProjectBlueprintDocument>>;
+}): {
+  sectionName: (typeof PROJECT_BLUEPRINT_REQUIRED_SECTIONS)[number];
+  append: boolean;
+} {
+  const question = params.question;
+  const defaulted = new Set(params.blueprint.defaultedSections);
+  if (/No project blueprint exists yet/i.test(question)) {
+    return {
+      sectionName: "Goal",
+      append: false,
+    };
+  }
+  if (/Goal placeholder|`Goal` section/i.test(question)) {
+    return {
+      sectionName: "Goal",
+      append: !defaulted.has("Goal"),
+    };
+  }
+  if (/Success Criteria/i.test(question)) {
+    return {
+      sectionName: "Success Criteria",
+      append: !defaulted.has("Success Criteria"),
+    };
+  }
+  if (/`Scope` section|in scope and out of scope/i.test(question)) {
+    return {
+      sectionName: "Scope",
+      append: !defaulted.has("Scope"),
+    };
+  }
+  if (/workstreams before autonomous issue creation|`Workstreams` section/i.test(question)) {
+    return {
+      sectionName: "Workstreams",
+      append: !defaulted.has("Workstreams"),
+    };
+  }
+  if (/Open Questions/i.test(question)) {
+    return {
+      sectionName: "Open Questions",
+      append: false,
+    };
+  }
+  return {
+    sectionName: "Assumptions",
+    append: !defaulted.has("Assumptions"),
+  };
+}
+
 function extractMultilineCommandBody(params: {
   commandBody: string;
   commandName: string;
@@ -2832,6 +2940,8 @@ function buildBlueprintGoalUpdateMessage(params: {
     params.executionStartReadiness
       ? `Execution-start gate: ${params.executionStartReadiness}`
       : undefined,
+    `Validation: errors=${params.blueprint.validationErrorCount} | warnings=${params.blueprint.validationWarningCount}`,
+    ...(params.blueprint.validationErrors.slice(0, 2).map((entry) => `- error: ${entry}`) ?? []),
     params.clarification.priorityQuestion
       ? `Priority question: ${params.clarification.priorityQuestion}`
       : undefined,
@@ -2839,6 +2949,7 @@ function buildBlueprintGoalUpdateMessage(params: {
     ...params.clarification.questions.slice(0, 3).map((question) => `- ${question}`),
     `Suggestions: ${params.clarification.suggestionCount}`,
     ...params.clarification.suggestions.slice(0, 2).map((suggestion) => `- ${suggestion}`),
+    `Clarification history: ${params.clarification.clarificationHistoryCount}`,
   ];
   return lines.filter(Boolean).join("\n");
 }
@@ -3169,6 +3280,18 @@ function buildBlueprintSummaryMessage(params: {
     if (providerStrategy) {
       lines.push(providerStrategy);
     }
+    lines.push(
+      `Validation: errors=${params.blueprint.validationErrorCount} | warnings=${params.blueprint.validationWarningCount}`,
+    );
+    for (const error of params.blueprint.validationErrors.slice(0, 3)) {
+      lines.push(`- error: ${error}`);
+    }
+    for (const warning of params.blueprint.validationWarnings.slice(0, 2)) {
+      lines.push(`- warning: ${warning}`);
+    }
+    lines.push(
+      `Clarification history: ${params.blueprint.clarificationHistoryCount}${params.blueprint.lastClarificationAt ? ` | last=${params.blueprint.lastClarificationAt}` : ""}`,
+    );
   }
 
   lines.push(`Clarifications: ${params.clarification.questionCount}`);
@@ -7363,10 +7486,16 @@ export default {
           };
         }
 
-        await updateProjectBlueprintStatus({
-          repoRoot: repoConfig.repoRoot,
-          status: "agreed",
-        });
+        try {
+          await updateProjectBlueprintStatus({
+            repoRoot: repoConfig.repoRoot,
+            status: "agreed",
+          });
+        } catch (error) {
+          return {
+            text: String((error as Error).message),
+          };
+        }
         const blueprint = await readProjectBlueprintDocument(repoConfig.repoRoot);
         const stageGates = await writeProjectStageGateArtifact(repoConfig.repoRoot);
         return {
@@ -7377,6 +7506,98 @@ export default {
               (entry) => entry.gateId === "execution-start",
             )?.readiness,
           }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-blueprint-answer",
+      description: "Answer one blueprint clarification question from chat and write it back.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const parsed = parseBlueprintAnswerArgs({
+          commandBody: ctx.commandBody,
+          defaults: {
+            owner: defaultRepo?.owner,
+            repo: defaultRepo?.repo,
+          },
+        });
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-blueprint-answer owner/repo [index] <answer...>\n" +
+              "Or, when exactly one repo is configured: /occode-blueprint-answer [index] <answer...>",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.repo.owner}/${parsed.repo.repo}.`,
+          };
+        }
+
+        const blueprintBefore = await readProjectBlueprintDocument(repoConfig.repoRoot);
+        const clarificationBefore = await inspectProjectBlueprintClarifications(repoConfig.repoRoot);
+        if (clarificationBefore.questionCount === 0) {
+          return {
+            text: `No outstanding blueprint clarification questions remain for ${formatRepoKey(parsed.repo)}.`,
+          };
+        }
+        const selectedQuestion = clarificationBefore.questions[parsed.questionIndex - 1];
+        if (!selectedQuestion) {
+          return {
+            text:
+              `Outstanding blueprint clarifications: 1-${clarificationBefore.questionCount}\n` +
+              `Use /occode-blueprint-answer ${formatRepoKey(parsed.repo)} <index> <answer...> to answer one of them.`,
+          };
+        }
+
+        const target = resolveBlueprintAnswerTarget({
+          question: selectedQuestion,
+          blueprint: blueprintBefore,
+        });
+        const isListSection =
+          target.sectionName !== "Goal" && target.sectionName !== "Scope" && target.sectionName !== "Constraints";
+        const body = isListSection ? normalizeBlueprintAnswerListBody(parsed.answer) : parsed.answer.trim();
+        const blueprint = await updateProjectBlueprintSection({
+          repoRoot: repoConfig.repoRoot,
+          sectionName: target.sectionName,
+          body,
+          append: target.append,
+          createIfMissing: true,
+          title: `${repoConfig.repo} project blueprint`,
+        });
+        await appendProjectBlueprintDiscussionEntry({
+          repoRoot: repoConfig.repoRoot,
+          entry: {
+            question: selectedQuestion,
+            answer: parsed.answer.trim(),
+            appliedSection: target.sectionName,
+            actor: resolveCommandNotifyTarget(ctx) ?? ctx.senderId ?? null,
+            appliedAt: new Date().toISOString(),
+            questionIndex: parsed.questionIndex,
+            blueprintRevisionBefore: blueprintBefore.revisionId,
+            blueprintRevisionAfter: blueprint.revisionId,
+          },
+        });
+        const clarification = await inspectProjectBlueprintClarifications(repoConfig.repoRoot);
+        const stageGates = await writeProjectStageGateArtifact(repoConfig.repoRoot);
+        return {
+          text: [
+            `Applied blueprint answer ${parsed.questionIndex} to \`${target.sectionName}\` for ${formatRepoKey(parsed.repo)}.`,
+            `Answered: ${selectedQuestion}`,
+            buildBlueprintGoalUpdateMessage({
+              repo: parsed.repo,
+              blueprint,
+              clarification,
+              executionStartReadiness: stageGates.gates.find(
+                (entry) => entry.gateId === "execution-start",
+              )?.readiness,
+            }),
+          ].join("\n"),
         };
       },
     });

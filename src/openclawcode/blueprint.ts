@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { parseFrontmatterBlock } from "../markdown/frontmatter.js";
+import { readProjectBlueprintDiscussionArtifact } from "./blueprint-discussion.js";
 
 export const PROJECT_BLUEPRINT_FILENAME = "PROJECT-BLUEPRINT.md";
 export const PROJECT_BLUEPRINT_SCHEMA_VERSION = 1;
@@ -104,6 +105,12 @@ export interface ProjectBlueprintSummary {
   openQuestionCount: number;
   humanGateCount: number;
   providerRoleAssignments: ProjectBlueprintRoleAssignments;
+  validationErrorCount: number;
+  validationErrors: string[];
+  validationWarningCount: number;
+  validationWarnings: string[];
+  clarificationHistoryCount: number;
+  lastClarificationAt: string | null;
 }
 
 export interface ProjectBlueprintClarificationReport extends ProjectBlueprintSummary {
@@ -585,6 +592,79 @@ function parseProjectBlueprintContent(params: {
     providerRoleAssignments: parseProjectBlueprintRoleAssignments(
       sectionBodies["Provider Strategy"],
     ),
+    validationErrorCount: 0,
+    validationErrors: [],
+    validationWarningCount: 0,
+    validationWarnings: [],
+    clarificationHistoryCount: 0,
+    lastClarificationAt: null,
+  };
+}
+
+function normalizeComparableItem(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function buildProjectBlueprintValidation(params: {
+  summary: ProjectBlueprintSummary;
+  sectionBodies: Partial<Record<string, string>>;
+}): { errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  for (const section of params.summary.missingRequiredSections) {
+    errors.push(`Missing required section: ${section}.`);
+  }
+  for (const section of params.summary.defaultedSections) {
+    errors.push(`Section still uses the default scaffold text: ${section}.`);
+  }
+
+  const scopeItems = extractMarkdownListItems(params.sectionBodies.Scope);
+  const nonGoalItems = extractMarkdownListItems(params.sectionBodies["Non-Goals"]);
+  const duplicateScopeItems = scopeItems.filter((item) =>
+    nonGoalItems.some((other) => normalizeComparableItem(other) === normalizeComparableItem(item)),
+  );
+  for (const duplicate of duplicateScopeItems) {
+    errors.push(`Scope and Non-Goals conflict on the same item: ${duplicate}.`);
+  }
+
+  const isAgreedOrActive =
+    params.summary.status === "agreed" || params.summary.status === "active";
+  if (isAgreedOrActive && params.summary.openQuestionCount > 0) {
+    errors.push("Agreed or active blueprints must not keep unresolved Open Questions.");
+  }
+  if (isAgreedOrActive && params.summary.workstreamCandidateCount === 0) {
+    errors.push("Agreed or active blueprints must include at least one workstream.");
+  }
+
+  const workstreams = extractMarkdownListItems(params.sectionBodies.Workstreams);
+  const horizontalWorkstreams = workstreams.filter((item) => isLikelyHorizontalWorkstream(item));
+  if (horizontalWorkstreams.length > 0) {
+    warnings.push(
+      `Horizontal-only workstreams detected: ${horizontalWorkstreams.join("; ")}. Rewrite them as thin vertical slices.`,
+    );
+  }
+
+  return { errors, warnings };
+}
+
+async function enrichProjectBlueprintSummary(params: {
+  summary: ProjectBlueprintSummary;
+  sectionBodies: Partial<Record<string, string>>;
+}): Promise<ProjectBlueprintSummary> {
+  const validation = buildProjectBlueprintValidation({
+    summary: params.summary,
+    sectionBodies: params.sectionBodies,
+  });
+  const discussion = await readProjectBlueprintDiscussionArtifact(params.summary.repoRoot);
+  return {
+    ...params.summary,
+    validationErrorCount: validation.errors.length,
+    validationErrors: validation.errors,
+    validationWarningCount: validation.warnings.length,
+    validationWarnings: validation.warnings,
+    clarificationHistoryCount: discussion.entryCount,
+    lastClarificationAt: discussion.lastClarificationAt,
   };
 }
 
@@ -631,7 +711,10 @@ export async function readProjectBlueprint(repoRoot: string): Promise<ProjectBlu
   const blueprintPath = resolveProjectBlueprintPath(repoRoot);
   try {
     const content = await readFile(blueprintPath, "utf8");
-    return parseProjectBlueprintContent({ repoRoot, blueprintPath, content });
+    return await enrichProjectBlueprintSummary({
+      summary: parseProjectBlueprintContent({ repoRoot, blueprintPath, content }),
+      sectionBodies: extractSectionBodies(content),
+    });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return {
@@ -660,6 +743,12 @@ export async function readProjectBlueprint(repoRoot: string): Promise<ProjectBlu
         openQuestionCount: 0,
         humanGateCount: 0,
         providerRoleAssignments: emptyProjectBlueprintRoleAssignments(),
+        validationErrorCount: 0,
+        validationErrors: [],
+        validationWarningCount: 0,
+        validationWarnings: [],
+        clarificationHistoryCount: 0,
+        lastClarificationAt: null,
       };
     }
     throw error;
@@ -704,12 +793,32 @@ export async function updateProjectBlueprintStatus(
 ): Promise<ProjectBlueprintSummary> {
   const repoRoot = path.resolve(options.repoRoot);
   const blueprintPath = resolveProjectBlueprintPath(repoRoot);
-  const currentContent = await readFile(blueprintPath, "utf8");
+  let currentContent: string;
+  try {
+    currentContent = await readFile(blueprintPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(
+        `Project blueprint does not exist at ${blueprintPath}. Run \`openclaw code blueprint-init\` first.`,
+      );
+    }
+    throw error;
+  }
   const current = parseProjectBlueprintContent({
     repoRoot,
     blueprintPath,
     content: currentContent,
   });
+  const currentSectionBodies = extractSectionBodies(currentContent);
+  const validation = buildProjectBlueprintValidation({
+    summary: current,
+    sectionBodies: currentSectionBodies,
+  });
+  if (options.status === "agreed" && validation.errors.length > 0) {
+    throw new Error(
+      `Cannot mark the blueprint as agreed until validation errors are resolved: ${validation.errors.join(" ")}`,
+    );
+  }
   const now = options.now ?? new Date().toISOString();
   const { body } = splitFrontmatter(currentContent);
   const frontmatter: ProjectBlueprintFrontmatter = {
@@ -899,14 +1008,19 @@ export async function readProjectBlueprintDocument(
   }
 
   const content = await readFile(summary.blueprintPath, "utf8");
-  return {
-    ...parseProjectBlueprintContent({
+  const sectionBodies = extractSectionBodies(content);
+  const enriched = await enrichProjectBlueprintSummary({
+    summary: parseProjectBlueprintContent({
       repoRoot,
       blueprintPath: summary.blueprintPath,
       content,
     }),
+    sectionBodies,
+  });
+  return {
+    ...enriched,
     content,
-    sectionBodies: extractSectionBodies(content),
+    sectionBodies,
   };
 }
 

@@ -2118,13 +2118,60 @@ describe("openclawCodeRunCommand", () => {
 
   it("records the explicit blueprint agreement checkpoint", async () => {
     const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-blueprint-agree-"));
-
-    await openclawCodeBlueprintInitCommand(
-      {
-        repoRoot,
-        title: "Agreement Blueprint",
-      },
-      runtime,
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Agreement Blueprint",
+        "status: clarified",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Agreement Blueprint",
+        "",
+        "## Goal",
+        "Ship a repeatable blueprint agreement flow.",
+        "",
+        "## Success Criteria",
+        "- Operators can agree the blueprint after clarifications are resolved.",
+        "",
+        "## Scope",
+        "- In scope: repo-local blueprint agreement.",
+        "- Out of scope: live operator proof in this test.",
+        "",
+        "## Non-Goals",
+        "- Replace the runtime orchestration model.",
+        "",
+        "## Constraints",
+        "- Keep the blueprint machine-readable.",
+        "",
+        "## Risks",
+        "- Invalid placeholders could block agreement.",
+        "",
+        "## Assumptions",
+        "- The operator can answer clarification prompts.",
+        "",
+        "## Human Gates",
+        "- Goal agreement: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Codex",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- [ ] Capture the agreed target in a validated blueprint.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+      ].join("\n"),
+      "utf8",
     );
     runtime.log.mockClear();
 
@@ -2144,6 +2191,30 @@ describe("openclawCodeRunCommand", () => {
     const content = await readFile(path.join(repoRoot, "PROJECT-BLUEPRINT.md"), "utf8");
     expect(content).toContain("status: agreed");
     expect(content).toContain("agreedAt:");
+  });
+
+  it("blocks blueprint agreement while validation errors remain", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-blueprint-agree-blocked-"));
+
+    await openclawCodeBlueprintInitCommand(
+      {
+        repoRoot,
+        title: "Blocked Agreement Blueprint",
+      },
+      runtime,
+    );
+    runtime.log.mockClear();
+
+    await expect(
+      openclawCodeBlueprintSetStatusCommand(
+        {
+          repoRoot,
+          status: "agreed",
+          json: true,
+        },
+        runtime,
+      ),
+    ).rejects.toThrow(/Cannot mark the blueprint as agreed/);
   });
 
   it("updates one blueprint provider role and refreshes routing artifacts", async () => {
@@ -2253,6 +2324,10 @@ describe("openclawCodeRunCommand", () => {
     );
     expect(payload.questions).toContain(
       "Break the blueprint into initial workstreams before autonomous issue creation.",
+    );
+    expect(payload.validationErrorCount).toBeGreaterThan(0);
+    expect(payload.validationErrors).toContain(
+      "Section still uses the default scaffold text: Goal.",
     );
     expect(payload.suggestions).toContain(
       "When the team agrees on the target, record it with `openclaw code blueprint-set-status --status agreed`.",

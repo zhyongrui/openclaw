@@ -1895,6 +1895,18 @@ function logProjectBlueprintSummary(params: {
   runtime.log(`Workstream candidates: ${summary.workstreamCandidateCount}`);
   runtime.log(`Open questions: ${summary.openQuestionCount}`);
   runtime.log(`Human gates: ${summary.humanGateCount}`);
+  runtime.log(`Validation errors: ${summary.validationErrorCount}`);
+  for (const error of summary.validationErrors) {
+    runtime.log(`- validation-error: ${error}`);
+  }
+  runtime.log(`Validation warnings: ${summary.validationWarningCount}`);
+  for (const warning of summary.validationWarnings) {
+    runtime.log(`- validation-warning: ${warning}`);
+  }
+  runtime.log(`Clarification history: ${summary.clarificationHistoryCount}`);
+  if (summary.lastClarificationAt) {
+    runtime.log(`Last clarification at: ${summary.lastClarificationAt}`);
+  }
   const providerAssignments = Object.entries(summary.providerRoleAssignments)
     .filter(([, value]) => value != null)
     .map(([role, value]) => `${role}=${value}`);
