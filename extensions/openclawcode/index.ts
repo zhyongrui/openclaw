@@ -69,7 +69,7 @@ import {
 import { readOpenClawCodeOperatorStatusSnapshot } from "../../src/openclawcode/operator-status.js";
 import {
   readProjectAutonomousLoopArtifact,
-  runProjectAutonomousLoopOnce,
+  runProjectAutonomousLoop,
   setProjectAutonomousLoopDisabled,
 } from "../../src/openclawcode/autonomous-loop.js";
 import {
@@ -3102,12 +3102,13 @@ function buildAutonomousLoopSummaryMessage(params: {
   lines.push(`Mode: ${params.artifact.mode}`);
   lines.push(`Status: ${params.artifact.status}`);
   lines.push(`Enabled: ${params.artifact.enabled ? "yes" : "no"}`);
+  lines.push(`Iterations: ${params.artifact.completedIterationCount}/${params.artifact.requestedIterationCount}`);
   lines.push(`Next work: ${params.artifact.nextWorkDecision}`);
   if (params.artifact.nextWorkBlockingGateId) {
     lines.push(`Next-work gate: ${params.artifact.nextWorkBlockingGateId}`);
   }
   lines.push(
-    `Operator: currentRun=${params.artifact.currentRunPresent ? "yes" : "no"} | pause=${params.artifact.providerPauseActive ? "yes" : "no"}`,
+    `Operator: queued=${params.artifact.queuedRunCount} | currentRun=${params.artifact.currentRunPresent ? "yes" : "no"} | pause=${params.artifact.providerPauseActive ? "yes" : "no"}`,
   );
   if (params.artifact.selectedWorkItemId) {
     lines.push(`Selected work item: ${params.artifact.selectedWorkItemId}`);
@@ -3142,6 +3143,11 @@ function buildAutonomousLoopSummaryMessage(params: {
   if (params.artifact.message) {
     lines.push(`Message: ${params.artifact.message}`);
   }
+  for (const iteration of params.artifact.iterations.slice(0, 3)) {
+    lines.push(
+      `- iteration ${iteration.iteration}: ${iteration.status} | ${iteration.nextWorkDecision}${iteration.selectedIssueNumber != null ? ` | #${iteration.selectedIssueNumber}` : ""}${iteration.queuedIssueKey ? ` | ${iteration.queuedIssueKey}` : ""}`,
+    );
+  }
   return lines.join("\n");
 }
 
@@ -3150,7 +3156,8 @@ function parseAutopilotArgs(params: {
   defaults: { owner?: string; repo?: string };
 }):
   | {
-      action: "once" | "status" | "off";
+      action: "once" | "repeat" | "status" | "off";
+      iterations: number;
       repo: { owner: string; repo: string };
     }
   | undefined {
@@ -3159,16 +3166,23 @@ function parseAutopilotArgs(params: {
     .map((token) => token.trim())
     .filter(Boolean);
   const actionToken = (tokens[0] ?? "status").toLowerCase();
-  if (actionToken !== "once" && actionToken !== "status" && actionToken !== "off") {
+  if (actionToken !== "once" && actionToken !== "repeat" && actionToken !== "status" && actionToken !== "off") {
     return undefined;
   }
-  const repo = parseChatopsRepoReference(tokens.slice(1).join(" "), params.defaults) ??
+  let iterations = 1;
+  let repoTokens = tokens.slice(1);
+  if (actionToken === "repeat" && repoTokens[0] && /^\d+$/.test(repoTokens[0])) {
+    iterations = Math.max(1, Number.parseInt(repoTokens[0], 10) || 1);
+    repoTokens = repoTokens.slice(1);
+  }
+  const repo = parseChatopsRepoReference(repoTokens.join(" "), params.defaults) ??
     parseChatopsRepoReference("", params.defaults);
   if (!repo) {
     return undefined;
   }
   return {
     action: actionToken,
+    iterations,
     repo,
   };
 }
@@ -7147,8 +7161,8 @@ export default {
         if (!parsed) {
           return {
             text:
-              "Usage: /occode-autopilot <once|status|off> owner/repo\n" +
-              "Or, when exactly one repo is configured: /occode-autopilot <once|status|off>",
+              "Usage: /occode-autopilot <once|repeat [count]|status|off> owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-autopilot <once|repeat [count]|status|off>",
           };
         }
 
@@ -7183,10 +7197,14 @@ export default {
         const operatorSnapshot = await readOpenClawCodeOperatorStatusSnapshot(
           api.runtime.state.resolveStateDir(),
         ).catch(() => undefined);
-        const artifact = await runProjectAutonomousLoopOnce({
+        const artifact = await runProjectAutonomousLoop({
           repoRoot: repoConfig.repoRoot,
           repo: parsed.repo,
           operatorSnapshot,
+          readOperatorSnapshot: async () =>
+            await readOpenClawCodeOperatorStatusSnapshot(
+              api.runtime.state.resolveStateDir(),
+            ).catch(() => undefined),
           queueIssue:
             notifyTarget == null
               ? undefined
@@ -7203,7 +7221,10 @@ export default {
                       channel: ctx.channel,
                       target: notifyTarget,
                     },
-                    queuedStatus: "Queued from /occode-autopilot once.",
+                    queuedStatus:
+                      parsed.action === "repeat"
+                        ? "Queued from /occode-autopilot repeat."
+                        : "Queued from /occode-autopilot once.",
                     gatedStatus: "Awaiting execution-start gate approval.",
                   });
                   if (queued.outcome === "queued") {
@@ -7221,6 +7242,7 @@ export default {
                         : null,
                   };
                 },
+          maxIterations: parsed.action === "repeat" ? parsed.iterations : 1,
         });
         return {
           text: buildAutonomousLoopSummaryMessage({

@@ -6456,6 +6456,152 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("runs a supervised repeat autopilot loop until queued work blocks the next iteration", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Repeat Autopilot Chat Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-20T00:00:00.000Z",
+          "updatedAt: 2026-03-20T00:00:00.000Z",
+          "statusChangedAt: 2026-03-20T00:00:00.000Z",
+          "agreedAt: 2026-03-20T00:00:00.000Z",
+          "---",
+          "",
+          "# Repeat Autopilot Chat Blueprint",
+          "",
+          "## Goal",
+          "Let chat operators run a bounded supervised autopilot loop.",
+          "",
+          "## Success Criteria",
+          "- /occode-autopilot repeat records each iteration until the loop blocks.",
+          "",
+          "## Scope",
+          "- In scope: repeat-loop orchestration and reporting.",
+          "",
+          "## Non-Goals",
+          "- Full end-to-end execution.",
+          "",
+          "## Constraints",
+          "- Stop cleanly when work is already queued.",
+          "",
+          "## Risks",
+          "- Repeat mode could queue duplicate work without a queue-aware stop.",
+          "",
+          "## Assumptions",
+          "- The blueprint is already agreed.",
+          "",
+          "## Human Gates",
+          "- Merge promotion: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: Codex",
+          "- Doc-writer: Codex",
+          "",
+          "## Workstreams",
+          "- Run a bounded repeat autopilot loop from chat.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-20: repeat autopilot chat proof.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              number: 88,
+              title: "[Blueprint]: Run a bounded repeat autopilot loop from chat.",
+              body: "materialized body",
+              html_url: "https://github.com/zhyongrui/openclawcode/issues/88",
+              state: "open",
+              labels: [],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      vi.stubEnv("GH_TOKEN", "test-gh-token");
+      await fixture.service?.stop?.({
+        config: {},
+        stateDir: fixture.stateDir,
+        logger: { info() {}, warn() {}, error() {} },
+      });
+
+      const result = await fixture.commands.get("occode-autopilot")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-autopilot repeat 2",
+        args: "repeat 2",
+        senderId: "user:operator",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Mode: repeat");
+      expect(result?.text).toContain("Status: blocked");
+      expect(result?.text).toContain("Iterations: 2/2");
+      expect(result?.text).toContain("Operator: queued=1 | currentRun=no | pause=no");
+      expect(result?.text).toContain("Stop reason: A run is already queued for this repository.");
+      expect(result?.text).toContain(
+        "- iteration 1: materialized-and-queued | ready-to-execute | #88 | zhyongrui/openclawcode#88",
+      );
+      expect(result?.text).toContain("- iteration 2: blocked | ready-to-execute | #88");
+
+      const artifact = await readProjectAutonomousLoopArtifact(fixture.repoRoot);
+      expect(artifact).toMatchObject({
+        mode: "repeat",
+        status: "blocked",
+        requestedIterationCount: 2,
+        completedIterationCount: 2,
+        queuedRunCount: 1,
+        stopReason: "A run is already queued for this repository.",
+      });
+      expect(artifact.iterations).toEqual([
+        expect.objectContaining({
+          iteration: 1,
+          status: "materialized-and-queued",
+          selectedIssueNumber: 88,
+          queuedIssueKey: "zhyongrui/openclawcode#88",
+        }),
+        expect.objectContaining({
+          iteration: 2,
+          status: "blocked",
+          selectedIssueNumber: 88,
+          stopReason: "A run is already queued for this repository.",
+        }),
+      ]);
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.queue).toHaveLength(1);
+      expect(snapshot.queue[0]?.issueKey).toBe("zhyongrui/openclawcode#88");
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
   it("shows active-run stage and role routing through progress and autopilot chat commands", async () => {
     const fixture = await registerPluginFixture();
     try {

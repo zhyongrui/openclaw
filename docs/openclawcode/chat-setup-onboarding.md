@@ -320,9 +320,12 @@ control-plane steps.
 - `openclaw code autonomous-loop-run --once` and
   `/occode-autopilot once owner/repo` now provide the first supervised
   single-iteration autopilot slice
+- `openclaw code autonomous-loop-run --iterations <n>` and
+  `/occode-autopilot repeat [count] owner/repo` now provide the first bounded
+  repeat-loop slice with iteration history and queue-aware stop conditions
 
 ### Recommended build order
 
 1. live operator proof
 2. live-proof the new failure recovery paths
-3. extend the single-iteration autopilot into a repeatable supervised loop
+3. live-proof the bounded repeat-loop autopilot on the real operator host

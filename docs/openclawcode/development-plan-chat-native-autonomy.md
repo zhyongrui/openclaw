@@ -233,6 +233,11 @@ The next implementation slice should deepen Milestones 4, 5, and 6:
 - role-routing proof and operator docs
 - richer project-progress reporting during active runs
 - promoting the single-iteration loop into a repeatable supervised autopilot
+  - first bounded repeat-loop slice is now landed:
+    - `openclaw code autonomous-loop-run --iterations <n>`
+    - `/occode-autopilot repeat [count]`
+    - repeat-loop artifacts now record iteration history and stop cleanly when
+      a queued/current run or another legal blocker is encountered
 
 ## Setup Track Addendum
 
@@ -252,8 +257,11 @@ The chat-native setup track now has a concrete operator-facing foundation:
   item through `/occode-materialize` and `openclaw code issue-materialize`
 - chat and CLI can now persist a blueprint-aware progress summary through
   `/occode-progress` and `openclaw code project-progress-show`
-- chat and CLI now expose the first supervised autopilot loop status through
-  `/occode-autopilot` and `openclaw code autonomous-loop-run --once`
+- chat and CLI now expose a supervised autopilot surface through
+  `/occode-autopilot` and `openclaw code autonomous-loop-run`
+  - one-shot mode remains available through `--once` and `/occode-autopilot once`
+  - bounded repeat mode is now available through
+    `--iterations <n>` and `/occode-autopilot repeat [count]`
 - bootstrap can auto-bind the active chat when safe
 - setup sessions now have cancel/retry controls and persisted failure context
 
@@ -262,8 +270,8 @@ The remaining setup-specific hardening sequence should be:
 1. live-proof the full `new-project` flow on a real chat + GitHub operator host
 2. live-proof the new recovery messaging for expired auth, repo-create
    failures, bootstrap failures, and blueprint-sync failures
-3. extend the first `/occode-autopilot once` handoff into a repeatable
-   supervised loop after real operator proof
+3. live-proof the bounded repeat-loop behavior on the real operator host and
+   decide whether it is ready for longer unattended runs
 
 This setup track remains the operator-surface prerequisite for the later
 autonomous loop milestones, because it turns onboarding from a CLI-heavy

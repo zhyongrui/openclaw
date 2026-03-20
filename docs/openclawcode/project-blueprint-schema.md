@@ -240,10 +240,14 @@ The project-progress artifact now also carries:
 
 The autonomous-loop artifact now also carries:
 
+- `requestedIterationCount`
+- `completedIterationCount`
+- `iterations`
 - `nextWorkBlockingGateId`
 - `nextWorkPrimaryBlocker`
 - `selectedWorkItemExecutionMode`
 - `roleRouteSummary`
+- `queuedRunCount`
 - `currentRunStage`
 - `currentRunBranchName`
 - `currentRunPullRequestNumber`

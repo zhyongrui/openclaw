@@ -76,7 +76,7 @@ import {
   writeProjectProgressArtifact,
   writeProjectNextWorkSelection,
   writeProjectWorkItemInventory,
-  runProjectAutonomousLoopOnce,
+  runProjectAutonomousLoop,
   buildOpenClawCodePolicySnapshot,
   resolveAutoMergeDisposition,
   resolveAutoMergePolicy,
@@ -284,6 +284,7 @@ export interface OpenClawCodeAutonomousLoopRunOpts {
   repoRoot?: string;
   stateDir?: string;
   once?: boolean;
+  iterations?: number;
   json?: boolean;
 }
 
@@ -2139,12 +2140,14 @@ function logProjectAutonomousLoopArtifact(params: {
   runtime.log(`Enabled: ${artifact.enabled ? "yes" : "no"}`);
   runtime.log(`Mode: ${artifact.mode}`);
   runtime.log(`Status: ${artifact.status}`);
+  runtime.log(`Iterations: ${artifact.completedIterationCount}/${artifact.requestedIterationCount}`);
   runtime.log(`Next work: ${artifact.nextWorkDecision}`);
   if (artifact.nextWorkBlockingGateId) {
     runtime.log(`Next-work gate: ${artifact.nextWorkBlockingGateId}`);
   }
-  runtime.log(`Provider pause: ${artifact.providerPauseActive ? "yes" : "no"}`);
-  runtime.log(`Current run present: ${artifact.currentRunPresent ? "yes" : "no"}`);
+  runtime.log(
+    `Operator: queued=${artifact.queuedRunCount} | currentRun=${artifact.currentRunPresent ? "yes" : "no"} | pause=${artifact.providerPauseActive ? "yes" : "no"}`,
+  );
   if (artifact.selectedWorkItemId) {
     runtime.log(`Selected work item: ${artifact.selectedWorkItemId}`);
   }
@@ -2177,6 +2180,21 @@ function logProjectAutonomousLoopArtifact(params: {
   }
   if (artifact.message) {
     runtime.log(`Message: ${artifact.message}`);
+  }
+  if (artifact.iterations.length > 0) {
+    runtime.log("Iteration history:");
+    for (const iteration of artifact.iterations.slice(0, 5)) {
+      const details = [
+        `status=${iteration.status}`,
+        `decision=${iteration.nextWorkDecision}`,
+        iteration.selectedIssueNumber != null ? `issue=#${iteration.selectedIssueNumber}` : undefined,
+        iteration.queuedIssueKey ? `queued=${iteration.queuedIssueKey}` : undefined,
+        iteration.stopReason ? `stop=${iteration.stopReason}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      runtime.log(`- ${iteration.iteration}: ${details}`);
+    }
   }
 }
 
@@ -3988,20 +4006,23 @@ export async function openclawCodeAutonomousLoopRunCommand(
   runtime: RuntimeEnv,
 ): Promise<void> {
   const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const stateDir = resolveOperatorStateDir(opts.stateDir);
   const repoRef = await resolveRepoRef({
     owner: opts.owner,
     repo: opts.repo,
     repoRoot,
   }).catch(() => undefined);
   const operatorSnapshot = repoRef
-    ? await readOpenClawCodeOperatorStatusSnapshot(resolveOperatorStateDir(opts.stateDir)).catch(
-        () => undefined,
-      )
+    ? await readOpenClawCodeOperatorStatusSnapshot(stateDir).catch(() => undefined)
     : undefined;
-  const artifact = await runProjectAutonomousLoopOnce({
+  const artifact = await runProjectAutonomousLoop({
     repoRoot,
     repo: repoRef,
     operatorSnapshot,
+    readOperatorSnapshot: repoRef
+      ? async () => await readOpenClawCodeOperatorStatusSnapshot(stateDir).catch(() => undefined)
+      : undefined,
+    maxIterations: Math.max(1, Math.trunc(opts.iterations ?? (opts.once ? 1 : 1))),
   });
   logProjectAutonomousLoopArtifact({
     artifact,

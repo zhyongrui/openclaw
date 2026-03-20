@@ -9,6 +9,22 @@ import { writeProjectProgressArtifact } from "./project-progress.js";
 
 export const PROJECT_AUTONOMOUS_LOOP_SCHEMA_VERSION = 1;
 
+export interface ProjectAutonomousLoopIteration {
+  iteration: number;
+  status:
+    | "disabled"
+    | "blocked"
+    | "missing-repo"
+    | "materialized-only"
+    | "materialized-and-queued";
+  nextWorkDecision: string;
+  selectedWorkItemId: string | null;
+  selectedIssueNumber: number | null;
+  queuedIssueKey: string | null;
+  stopReason: string | null;
+  message: string | null;
+}
+
 export interface ProjectAutonomousLoopArtifact {
   repoRoot: string;
   artifactPath: string;
@@ -17,13 +33,16 @@ export interface ProjectAutonomousLoopArtifact {
   generatedAt: string | null;
   repoKey: string | null;
   enabled: boolean;
-  mode: "once" | "off" | "status";
+  mode: "once" | "repeat" | "off" | "status";
   status:
     | "disabled"
     | "blocked"
     | "missing-repo"
     | "materialized-only"
     | "materialized-and-queued";
+  requestedIterationCount: number;
+  completedIterationCount: number;
+  iterations: ProjectAutonomousLoopIteration[];
   stopReason: string | null;
   nextWorkDecision: string;
   nextWorkBlockingGateId: string | null;
@@ -35,6 +54,7 @@ export interface ProjectAutonomousLoopArtifact {
   selectedIssueUrl: string | null;
   queuedIssueKey: string | null;
   providerPauseActive: boolean;
+  queuedRunCount: number;
   currentRunPresent: boolean;
   currentRunStage: string | null;
   currentRunBranchName: string | null;
@@ -63,6 +83,9 @@ export async function setProjectAutonomousLoopDisabled(params: {
     enabled: false,
     mode: "off",
     status: "disabled",
+    requestedIterationCount: 0,
+    completedIterationCount: 0,
+    iterations: [],
     stopReason: "Autonomous loop is disabled until it is started again.",
     nextWorkDecision: "no-actionable-work-item",
     nextWorkBlockingGateId: null,
@@ -74,6 +97,7 @@ export async function setProjectAutonomousLoopDisabled(params: {
     selectedIssueUrl: null,
     queuedIssueKey: null,
     providerPauseActive: false,
+    queuedRunCount: 0,
     currentRunPresent: false,
     currentRunStage: null,
     currentRunBranchName: null,
@@ -108,6 +132,9 @@ export async function readProjectAutonomousLoopArtifact(
       enabled: false,
       mode: "status",
       status: "disabled",
+      requestedIterationCount: 0,
+      completedIterationCount: 0,
+      iterations: [],
       stopReason: null,
       nextWorkDecision: "no-actionable-work-item",
       nextWorkBlockingGateId: null,
@@ -119,6 +146,7 @@ export async function readProjectAutonomousLoopArtifact(
       selectedIssueUrl: null,
       queuedIssueKey: null,
       providerPauseActive: false,
+      queuedRunCount: 0,
       currentRunPresent: false,
       currentRunStage: null,
       currentRunBranchName: null,
@@ -127,10 +155,52 @@ export async function readProjectAutonomousLoopArtifact(
       message: null,
     };
   }
-  return JSON.parse(raw) as ProjectAutonomousLoopArtifact;
+  const parsed = JSON.parse(raw) as Partial<ProjectAutonomousLoopArtifact>;
+  return {
+    repoRoot,
+    artifactPath,
+    exists: parsed.exists ?? true,
+    schemaVersion: parsed.schemaVersion ?? PROJECT_AUTONOMOUS_LOOP_SCHEMA_VERSION,
+    generatedAt: parsed.generatedAt ?? null,
+    repoKey: parsed.repoKey ?? null,
+    enabled: parsed.enabled ?? false,
+    mode:
+      parsed.mode === "once" || parsed.mode === "repeat" || parsed.mode === "off"
+        ? parsed.mode
+        : "status",
+    status:
+      parsed.status === "disabled" ||
+      parsed.status === "blocked" ||
+      parsed.status === "missing-repo" ||
+      parsed.status === "materialized-only" ||
+      parsed.status === "materialized-and-queued"
+        ? parsed.status
+        : "disabled",
+    requestedIterationCount: parsed.requestedIterationCount ?? 0,
+    completedIterationCount: parsed.completedIterationCount ?? 0,
+    iterations: Array.isArray(parsed.iterations) ? parsed.iterations : [],
+    stopReason: parsed.stopReason ?? null,
+    nextWorkDecision: parsed.nextWorkDecision ?? "no-actionable-work-item",
+    nextWorkBlockingGateId: parsed.nextWorkBlockingGateId ?? null,
+    nextWorkPrimaryBlocker: parsed.nextWorkPrimaryBlocker ?? null,
+    selectedWorkItemId: parsed.selectedWorkItemId ?? null,
+    selectedWorkItemExecutionMode: parsed.selectedWorkItemExecutionMode ?? null,
+    roleRouteSummary: Array.isArray(parsed.roleRouteSummary) ? parsed.roleRouteSummary : [],
+    selectedIssueNumber: parsed.selectedIssueNumber ?? null,
+    selectedIssueUrl: parsed.selectedIssueUrl ?? null,
+    queuedIssueKey: parsed.queuedIssueKey ?? null,
+    providerPauseActive: parsed.providerPauseActive ?? false,
+    queuedRunCount: parsed.queuedRunCount ?? 0,
+    currentRunPresent: parsed.currentRunPresent ?? false,
+    currentRunStage: parsed.currentRunStage ?? null,
+    currentRunBranchName: parsed.currentRunBranchName ?? null,
+    currentRunPullRequestNumber: parsed.currentRunPullRequestNumber ?? null,
+    currentRunPullRequestUrl: parsed.currentRunPullRequestUrl ?? null,
+    message: parsed.message ?? null,
+  };
 }
 
-export async function runProjectAutonomousLoopOnce(params: {
+async function runProjectAutonomousLoopIteration(params: {
   repoRoot: string;
   repo?: RepoRef;
   operatorSnapshot?: OpenClawCodeOperatorStatusSnapshot;
@@ -143,6 +213,7 @@ export async function runProjectAutonomousLoopOnce(params: {
     repo: params.repo,
     operatorSnapshot: params.operatorSnapshot,
   });
+  const queuedRunCount = progress.operator.queuedRunCount;
   const currentRunPresent = progress.operator.currentRunCount > 0;
   const providerPauseActive = progress.operator.providerPauseActive;
 
@@ -156,6 +227,8 @@ export async function runProjectAutonomousLoopOnce(params: {
     stopReason = "Resolve the GitHub owner/repo before autonomous issue materialization can continue.";
   } else if (providerPauseActive) {
     stopReason = "Provider pause is active.";
+  } else if (queuedRunCount > 0) {
+    stopReason = "A run is already queued for this repository.";
   } else if (currentRunPresent) {
     stopReason = "A run is already active for this repository.";
   } else if (progress.nextWorkDecision !== "ready-to-execute") {
@@ -189,6 +262,9 @@ export async function runProjectAutonomousLoopOnce(params: {
       enabled: true,
       mode: "once",
       status,
+      requestedIterationCount: 1,
+      completedIterationCount: 1,
+      iterations: [],
       stopReason,
       nextWorkDecision: progress.nextWorkDecision,
       nextWorkBlockingGateId: progress.nextWorkBlockingGateId,
@@ -200,6 +276,7 @@ export async function runProjectAutonomousLoopOnce(params: {
       selectedIssueUrl: issueMaterialization.selectedIssueUrl,
       queuedIssueKey,
       providerPauseActive,
+      queuedRunCount,
       currentRunPresent,
       currentRunStage: progress.operator.currentRunStage,
       currentRunBranchName: progress.operator.currentRunBranchName,
@@ -222,6 +299,9 @@ export async function runProjectAutonomousLoopOnce(params: {
     enabled: true,
     mode: "once",
     status,
+    requestedIterationCount: 1,
+    completedIterationCount: 1,
+    iterations: [],
     stopReason,
     nextWorkDecision: progress.nextWorkDecision,
     nextWorkBlockingGateId: progress.nextWorkBlockingGateId,
@@ -233,6 +313,7 @@ export async function runProjectAutonomousLoopOnce(params: {
     selectedIssueUrl: progress.selectedIssueUrl,
     queuedIssueKey,
     providerPauseActive,
+    queuedRunCount,
     currentRunPresent,
     currentRunStage: progress.operator.currentRunStage,
     currentRunBranchName: progress.operator.currentRunBranchName,
@@ -243,4 +324,132 @@ export async function runProjectAutonomousLoopOnce(params: {
   await mkdir(path.dirname(artifactPath), { recursive: true });
   await writeFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
   return artifact;
+}
+
+function shouldContinueAutonomousLoop(params: {
+  artifact: ProjectAutonomousLoopArtifact;
+  iteration: number;
+  maxIterations: number;
+}): { continue: boolean; stopReason?: string } {
+  if (params.iteration >= params.maxIterations) {
+    return {
+      continue: false,
+      stopReason: params.artifact.stopReason,
+    };
+  }
+  if (
+    params.artifact.status === "blocked" ||
+    params.artifact.status === "missing-repo" ||
+    params.artifact.status === "disabled"
+  ) {
+    return {
+      continue: false,
+      stopReason: params.artifact.stopReason,
+    };
+  }
+  if (params.artifact.status === "materialized-only") {
+    return {
+      continue: false,
+      stopReason:
+        params.artifact.queuedIssueKey == null
+          ? "Autonomous loop stopped after materialization because no queue handoff is configured."
+          : params.artifact.stopReason,
+    };
+  }
+  return { continue: true };
+}
+
+export async function runProjectAutonomousLoop(params: {
+  repoRoot: string;
+  repo?: RepoRef;
+  operatorSnapshot?: OpenClawCodeOperatorStatusSnapshot;
+  readOperatorSnapshot?: () => Promise<OpenClawCodeOperatorStatusSnapshot | undefined>;
+  queueIssue?: (args: { issueNumber: number }) => Promise<{ queued: boolean; issueKey: string | null }>;
+  maxIterations?: number;
+}): Promise<ProjectAutonomousLoopArtifact> {
+  const repoRoot = path.resolve(params.repoRoot);
+  const artifactPath = resolveProjectAutonomousLoopArtifactPath(repoRoot);
+  const maxIterations = Math.max(1, Math.trunc(params.maxIterations ?? 1));
+  const iterations: ProjectAutonomousLoopIteration[] = [];
+  let latest = await runProjectAutonomousLoopIteration({
+    repoRoot,
+    repo: params.repo,
+    operatorSnapshot: params.operatorSnapshot,
+    queueIssue: params.queueIssue,
+  });
+
+  iterations.push({
+    iteration: 1,
+    status: latest.status,
+    nextWorkDecision: latest.nextWorkDecision,
+    selectedWorkItemId: latest.selectedWorkItemId,
+    selectedIssueNumber: latest.selectedIssueNumber,
+    queuedIssueKey: latest.queuedIssueKey,
+    stopReason: latest.stopReason,
+    message: latest.message,
+  });
+
+  for (let iteration = 2; iteration <= maxIterations; iteration += 1) {
+    const decision = shouldContinueAutonomousLoop({
+      artifact: latest,
+      iteration: iteration - 1,
+      maxIterations,
+    });
+    if (!decision.continue) {
+      latest = {
+        ...latest,
+        requestedIterationCount: maxIterations,
+        completedIterationCount: iterations.length,
+        iterations,
+        mode: maxIterations > 1 ? "repeat" : "once",
+        stopReason: decision.stopReason ?? latest.stopReason,
+      };
+      await mkdir(path.dirname(artifactPath), { recursive: true });
+      await writeFile(artifactPath, `${JSON.stringify(latest, null, 2)}\n`, "utf8");
+      return latest;
+    }
+
+    const operatorSnapshot = params.readOperatorSnapshot
+      ? await params.readOperatorSnapshot()
+      : params.operatorSnapshot;
+    latest = await runProjectAutonomousLoopIteration({
+      repoRoot,
+      repo: params.repo,
+      operatorSnapshot,
+      queueIssue: params.queueIssue,
+    });
+    iterations.push({
+      iteration,
+      status: latest.status,
+      nextWorkDecision: latest.nextWorkDecision,
+      selectedWorkItemId: latest.selectedWorkItemId,
+      selectedIssueNumber: latest.selectedIssueNumber,
+      queuedIssueKey: latest.queuedIssueKey,
+      stopReason: latest.stopReason,
+      message: latest.message,
+    });
+  }
+
+  latest = {
+    ...latest,
+    requestedIterationCount: maxIterations,
+    completedIterationCount: iterations.length,
+    iterations,
+    mode: maxIterations > 1 ? "repeat" : "once",
+  };
+  await mkdir(path.dirname(artifactPath), { recursive: true });
+  await writeFile(artifactPath, `${JSON.stringify(latest, null, 2)}\n`, "utf8");
+  return latest;
+}
+
+export async function runProjectAutonomousLoopOnce(params: {
+  repoRoot: string;
+  repo?: RepoRef;
+  operatorSnapshot?: OpenClawCodeOperatorStatusSnapshot;
+  queueIssue?: (args: { issueNumber: number }) => Promise<{ queued: boolean; issueKey: string | null }>;
+}): Promise<ProjectAutonomousLoopArtifact> {
+  return await runProjectAutonomousLoop({
+    ...params,
+    maxIterations: 1,
+  });
 }

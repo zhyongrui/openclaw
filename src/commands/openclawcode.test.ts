@@ -3178,12 +3178,22 @@ describe("openclawCodeRunCommand", () => {
     expect(loop).toMatchObject({
       repoRoot,
       exists: true,
+      mode: "once",
       status: "materialized-only",
+      requestedIterationCount: 1,
+      completedIterationCount: 1,
       nextWorkDecision: "ready-to-execute",
       selectedWorkItemId: "planned-01-show-blueprint-aware-progress-in-one-artifact",
       selectedWorkItemExecutionMode: "feature",
       selectedIssueNumber: 654,
     });
+    expect(loop.iterations).toEqual([
+      expect.objectContaining({
+        iteration: 1,
+        status: "materialized-only",
+        selectedIssueNumber: 654,
+      }),
+    ]);
 
     runtime.log.mockClear();
     await openclawCodeAutonomousLoopShowCommand(
@@ -3290,6 +3300,98 @@ describe("openclawCodeRunCommand", () => {
     expect(loop.nextWorkPrimaryBlocker).toBe(
       "The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
     );
+  });
+
+  it("records repeat-loop iteration history when no queue handoff is configured", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-autonomous-loop-repeat-"));
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Repeat Loop Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Repeat Loop Blueprint",
+        "",
+        "## Goal",
+        "Record supervised repeat-loop progress even before queue handoff is wired in.",
+        "",
+        "## Success Criteria",
+        "- Repeat mode records at least one iteration and a precise stop reason.",
+        "",
+        "## Scope",
+        "- In scope: repeat-loop artifact behavior.",
+        "",
+        "## Non-Goals",
+        "- Real queue execution.",
+        "",
+        "## Constraints",
+        "- Stop cleanly when the next step needs external queue handoff.",
+        "",
+        "## Risks",
+        "- Repeat mode could spin uselessly without a stop condition.",
+        "",
+        "## Assumptions",
+        "- The repository can resolve its GitHub remote.",
+        "",
+        "## Human Gates",
+        "- Merge promotion: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Show supervised repeat-loop history in the artifact.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: repeat-loop baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeAutonomousLoopRunCommand(
+      {
+        owner: "openclaw",
+        repo: "openclaw",
+        repoRoot,
+        iterations: 3,
+        json: true,
+      },
+      runtime,
+    );
+
+    const loop = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(loop).toMatchObject({
+      mode: "repeat",
+      status: "materialized-only",
+      requestedIterationCount: 3,
+      completedIterationCount: 1,
+      stopReason:
+        "Autonomous loop stopped after materialization because no queue handoff is configured.",
+    });
+    expect(loop.iterations).toEqual([
+      expect.objectContaining({
+        iteration: 1,
+        status: "materialized-only",
+      }),
+    ]);
   });
 
   it("surfaces active-run stage and role routing through project progress and autopilot artifacts", async () => {

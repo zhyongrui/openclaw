@@ -550,12 +550,13 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
 
   code
     .command("autonomous-loop-run")
-    .description("Run one autonomous blueprint-backed progress iteration")
+    .description("Run one or more supervised autonomous blueprint-backed progress iterations")
     .option("--owner <owner>", "GitHub repository owner")
     .option("--repo <repo>", "GitHub repository name")
     .option("--repo-root <dir>", "Local repository root")
     .option("--state-dir <dir>", "Operator state directory")
     .option("--once", "Run a single iteration", false)
+    .option("--iterations <count>", "Run up to this many supervised iterations", "1")
     .option("--json", "Output JSON", false)
     .action(async (opts) => {
       await runCommandWithRuntime(defaultRuntime, async () => {
@@ -566,6 +567,7 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             repoRoot: opts.repoRoot as string | undefined,
             stateDir: opts.stateDir as string | undefined,
             once: Boolean(opts.once),
+            iterations: Number.parseInt(String(opts.iterations ?? "1"), 10),
             json: Boolean(opts.json),
           },
           defaultRuntime,
