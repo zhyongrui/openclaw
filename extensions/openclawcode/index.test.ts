@@ -6570,7 +6570,9 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain(
         "- iteration 1: materialized-and-queued | ready-to-execute | #88 | zhyongrui/openclawcode#88",
       );
-      expect(result?.text).toContain("- iteration 2: blocked | ready-to-execute | #88");
+      expect(result?.text).toContain(
+        "- iteration 2: blocked | ready-to-execute | #88 | stop=A run is already queued for this repository.",
+      );
 
       const artifact = await readProjectAutonomousLoopArtifact(fixture.repoRoot);
       expect(artifact).toMatchObject({
@@ -6722,6 +6724,9 @@ describe("openclawcode extension", () => {
 
       expect(result?.text).toContain("Status: blocked");
       expect(result?.text).toContain("Stop reason: A run is already queued for this repository.");
+      expect(result?.text).toContain(
+        "- iteration 1: blocked | ready-to-execute | stop=A run is already queued for this repository.",
+      );
 
       const artifact = await readProjectAutonomousLoopArtifact(fixture.repoRoot);
       expect(artifact).toMatchObject({

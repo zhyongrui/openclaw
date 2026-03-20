@@ -3180,9 +3180,15 @@ function buildAutonomousLoopSummaryMessage(params: {
     lines.push(`Next: ${nextSuggestedCommand}`);
   }
   for (const iteration of params.artifact.iterations.slice(0, 3)) {
-    lines.push(
-      `- iteration ${iteration.iteration}: ${iteration.status} | ${iteration.nextWorkDecision}${iteration.selectedIssueNumber != null ? ` | #${iteration.selectedIssueNumber}` : ""}${iteration.queuedIssueKey ? ` | ${iteration.queuedIssueKey}` : ""}`,
-    );
+    const iterationParts = [
+      `${iteration.status}`,
+      `${iteration.nextWorkDecision}`,
+      iteration.selectedIssueNumber != null ? `#${iteration.selectedIssueNumber}` : null,
+      iteration.queuedIssueKey,
+      iteration.stopReason ? `stop=${iteration.stopReason}` : null,
+      iteration.message ? `message=${iteration.message}` : null,
+    ].filter((part): part is string => Boolean(part));
+    lines.push(`- iteration ${iteration.iteration}: ${iterationParts.join(" | ")}`);
   }
   return lines.join("\n");
 }
