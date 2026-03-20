@@ -4008,6 +4008,181 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("pushes the next setup message automatically after GitHub auth completes", async () => {
+    const fixture = await registerPluginFixture({ pollIntervalMs: 10 });
+    mocked.resolveOnboardingGitHubToken.mockReturnValue(null);
+    mocked.inspectOnboardingGitHubCliDeviceLogin.mockResolvedValue({
+      state: "authorized",
+      running: false,
+      source: "gh-auth-token",
+      userCode: "ABCD-EFGH",
+      verificationUri: "https://github.com/login/device",
+      startedAt: "2026-03-19T02:35:00.000Z",
+      completedAt: "2026-03-19T02:36:00.000Z",
+    });
+    mocked.runOnboardingOpenClawCodeBootstrap.mockResolvedValue({
+      repo: {
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        repoKey: "zhyongrui/openclawcode",
+        repoRoot: fixture.repoRoot,
+        checkoutAction: "attached",
+      },
+      blueprint: {
+        blueprintPath: path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        status: "draft",
+        revisionId: "rev-bootstrap",
+      },
+      pluginActivation: {
+        ready: true,
+        pluginsEnabled: true,
+        allowlisted: true,
+        entryEnabled: true,
+      },
+      proofReadiness: {
+        cliProofReady: true,
+        chatProofReady: true,
+        chatSetupRoutingReady: true,
+      },
+      handoff: {
+        blueprintCommand: "/occode-blueprint zhyongrui/openclawcode",
+      },
+      nextAction: "clarify-project-blueprint",
+    });
+    await fixture.store.upsertSetupSession({
+      notifyChannel: "feishu",
+      notifyTarget: "user:setup-chat",
+      projectMode: "existing-repo",
+      repoKey: "zhyongrui/openclawcode",
+      stage: "awaiting-github-device-auth",
+      githubDeviceAuth: {
+        pid: 321,
+        logPath: "/tmp/gh-auth.log",
+        userCode: "ABCD-EFGH",
+        verificationUri: "https://github.com/login/device",
+        startedAt: "2026-03-19T02:35:00.000Z",
+      },
+      createdAt: "2026-03-19T02:35:00.000Z",
+      updatedAt: "2026-03-19T02:35:00.000Z",
+    });
+
+    try {
+      await fixture.service?.start({
+        config: {},
+        stateDir: fixture.stateDir,
+        logger: { info() {}, warn() {}, error() {} },
+      });
+
+      await waitForAssertion(async () => {
+        expect(mocked.runMessageAction).toHaveBeenCalled();
+        expect(
+          mocked.runMessageAction.mock.calls.some((call) =>
+            String(call[0]?.params?.message ?? "").includes(
+              "OpenClaw Code bootstrap finished for this setup session.",
+            ),
+          ),
+        ).toBe(true);
+      });
+
+      expect(
+        mocked.runMessageAction.mock.calls.some((call) =>
+          String(call[0]?.params?.message ?? "").includes("Plugin activation: ready"),
+        ),
+      ).toBe(true);
+      expect(mocked.runOnboardingOpenClawCodeBootstrap).toHaveBeenCalledWith({
+        repo: "zhyongrui/openclawcode",
+      });
+      await waitForAssertion(async () => {
+        expect(
+          await fixture.store.getSetupSession({
+            notifyChannel: "feishu",
+            notifyTarget: "user:setup-chat",
+          }),
+        ).toMatchObject({
+          stage: "bootstrap-complete",
+          githubAuthSource: "gh-auth-token",
+          githubDeviceAuth: {
+            completedAt: "2026-03-19T02:36:00.000Z",
+            notificationState: "authorized",
+          },
+          bootstrap: {
+            pluginActivation: {
+              ready: true,
+            },
+            proofReadiness: {
+              chatSetupRoutingReady: true,
+            },
+          },
+        });
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("pushes a retry message automatically after GitHub auth fails", async () => {
+    const fixture = await registerPluginFixture({ pollIntervalMs: 10 });
+    mocked.resolveOnboardingGitHubToken.mockReturnValue(null);
+    mocked.inspectOnboardingGitHubCliDeviceLogin.mockResolvedValue({
+      state: "failed",
+      running: false,
+      reason: "GitHub device approval expired.",
+      userCode: "ABCD-EFGH",
+      verificationUri: "https://github.com/login/device",
+      startedAt: "2026-03-19T02:35:00.000Z",
+      completedAt: "2026-03-19T02:40:00.000Z",
+    });
+    await fixture.store.upsertSetupSession({
+      notifyChannel: "feishu",
+      notifyTarget: "user:setup-chat",
+      projectMode: "existing-repo",
+      repoKey: "zhyongrui/openclawcode",
+      stage: "awaiting-github-device-auth",
+      githubDeviceAuth: {
+        pid: 321,
+        logPath: "/tmp/gh-auth.log",
+        userCode: "ABCD-EFGH",
+        verificationUri: "https://github.com/login/device",
+        startedAt: "2026-03-19T02:35:00.000Z",
+      },
+      createdAt: "2026-03-19T02:35:00.000Z",
+      updatedAt: "2026-03-19T02:35:00.000Z",
+    });
+
+    try {
+      await fixture.service?.start({
+        config: {},
+        stateDir: fixture.stateDir,
+        logger: { info() {}, warn() {}, error() {} },
+      });
+
+      await waitForAssertion(async () => {
+        expect(mocked.runMessageAction).toHaveBeenCalled();
+        expect(
+          mocked.runMessageAction.mock.calls.some((call) =>
+            String(call[0]?.params?.message ?? "").includes("GitHub device approval expired."),
+          ),
+        ).toBe(true);
+      });
+
+      expect(mocked.runOnboardingOpenClawCodeBootstrap).not.toHaveBeenCalled();
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "feishu",
+          notifyTarget: "user:setup-chat",
+        }),
+      ).toMatchObject({
+        stage: "awaiting-github-device-auth",
+        githubDeviceAuth: {
+          failureReason: "GitHub device approval expired.",
+          notificationState: "failed",
+        },
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
   it("captures blueprint alignment details after bootstrap completes", async () => {
     const fixture = await registerPluginFixture();
     mocked.resolveOnboardingGitHubToken.mockReturnValue({

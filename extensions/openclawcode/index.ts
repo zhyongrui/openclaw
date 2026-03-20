@@ -125,12 +125,20 @@ type SetupCheckReadinessPayload = {
   lowRiskProofReady: boolean;
   fallbackProofReady: boolean;
   promotionReady: boolean;
+  chatSetupRoutingReady: boolean;
   gatewayReachable: boolean;
   routeProbeReady: boolean;
   routeProbeSkipped: boolean;
   builtStartupProofRequested: boolean;
   builtStartupProofReady: boolean;
   nextAction: string;
+};
+
+type SetupCheckPluginActivationPayload = {
+  ready: boolean;
+  pluginsEnabled: boolean;
+  allowlisted: boolean;
+  entryEnabled: boolean;
 };
 
 type SetupCheckSummaryPayload = {
@@ -145,6 +153,7 @@ type SetupCheckProbePayload = {
   repoRoot: string;
   operatorRoot: string;
   readiness: SetupCheckReadinessPayload;
+  pluginActivation?: SetupCheckPluginActivationPayload;
   summary: SetupCheckSummaryPayload;
 };
 
@@ -231,7 +240,8 @@ function buildChatSetupAwaitingGitHubAuthMessage(params: {
     `Code: ${params.userCode}`,
     params.selectionLabel ? `Selected target: ${params.selectionLabel}` : undefined,
     "The host-side GitHub login flow is already running.",
-    "Finish approval in your browser, then send /occode-setup-status here.",
+    "Finish approval in your browser. OpenClaw Code will push the next status here automatically.",
+    "If that push does not arrive, send /occode-setup-status here.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -515,8 +525,14 @@ function buildChatSetupBootstrapCompleteMessage(params: {
     typeof params.bootstrap.needsHumanDecisionCount === "number"
       ? `Stage gates: blocked=${params.bootstrap.blockedGateCount} | needsHumanDecision=${params.bootstrap.needsHumanDecisionCount}`
       : undefined,
+    params.bootstrap.pluginActivation
+      ? `Plugin activation: ${params.bootstrap.pluginActivation.ready ? "ready" : "blocked"} | plugins=${params.bootstrap.pluginActivation.pluginsEnabled ? "enabled" : "disabled"} | allow=${params.bootstrap.pluginActivation.allowlisted ? "ready" : "missing"} | entry=${params.bootstrap.pluginActivation.entryEnabled ? "enabled" : "disabled"}`
+      : undefined,
     typeof params.bootstrap.readyForIssueProjection === "boolean"
       ? `Issue projection: ${params.bootstrap.readyForIssueProjection ? "ready" : "blocked"}`
+      : undefined,
+    typeof params.bootstrap.proofReadiness?.chatSetupRoutingReady === "boolean"
+      ? `Chat setup routing: ${params.bootstrap.proofReadiness.chatSetupRoutingReady ? "ready" : "blocked"}`
       : undefined,
     params.bootstrap.firstWorkItemTitle
       ? `First work item: ${params.bootstrap.firstWorkItemTitle}`
@@ -939,6 +955,7 @@ async function completeChatSetupBootstrap(params: {
       readyForIssueProjection: workItems?.readyForIssueProjection,
       blockedGateCount: stageGates?.blockedGateCount,
       needsHumanDecisionCount: stageGates?.needsHumanDecisionCount,
+      pluginActivation: payload.pluginActivation,
       firstWorkItemTitle: workItems?.workItems[0]?.title,
       nextSuggestedCommand,
       autoBindStatus: autoBind?.status,
@@ -1048,6 +1065,75 @@ async function continueChatSetupSession(params: {
       synced.session.lastFailure?.step === "bootstrap" ||
       synced.session.lastFailure?.step === "blueprint-sync",
   });
+}
+
+function resolveSetupSessionNotificationState(params: {
+  session: ChatSetupSession;
+  status?: OnboardingGitHubCliDeviceLoginStatus;
+}): "authorized" | "failed" | null {
+  if (params.status?.state === "failed") {
+    return "failed";
+  }
+  if (
+    params.session.githubAuthSource &&
+    params.session.stage !== "awaiting-github-device-auth"
+  ) {
+    return "authorized";
+  }
+  return null;
+}
+
+async function processPendingSetupSessions(
+  api: OpenClawPluginApi,
+  store: OpenClawCodeChatopsStore,
+): Promise<void> {
+  const sessions = await store.listSetupSessions();
+  for (const session of sessions) {
+    if (
+      session.stage !== "awaiting-github-device-auth" ||
+      !session.githubDeviceAuth ||
+      session.githubDeviceAuth.notificationState
+    ) {
+      continue;
+    }
+
+    const synced = await syncChatSetupSession({
+      store,
+      session,
+    });
+    const notificationState = resolveSetupSessionNotificationState(synced);
+    if (!notificationState) {
+      continue;
+    }
+
+    const message = await continueChatSetupSession({
+      store,
+      session: synced.session,
+    });
+    await sendText({
+      api,
+      channel: synced.session.notifyChannel,
+      target: synced.session.notifyTarget,
+      text: message,
+    });
+
+    const latest = await store.getSetupSession({
+      notifyChannel: synced.session.notifyChannel,
+      notifyTarget: synced.session.notifyTarget,
+    });
+    if (!latest?.githubDeviceAuth) {
+      continue;
+    }
+    await store.upsertSetupSession({
+      ...latest,
+      githubDeviceAuth: {
+        ...latest.githubDeviceAuth,
+        notificationState,
+        notificationSentAt: new Date().toISOString(),
+      },
+      updatedAt: new Date().toISOString(),
+    });
+  }
 }
 
 async function syncChatSetupSession(params: {
@@ -1636,12 +1722,28 @@ function isSetupCheckReadinessPayload(value: unknown): value is SetupCheckReadin
     typeof candidate.lowRiskProofReady === "boolean" &&
     typeof candidate.fallbackProofReady === "boolean" &&
     typeof candidate.promotionReady === "boolean" &&
+    typeof candidate.chatSetupRoutingReady === "boolean" &&
     typeof candidate.gatewayReachable === "boolean" &&
     typeof candidate.routeProbeReady === "boolean" &&
     typeof candidate.routeProbeSkipped === "boolean" &&
     typeof candidate.builtStartupProofRequested === "boolean" &&
     typeof candidate.builtStartupProofReady === "boolean" &&
     typeof candidate.nextAction === "string"
+  );
+}
+
+function isSetupCheckPluginActivationPayload(
+  value: unknown,
+): value is SetupCheckPluginActivationPayload {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.ready === "boolean" &&
+    typeof candidate.pluginsEnabled === "boolean" &&
+    typeof candidate.allowlisted === "boolean" &&
+    typeof candidate.entryEnabled === "boolean"
   );
 }
 
@@ -1688,6 +1790,9 @@ function parseSetupCheckProbePayload(stdout: string): SetupCheckProbePayload | u
     repoRoot: candidate.repoRoot,
     operatorRoot: candidate.operatorRoot,
     readiness: candidate.readiness,
+    pluginActivation: isSetupCheckPluginActivationPayload(candidate.pluginActivation)
+      ? candidate.pluginActivation
+      : undefined,
     summary: candidate.summary,
   };
 }
@@ -8246,9 +8351,11 @@ export default {
         workerActive = false;
         runnerReady = true;
         pollTimer = setInterval(() => {
-          void processNextQueuedRun(api, store);
+          void processPendingSetupSessions(api, store).catch(() => undefined);
+          void processNextQueuedRun(api, store).catch(() => undefined);
         }, intervalMs);
         pollTimer.unref?.();
+        await processPendingSetupSessions(api, store);
         kickQueueDrain(api, store);
       },
       stop: async () => {

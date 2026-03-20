@@ -546,6 +546,12 @@ describe("OpenClawCodeChatopsStore", () => {
             readyForIssueProjection: false,
             blockedGateCount: 1,
             needsHumanDecisionCount: 1,
+            pluginActivation: {
+              ready: true,
+              pluginsEnabled: true,
+              allowlisted: true,
+              entryEnabled: true,
+            },
             firstWorkItemTitle: "[Blueprint]: Capture project goal",
             nextSuggestedCommand: "/occode-gates zhyongrui/openclawcode",
             autoBindStatus: "existing-binding-kept",
@@ -554,6 +560,11 @@ describe("OpenClawCodeChatopsStore", () => {
             clarificationQuestions: ["What exact operator-visible success proves readiness?"],
             nextAction: "clarify-project-blueprint",
             blueprintCommand: "/occode-blueprint zhyongrui/openclawcode",
+            proofReadiness: {
+              cliProofReady: true,
+              chatProofReady: true,
+              chatSetupRoutingReady: true,
+            },
           },
           githubDeviceAuth: {
             pid: 321,
@@ -562,6 +573,8 @@ describe("OpenClawCodeChatopsStore", () => {
             verificationUri: "https://github.com/login/device",
             startedAt: createdAt,
             completedAt: "2026-03-19T02:03:00.000Z",
+            notificationState: "authorized",
+            notificationSentAt: "2026-03-19T02:04:00.000Z",
           },
           createdAt: "2026-03-19T02:03:00.000Z",
           updatedAt: "2026-03-19T02:03:00.000Z",
@@ -582,9 +595,16 @@ describe("OpenClawCodeChatopsStore", () => {
           nextAction: "clarify-project-blueprint",
           workItemCount: 2,
           autoBindStatus: "existing-binding-kept",
+          pluginActivation: {
+            ready: true,
+          },
+          proofReadiness: {
+            chatSetupRoutingReady: true,
+          },
         },
         createdAt,
       });
+      await expect(fixture.store.listSetupSessions()).resolves.toHaveLength(1);
 
       expect(
         await fixture.store.removeSetupSession({

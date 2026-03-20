@@ -3,6 +3,9 @@
 ## Completed Repo-Local Proofs
 
 - strict setup-check and built-startup readiness
+- chat-native setup hardening proofs for:
+  - explicit plugin activation readiness / chat-setup-routing visibility
+  - automatic post-auth chat push after browser-side GitHub device approval
 - issue-driven local runs with worktrees, build, verify, PR publication, and
   merge-policy explanation
 - provider pause and compact failure diagnostics
@@ -29,6 +32,9 @@
 ## Still Pending Live Proofs
 
 - blueprint-first live proof end-to-end from goal discussion to merged PR
+- live operator proof that the hardened chat-native setup path:
+  - reports plugin activation / routing readiness clearly on a fresh machine
+  - pushes the next setup message automatically after browser auth completes
 
 ## External-Usable Proof Gate
 

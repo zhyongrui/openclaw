@@ -48,7 +48,8 @@ FAIL_COUNT=0
 LAST_RETRY_ERROR=""
 RESULTS_FILE="${TMPDIR:-/tmp}/openclawcode-setup-check-results.$$"
 MODEL_INVENTORY_JSON='{"available":0,"keys":[],"configuredFallbacks":[],"fallbackReady":false}'
-READINESS_JSON='{"basic":false,"strict":false,"lowRiskProofReady":false,"fallbackProofReady":false,"promotionReady":false,"gatewayReachable":false,"routeProbeReady":false,"routeProbeSkipped":false,"builtStartupProofRequested":false,"builtStartupProofReady":false,"nextAction":"fix-failing-checks"}'
+PLUGIN_ACTIVATION_JSON='{"ready":false,"pluginsEnabled":false,"allowlisted":false,"entryEnabled":false}'
+READINESS_JSON='{"basic":false,"strict":false,"lowRiskProofReady":false,"fallbackProofReady":false,"promotionReady":false,"chatSetupRoutingReady":false,"gatewayReachable":false,"routeProbeReady":false,"routeProbeSkipped":false,"builtStartupProofRequested":false,"builtStartupProofReady":false,"nextAction":"fix-failing-checks"}'
 NODE_VERSION_FLOOR_OK=0
 STARTUP_PROOF_TEMP_DIR=""
 
@@ -71,6 +72,7 @@ Checks:
   - repo root and built CLI artifact
   - local Node version satisfies the CLI startup floor
   - env/config/state files used by the local operator flow
+  - openclawcode plugin activation and chat-routing readiness
   - webhook secret presence
   - GitHub token presence
   - local gateway TCP reachability
@@ -514,6 +516,80 @@ PY
     pass "repo binding present for ${GITHUB_REPO}: ${binding}"
   else
     warn "no saved repo binding for ${GITHUB_REPO}; /occode-bind is recommended"
+  fi
+}
+
+check_plugin_activation() {
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    fail "operator config missing: ${CONFIG_FILE}"
+    return
+  fi
+
+  local result
+  if ! result="$(
+    python3 - "$CONFIG_FILE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+
+with config_path.open("r", encoding="utf-8") as handle:
+    config = json.load(handle)
+
+plugins = config.get("plugins") or {}
+entries = plugins.get("entries") or {}
+openclawcode = entries.get("openclawcode") or {}
+
+plugins_enabled = plugins.get("enabled") is True
+allow = plugins.get("allow")
+allowlisted = isinstance(allow, list) and "openclawcode" in allow
+entry_enabled = isinstance(openclawcode, dict) and openclawcode.get("enabled") is True
+
+missing = []
+if not plugins_enabled:
+    missing.append("plugins.enabled=true")
+if not allowlisted:
+    missing.append('plugins.allow includes "openclawcode"')
+if not entry_enabled:
+    missing.append("plugins.entries.openclawcode.enabled=true")
+
+print(json.dumps({
+    "ready": plugins_enabled and allowlisted and entry_enabled,
+    "pluginsEnabled": plugins_enabled,
+    "allowlisted": allowlisted,
+    "entryEnabled": entry_enabled,
+    "missing": missing,
+}))
+PY
+  )"; then
+    fail "unable to inspect plugin activation in ${CONFIG_FILE}"
+    return
+  fi
+
+  PLUGIN_ACTIVATION_JSON="$result"
+
+  local verdict
+  verdict="$(
+    python3 - "$result" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+if payload.get("ready") is True:
+    print("pass\topenclawcode plugin activation ready for chat routing")
+else:
+    missing = ", ".join(payload.get("missing") or []) or "unknown requirement"
+    print(f'fail\topenclawcode plugin activation missing: {missing}')
+PY
+  )"
+
+  local status="${verdict%%$'\t'*}"
+  local message="${verdict#*$'\t'}"
+  if [[ "$status" == "pass" ]]; then
+    pass "$message"
+  else
+    fail "$message"
   fi
 }
 
@@ -1098,7 +1174,7 @@ check_tunnel_status() {
 
 refresh_readiness_json() {
   READINESS_JSON="$(
-    python3 - "$FAIL_COUNT" "$WARN_COUNT" "$MODEL_INVENTORY_JSON" "$RESULTS_FILE" "$PROBE_BUILT_STARTUP" "$SKIP_ROUTE_PROBE" <<'PY'
+    python3 - "$FAIL_COUNT" "$WARN_COUNT" "$MODEL_INVENTORY_JSON" "$PLUGIN_ACTIVATION_JSON" "$RESULTS_FILE" "$PROBE_BUILT_STARTUP" "$SKIP_ROUTE_PROBE" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -1106,9 +1182,10 @@ from pathlib import Path
 fail_count = int(sys.argv[1])
 warn_count = int(sys.argv[2])
 model_inventory = json.loads(sys.argv[3])
-results_path = Path(sys.argv[4])
-built_startup_requested = sys.argv[5] == "1"
-route_probe_skipped = sys.argv[6] == "1"
+plugin_activation = json.loads(sys.argv[4])
+results_path = Path(sys.argv[5])
+built_startup_requested = sys.argv[6] == "1"
+route_probe_skipped = sys.argv[7] == "1"
 
 entries = []
 for line in results_path.read_text(encoding="utf-8").splitlines():
@@ -1125,11 +1202,14 @@ strict_ready = fail_count == 0 and warn_count == 0
 low_risk_ready = strict_ready
 fallback_ready = strict_ready and bool(model_inventory.get("fallbackReady"))
 promotion_ready = strict_ready
+chat_setup_routing_ready = bool(plugin_activation.get("ready"))
 gateway_reachable = has("pass", "gateway reachable:")
 route_probe_ready = has("pass", "signed webhook probe reached plugin route")
 built_startup_ready = has("pass", "built gateway startup proof reached listener")
 
-if not basic_ready:
+if not chat_setup_routing_ready:
+    next_action = "repair-plugin-activation"
+elif not basic_ready:
     if built_startup_requested and built_startup_ready and not gateway_reachable:
         next_action = "start-or-restart-live-gateway"
     elif built_startup_requested and not built_startup_ready:
@@ -1149,6 +1229,7 @@ print(json.dumps({
     "lowRiskProofReady": low_risk_ready,
     "fallbackProofReady": fallback_ready,
     "promotionReady": promotion_ready,
+    "chatSetupRoutingReady": chat_setup_routing_ready,
     "gatewayReachable": gateway_reachable,
     "routeProbeReady": route_probe_ready,
     "routeProbeSkipped": route_probe_skipped,
@@ -1157,7 +1238,7 @@ print(json.dumps({
     "nextAction": next_action,
 }))
 PY
-  )" || READINESS_JSON='{"basic":false,"strict":false,"lowRiskProofReady":false,"fallbackProofReady":false,"promotionReady":false,"gatewayReachable":false,"routeProbeReady":false,"routeProbeSkipped":false,"builtStartupProofRequested":false,"builtStartupProofReady":false,"nextAction":"fix-failing-checks"}'
+  )" || READINESS_JSON='{"basic":false,"strict":false,"lowRiskProofReady":false,"fallbackProofReady":false,"promotionReady":false,"chatSetupRoutingReady":false,"gatewayReachable":false,"routeProbeReady":false,"routeProbeSkipped":false,"builtStartupProofRequested":false,"builtStartupProofReady":false,"nextAction":"fix-failing-checks"}'
 }
 
 print_summary_and_exit() {
@@ -1188,6 +1269,7 @@ print_summary_and_exit() {
     printf '"gatewayUrl":"%s",' "$(json_escape "$GATEWAY_URL")"
     printf '"modelInventory":%s,' "$MODEL_INVENTORY_JSON"
     printf '"readiness":%s,' "$READINESS_JSON"
+    printf '"pluginActivation":%s,' "$PLUGIN_ACTIVATION_JSON"
     printf '"summary":{"pass":%s,"warn":%s,"fail":%s},' "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT"
     printf '"checks":[%s]}\n' "$checks_json"
   else
@@ -1198,12 +1280,13 @@ import sys
 
 payload = json.loads(sys.argv[1])
 print(
-    "Readiness: basic={basic}, strict={strict}, low-risk-proof={low_risk}, fallback-proof={fallback}, promotion={promotion}, gateway={gateway}, route-probe={route_probe}, built-startup={built_startup}".format(
+    "Readiness: basic={basic}, strict={strict}, low-risk-proof={low_risk}, fallback-proof={fallback}, promotion={promotion}, chat-routing={chat_routing}, gateway={gateway}, route-probe={route_probe}, built-startup={built_startup}".format(
         basic=str(payload.get("basic", False)).lower(),
         strict=str(payload.get("strict", False)).lower(),
         low_risk=str(payload.get("lowRiskProofReady", False)).lower(),
         fallback=str(payload.get("fallbackProofReady", False)).lower(),
         promotion=str(payload.get("promotionReady", False)).lower(),
+        chat_routing=str(payload.get("chatSetupRoutingReady", False)).lower(),
         gateway=str(payload.get("gatewayReachable", False)).lower(),
         route_probe=str(payload.get("routeProbeReady", False)).lower(),
         built_startup=str(payload.get("builtStartupProofReady", False)).lower(),
@@ -1256,6 +1339,7 @@ check_dist_artifact
 check_node_version_floor
 load_env_file
 check_config_file
+check_plugin_activation
 check_webhook_secret
 check_github_token
 check_gateway_port

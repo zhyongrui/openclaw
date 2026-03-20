@@ -84,9 +84,16 @@ export type OnboardingBootstrapSummary = {
   config?: {
     blueprintFirstBootstrap?: boolean;
   };
+  pluginActivation?: {
+    ready?: boolean;
+    pluginsEnabled?: boolean;
+    allowlisted?: boolean;
+    entryEnabled?: boolean;
+  };
   proofReadiness?: {
     cliProofReady?: boolean;
     chatProofReady?: boolean;
+    chatSetupRoutingReady?: boolean;
     webhookReady?: boolean;
     webhookUrlReady?: boolean;
     needsChatBind?: boolean;
@@ -639,6 +646,12 @@ async function handleNewRepositorySetup(params: {
           payload.blueprint?.blueprintPath
             ? `Blueprint: ${payload.blueprint.blueprintPath}`
             : undefined,
+          payload.pluginActivation
+            ? `Plugin activation: ${payload.pluginActivation.ready ? "ready" : "blocked"}`
+            : undefined,
+          typeof payload.proofReadiness?.chatSetupRoutingReady === "boolean"
+            ? `Chat routing: ${payload.proofReadiness.chatSetupRoutingReady ? "ready" : "blocked"}`
+            : undefined,
           payload.config?.blueprintFirstBootstrap
             ? "Bootstrap detected an empty repo and entered blueprint-first startup mode."
             : undefined,
@@ -703,6 +716,12 @@ async function handleExistingRepositorySetup(params: {
           payload.repo?.checkoutAction ? `Checkout: ${payload.repo.checkoutAction}` : undefined,
           payload.blueprint?.blueprintPath
             ? `Blueprint: ${payload.blueprint.blueprintPath}`
+            : undefined,
+          payload.pluginActivation
+            ? `Plugin activation: ${payload.pluginActivation.ready ? "ready" : "blocked"}`
+            : undefined,
+          typeof payload.proofReadiness?.chatSetupRoutingReady === "boolean"
+            ? `Chat routing: ${payload.proofReadiness.chatSetupRoutingReady ? "ready" : "blocked"}`
             : undefined,
           payload.handoff?.cliRunCommand ? `Next: ${payload.handoff.cliRunCommand}` : undefined,
           payload.nextAction ? `Status: ${payload.nextAction}` : undefined,

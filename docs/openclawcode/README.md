@@ -98,6 +98,10 @@ loop with:
   - `/occode-unbind`
   - `/occode-setup`
   - `/occode-setup-status`
+    - `/occode-setup` now pushes the next setup message automatically after
+      browser-side GitHub auth finishes
+    - `/occode-setup-status` remains the explicit manual recovery / status
+      command
 - a local builder/verifier runtime adapter built on top of OpenClaw's embedded
   agent entrypoint
 - an `openclaw code run ...` CLI path for issue-driven execution
@@ -356,6 +360,12 @@ loop with:
     are available for fallback proofs
   - if `OPENCLAWCODE_MODEL_FALLBACKS` is configured, setup-check now fails when
     any requested fallback model is not actually discoverable on that host
+  - JSON and bootstrap summaries now also surface plugin activation and
+    `chatSetupRoutingReady`, so chat-native setup can distinguish:
+    - plugin not enabled yet
+    - plugin allowlist missing
+    - plugin entry disabled
+    - routing actually ready
 - setup-check now also retries transient GitHub webhook subscription probe
   failures before failing strict mode, which prevents one GitHub TLS/API flap
   from falsely blocking promotion preflight on an otherwise healthy host

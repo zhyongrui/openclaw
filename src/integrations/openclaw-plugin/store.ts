@@ -107,11 +107,18 @@ export interface OpenClawCodeSetupSession {
     readyForIssueProjection?: boolean;
     blockedGateCount?: number;
     needsHumanDecisionCount?: number;
+    pluginActivation?: {
+      ready?: boolean;
+      pluginsEnabled?: boolean;
+      allowlisted?: boolean;
+      entryEnabled?: boolean;
+    };
     firstWorkItemTitle?: string;
     nextSuggestedCommand?: string | null;
     proofReadiness?: {
       cliProofReady?: boolean;
       chatProofReady?: boolean;
+      chatSetupRoutingReady?: boolean;
       webhookReady?: boolean;
       webhookUrlReady?: boolean;
       needsChatBind?: boolean;
@@ -127,6 +134,8 @@ export interface OpenClawCodeSetupSession {
     startedAt: string;
     completedAt?: string;
     failureReason?: string;
+    notificationState?: "authorized" | "failed";
+    notificationSentAt?: string;
   };
   createdAt: string;
   updatedAt: string;
@@ -604,6 +613,28 @@ function normalizeSetupSession(raw: unknown): OpenClawCodeSetupSession | undefin
               typeof candidate.bootstrap.needsHumanDecisionCount === "number"
                 ? candidate.bootstrap.needsHumanDecisionCount
                 : undefined,
+            pluginActivation:
+              candidate.bootstrap.pluginActivation &&
+              typeof candidate.bootstrap.pluginActivation === "object"
+                ? {
+                    ready:
+                      typeof candidate.bootstrap.pluginActivation.ready === "boolean"
+                        ? candidate.bootstrap.pluginActivation.ready
+                        : undefined,
+                    pluginsEnabled:
+                      typeof candidate.bootstrap.pluginActivation.pluginsEnabled === "boolean"
+                        ? candidate.bootstrap.pluginActivation.pluginsEnabled
+                        : undefined,
+                    allowlisted:
+                      typeof candidate.bootstrap.pluginActivation.allowlisted === "boolean"
+                        ? candidate.bootstrap.pluginActivation.allowlisted
+                        : undefined,
+                    entryEnabled:
+                      typeof candidate.bootstrap.pluginActivation.entryEnabled === "boolean"
+                        ? candidate.bootstrap.pluginActivation.entryEnabled
+                        : undefined,
+                  }
+                : undefined,
             firstWorkItemTitle:
               typeof candidate.bootstrap.firstWorkItemTitle === "string"
                 ? candidate.bootstrap.firstWorkItemTitle
@@ -625,6 +656,11 @@ function normalizeSetupSession(raw: unknown): OpenClawCodeSetupSession | undefin
                     chatProofReady:
                       typeof candidate.bootstrap.proofReadiness.chatProofReady === "boolean"
                         ? candidate.bootstrap.proofReadiness.chatProofReady
+                        : undefined,
+                    chatSetupRoutingReady:
+                      typeof candidate.bootstrap.proofReadiness.chatSetupRoutingReady ===
+                      "boolean"
+                        ? candidate.bootstrap.proofReadiness.chatSetupRoutingReady
                         : undefined,
                     webhookReady:
                       typeof candidate.bootstrap.proofReadiness.webhookReady === "boolean"
@@ -678,6 +714,15 @@ function normalizeSetupSession(raw: unknown): OpenClawCodeSetupSession | undefin
             failureReason:
               typeof githubDeviceAuth.failureReason === "string"
                 ? githubDeviceAuth.failureReason
+                : undefined,
+            notificationState:
+              githubDeviceAuth.notificationState === "authorized" ||
+              githubDeviceAuth.notificationState === "failed"
+                ? githubDeviceAuth.notificationState
+                : undefined,
+            notificationSentAt:
+              typeof githubDeviceAuth.notificationSentAt === "string"
+                ? githubDeviceAuth.notificationSentAt
                 : undefined,
           }
         : undefined,
@@ -1374,6 +1419,12 @@ export class OpenClawCodeChatopsStore {
       (entry) =>
         entry.notifyChannel === params.notifyChannel && entry.notifyTarget === params.notifyTarget,
     );
+  }
+
+  async listSetupSessions(): Promise<OpenClawCodeSetupSession[]> {
+    await this.flushMutations();
+    const state = await this.loadState();
+    return [...state.setupSessions];
   }
 
   async getManualTakeover(issueKey: string): Promise<OpenClawCodeManualTakeover | undefined> {

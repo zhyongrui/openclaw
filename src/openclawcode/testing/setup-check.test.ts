@@ -154,7 +154,9 @@ describe("openclawcode-setup-check.sh source", () => {
     expect(script).toContain("vitest.openclawcode.config.mjs");
     expect(script).toContain("--pool threads");
     expect(script).toContain('"modelInventory":');
+    expect(script).toContain('"pluginActivation":');
     expect(script).toContain('"readiness":');
+    expect(script).toContain('"chatSetupRoutingReady":');
     expect(script).toContain('"gatewayReachable":');
     expect(script).toContain('"routeProbeReady":');
     expect(script).toContain('"builtStartupProofReady":');
@@ -224,7 +226,10 @@ describeWithShell("openclawcode-setup-check.sh", () => {
       configFile,
       `${JSON.stringify(
         {
-          plugins: {
+          plugins:
+          {
+            enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -354,7 +359,10 @@ printf '{"accepted":false,"reason":"unconfigured-repo"}\\n202'
       configFile,
       `${JSON.stringify(
         {
-          plugins: {
+          plugins:
+          {
+            enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -464,12 +472,19 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
         lowRiskProofReady: boolean;
         fallbackProofReady: boolean;
         promotionReady: boolean;
+        chatSetupRoutingReady: boolean;
         gatewayReachable: boolean;
         routeProbeReady: boolean;
         routeProbeSkipped: boolean;
         builtStartupProofRequested: boolean;
         builtStartupProofReady: boolean;
         nextAction: string;
+      };
+      pluginActivation: {
+        ready: boolean;
+        pluginsEnabled: boolean;
+        allowlisted: boolean;
+        entryEnabled: boolean;
       };
       summary: { pass: number; warn: number; fail: number };
       checks: Array<{ status: string; message: string }>;
@@ -491,12 +506,19 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
       lowRiskProofReady: false,
       fallbackProofReady: false,
       promotionReady: false,
+      chatSetupRoutingReady: true,
       gatewayReachable: true,
       routeProbeReady: true,
       routeProbeSkipped: false,
       builtStartupProofRequested: false,
       builtStartupProofReady: false,
       nextAction: "resolve-warnings-before-promotion",
+    });
+    expect(payload.pluginActivation).toMatchObject({
+      ready: true,
+      pluginsEnabled: true,
+      allowlisted: true,
+      entryEnabled: true,
     });
     expect(payload.summary.fail).toBe(0);
     expect(payload.summary.pass).toBeGreaterThan(0);
@@ -513,6 +535,156 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
         expect.objectContaining({
           status: "pass",
           message: expect.stringContaining("fallback proof readiness: false"),
+        }),
+      ]),
+    );
+  });
+
+  it("fails readiness explicitly when plugin activation is missing", async () => {
+    const rootDir = await createTempDir();
+    tempRoots.add(rootDir);
+    const repoRoot = path.join(rootDir, "repo");
+    const distDir = path.join(repoRoot, "dist");
+    const binDir = path.join(rootDir, "bin");
+    const envFile = path.join(rootDir, "openclawcode.env");
+    const configFile = path.join(rootDir, "openclaw.json");
+    const stateFile = path.join(rootDir, "chatops-state.json");
+    const scriptPath = path.resolve("scripts/openclawcode-setup-check.sh");
+    const realPythonPath = resolveRealPythonPath();
+
+    await fs.mkdir(distDir, { recursive: true });
+    await fs.mkdir(binDir, { recursive: true });
+    await writeStubCliArtifacts(distDir);
+    await writeStubNode(binDir);
+    await fs.writeFile(
+      envFile,
+      "OPENCLAWCODE_GITHUB_WEBHOOK_SECRET=test-secret\nGH_TOKEN=dummy-token\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      configFile,
+      `${JSON.stringify(
+        {
+          plugins: {
+            enabled: true,
+            entries: {
+              openclawcode: {
+                enabled: true,
+                config: {
+                  repos: [
+                    {
+                      owner: "zhyongrui",
+                      repo: "openclawcode",
+                      repoRoot,
+                      baseBranch: "main",
+                      triggerMode: "approve",
+                      notifyChannel: "feishu",
+                      notifyTarget: "user:missing-allow",
+                      builderAgent: "main",
+                      verifierAgent: "main",
+                      testCommands: [
+                        "pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads",
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await fs.writeFile(
+      stateFile,
+      `${JSON.stringify(
+        {
+          repoBindingsByRepo: {
+            "zhyongrui/openclawcode": {
+              repoKey: "zhyongrui/openclawcode",
+              notifyChannel: "feishu",
+              notifyTarget: "user:missing-allow",
+              updatedAt: "2026-03-13T00:00:00.000Z",
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    await writeExecutable(
+      path.join(binDir, "python3"),
+      `#!/usr/bin/env bash
+set -euo pipefail
+script="$(cat)"
+if [[ "$script" == *"socket.create_connection"* ]]; then
+  exit 0
+fi
+if [[ "$script" == *"hmac.new"* ]]; then
+  printf 'sha256=test-signature\\n'
+  exit 0
+fi
+printf '%s' "$script" | "${realPythonPath}" "$@"
+`,
+    );
+    await writeExecutable(
+      path.join(binDir, "curl"),
+      '#!/usr/bin/env bash\nset -euo pipefail\nprintf \'{"accepted":false,"reason":"unconfigured-repo"}\\n202\'\n',
+    );
+
+    const result = runSetupCheck(
+      scriptPath,
+      {
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+        OPENCLAWCODE_SETUP_REPO_ROOT: repoRoot,
+        OPENCLAWCODE_SETUP_ENV_FILE: envFile,
+        OPENCLAWCODE_SETUP_CONFIG_FILE: configFile,
+        OPENCLAWCODE_SETUP_STATE_FILE: stateFile,
+        OPENCLAWCODE_SETUP_GATEWAY_URL: "http://127.0.0.1:18789",
+        OPENCLAWCODE_SETUP_WEBHOOK_ROUTE: "/plugins/openclawcode/github",
+        OPENCLAWCODE_GITHUB_REPO: "zhyongrui/openclawcode",
+        OPENCLAWCODE_TUNNEL_LOG_FILE: path.join(rootDir, "tunnel.log"),
+        OPENCLAWCODE_TUNNEL_PID_FILE: path.join(rootDir, "tunnel.pid"),
+      },
+      ["--json"],
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    const payload = JSON.parse(result.stdout) as {
+      ok: boolean;
+      pluginActivation: {
+        ready: boolean;
+        pluginsEnabled: boolean;
+        allowlisted: boolean;
+        entryEnabled: boolean;
+      };
+      readiness: {
+        chatSetupRoutingReady: boolean;
+        nextAction: string;
+      };
+      checks: Array<{ status: string; message: string }>;
+    };
+    expect(payload.ok).toBe(false);
+    expect(payload.pluginActivation).toMatchObject({
+      ready: false,
+      pluginsEnabled: true,
+      allowlisted: false,
+      entryEnabled: true,
+    });
+    expect(payload.readiness).toMatchObject({
+      chatSetupRoutingReady: false,
+      nextAction: "repair-plugin-activation",
+    });
+    expect(payload.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "fail",
+          message: expect.stringContaining("openclawcode plugin activation missing"),
         }),
       ]),
     );
@@ -548,7 +720,10 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
       configFile,
       `${JSON.stringify(
         {
-          plugins: {
+          plugins:
+          {
+            enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -680,6 +855,7 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
           ],
           plugins: {
             enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -844,6 +1020,7 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
         {
           plugins: {
             enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -1009,7 +1186,10 @@ exit 1
       configFile,
       `${JSON.stringify(
         {
-          plugins: {
+          plugins:
+          {
+            enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -1131,7 +1311,10 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
       configFile,
       `${JSON.stringify(
         {
-          plugins: {
+          plugins:
+          {
+            enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -1267,7 +1450,10 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
               },
             },
           ],
-          plugins: {
+          plugins:
+          {
+            enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -1443,7 +1629,10 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
                 },
               },
             ],
-            plugins: {
+            plugins:
+          {
+              enabled: true,
+            allow: ["openclawcode"],
               entries: {
                 openclawcode: {
                   enabled: true,
@@ -1573,6 +1762,7 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
         readiness: {
           basic: boolean;
           strict: boolean;
+          chatSetupRoutingReady: boolean;
           gatewayReachable: boolean;
           routeProbeReady: boolean;
           routeProbeSkipped: boolean;
@@ -1587,6 +1777,7 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
       expect(payload.readiness).toMatchObject({
         basic: false,
         strict: false,
+        chatSetupRoutingReady: true,
         gatewayReachable: false,
         routeProbeReady: false,
         routeProbeSkipped: false,
@@ -1638,7 +1829,10 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
       configFile,
       `${JSON.stringify(
         {
-          plugins: {
+          plugins:
+          {
+            enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -1782,7 +1976,10 @@ printf '{"accepted":false,"reason":"unconfigured-repo"}\\n202'
       configFile,
       `${JSON.stringify(
         {
-          plugins: {
+          plugins:
+          {
+            enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -1916,7 +2113,10 @@ printf '{"accepted":false,"reason":"unconfigured-repo"}\\n202'
       configFile,
       `${JSON.stringify(
         {
-          plugins: {
+          plugins:
+          {
+            enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -2066,7 +2266,10 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
       configFile,
       `${JSON.stringify(
         {
-          plugins: {
+          plugins:
+          {
+            enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,
@@ -2210,7 +2413,10 @@ printf '%s' "$script" | "${realPythonPath}" "$@"
       configFile,
       `${JSON.stringify(
         {
-          plugins: {
+          plugins:
+          {
+            enabled: true,
+            allow: ["openclawcode"],
             entries: {
               openclawcode: {
                 enabled: true,

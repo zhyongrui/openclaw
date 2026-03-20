@@ -566,12 +566,19 @@ interface BootstrapSetupCheckPayload {
     lowRiskProofReady: boolean;
     fallbackProofReady: boolean;
     promotionReady: boolean;
+    chatSetupRoutingReady: boolean;
     gatewayReachable: boolean;
     routeProbeReady: boolean;
     routeProbeSkipped: boolean;
     builtStartupProofRequested: boolean;
     builtStartupProofReady: boolean;
     nextAction: string;
+  };
+  pluginActivation?: {
+    ready: boolean;
+    pluginsEnabled: boolean;
+    allowlisted: boolean;
+    entryEnabled: boolean;
   };
   summary: {
     pass: number;
@@ -615,6 +622,7 @@ interface BootstrapHandoffPlan {
 interface BootstrapProofReadiness {
   cliProofReady: boolean;
   chatProofReady: boolean;
+  chatSetupRoutingReady: boolean;
   webhookReady: boolean;
   webhookUrlReady: boolean;
   needsChatBind: boolean;
@@ -1529,16 +1537,19 @@ function buildBootstrapProofReadiness(params: {
   const cliProofReady =
     params.setupCheckPayload?.readiness.strict === true &&
     params.setupCheckPayload.readiness.lowRiskProofReady;
+  const chatSetupRoutingReady = params.setupCheckPayload?.readiness.chatSetupRoutingReady === true;
   const needsChatBind =
     params.mode === "chatops" && params.notifyBindingMode === "chat-placeholder";
   const webhookUrlReady = params.webhookUrl != null;
   const webhookReady = params.webhookHookId != null;
   const needsPublicWebhookUrl =
     params.webhookAction === "skipped" && params.webhookUrl == null && params.mode === "chatops";
-  const chatProofReady = params.mode === "chatops" && !needsChatBind && cliProofReady;
+  const chatProofReady =
+    params.mode === "chatops" && !needsChatBind && cliProofReady && chatSetupRoutingReady;
   return {
     cliProofReady,
     chatProofReady,
+    chatSetupRoutingReady,
     webhookReady,
     webhookUrlReady,
     needsChatBind,
@@ -3668,6 +3679,12 @@ export async function openclawCodeBootstrapCommand(
       testCommandSource: testCommandsResult.source,
       blueprintFirstBootstrap,
     },
+    pluginActivation: setupCheck.payload?.pluginActivation ?? {
+      ready: false,
+      pluginsEnabled: false,
+      allowlisted: false,
+      entryEnabled: false,
+    },
     tunnel,
     webhook,
     binding,
@@ -3737,6 +3754,14 @@ export async function openclawCodeBootstrapCommand(
   runtime.log(
     `Proof readiness: cli=${proofReadiness.cliProofReady ? "ready" : "blocked"} chat=${proofReadiness.chatProofReady ? "ready" : "blocked"} webhook=${proofReadiness.webhookReady ? "ready" : "blocked"}`,
   );
+  runtime.log(
+    `Chat setup routing: ${proofReadiness.chatSetupRoutingReady ? "ready" : "blocked"}`,
+  );
+  if (setupCheck.payload?.pluginActivation) {
+    runtime.log(
+      `Plugin activation: ready=${setupCheck.payload.pluginActivation.ready} | plugins=${setupCheck.payload.pluginActivation.pluginsEnabled} | allow=${setupCheck.payload.pluginActivation.allowlisted} | entry=${setupCheck.payload.pluginActivation.entryEnabled}`,
+    );
+  }
   runtime.log(`Recommended proof mode: ${handoff.recommendedProofMode} | ${handoff.reason}`);
   if (blueprintFirstBootstrap) {
     runtime.log(`Blueprint clarify: ${handoff.blueprintClarifyCommand}`);

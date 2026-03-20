@@ -270,14 +270,18 @@ The setup flow now covers the first end-to-end operator path:
 1. start from chat with `/occode-setup`, `/occode-setup existing owner/repo`,
    or `/occode-setup new-project`
 2. if needed, complete GitHub device auth without pasting tokens into chat
-3. for `new-project`, draft and agree the initial blueprint directly in chat
-4. derive repo-name suggestions and continue with `/occode-setup new <repo>`
-5. run bootstrap automatically after repo selection
-6. sync the setup draft into the repo-local `PROJECT-BLUEPRINT.md`
-7. refresh work items and stage gates
-8. auto-bind the active chat when safe
-9. surface the next suggested command and proof readiness directly in chat
-10. hand off into `/occode-materialize owner/repo` once the selected work item
+3. receive an automatic chat push after browser-side GitHub auth succeeds or
+   fails, without relying on `/occode-setup-status` as the only continuation
+4. for `new-project`, draft and agree the initial blueprint directly in chat
+5. derive repo-name suggestions and continue with `/occode-setup new <repo>`
+6. run bootstrap automatically after repo selection
+7. sync the setup draft into the repo-local `PROJECT-BLUEPRINT.md`
+8. refresh work items and stage gates
+9. auto-bind the active chat when safe
+10. surface plugin activation and chat-setup-routing readiness directly in the
+   bootstrap summary and setup-check output
+11. surface the next suggested command and proof readiness directly in chat
+12. hand off into `/occode-materialize owner/repo` once the selected work item
     is ready for issue projection
 
 ## Remaining Delivery Tasks
@@ -303,33 +307,32 @@ control-plane steps.
 
 ### 3. plugin activation visibility and readiness
 
-- new-machine testing showed a real operator confusion point around
-  `/occode-setup` appearing unresponsive when the `openclawcode` plugin
-  activation prerequisite was not obvious in the primary onboarding path
-- the intended fix is:
-  - keep bootstrap as the only path that auto-writes the default plugin
-    activation state
-  - expose plugin allowlist / enabled-entry status in bootstrap summaries
-  - make setup-check report plugin activation as a first-class readiness item
-  - make onboarding/chat summaries explicitly say whether slash-command routing
-    should be expected to work yet
-- this is deliberately not a second auto-enable mechanism; it is a visibility
-  and proof-of-readiness fix around the existing bootstrap write path
+- this hardening is now landed
+- bootstrap remains the only writer for the default `openclawcode` plugin
+  activation state
+- bootstrap summaries, chat setup summaries, and setup-check now all surface:
+  - whether `plugins.enabled` is on
+  - whether `plugins.allow` includes `openclawcode`
+  - whether `plugins.entries.openclawcode.enabled` is on
+  - whether chat setup slash-command routing should actually be expected to
+    work
+- setup-check now emits an explicit `repair-plugin-activation` next action when
+  `/occode-setup` would still be blocked by plugin activation state
+- this remains a visibility and proof-of-readiness fix, not a second
+  auto-enable mechanism
 
 ### 4. proactive GitHub auth completion feedback
 
-- new-machine testing also showed that browser-side `gh auth login --web`
-  completion currently does not push a status update back into chat
-- today the operator must manually send `/occode-setup-status`, which makes the
-  flow feel stalled even when auth already succeeded
-- the planned fix is:
-  - extend the plugin service poll loop to watch setup sessions in
-    `awaiting-github-device-auth`
-  - run the same `syncChatSetupSession()` transition logic in the background
-  - automatically notify the originating chat when auth becomes authorized or
-    fails/expires
-  - keep `/occode-setup-status` and `/occode-setup-retry` as explicit recovery
-    controls
+- this hardening is now landed
+- the plugin service now polls saved setup sessions that are still in
+  `awaiting-github-device-auth`
+- the same setup-session sync path now runs in the background after browser
+  approval completes
+- when GitHub auth succeeds or fails, the originating chat receives the next
+  setup message automatically
+- `/occode-setup-status` and `/occode-setup-retry` remain available as manual
+  recovery controls, but they are no longer the only way the operator can see
+  progress
 
 ### 5. handoff into autonomous progress
 
@@ -358,6 +361,6 @@ control-plane steps.
 
 1. live operator proof
 2. live-proof the new failure recovery paths
-3. land plugin activation visibility/readiness hardening
-4. land proactive GitHub auth completion push feedback
-5. live-proof the bounded repeat-loop autopilot on the real operator host
+3. live-proof the proactive auth-completion push and plugin-activation
+   readiness on the real operator host
+4. live-proof the bounded repeat-loop autopilot on the real operator host

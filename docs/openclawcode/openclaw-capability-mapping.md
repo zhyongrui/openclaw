@@ -603,16 +603,17 @@ Acceptance:
 
 Status:
 
-- `[ ]` not started
+- `[x]` docs and repo-local proof contracts landed
+- `[ ]` live blueprint-first operator proofs still pending
 
 Tasks:
 
 - `[ ]` run one blueprint-first proof on the refreshed sync branch
 - `[ ]` run one blueprint-first proof on the long-lived baseline
-- `[ ]` document install, promotion, and rollback for blueprint-aware releases
-- `[ ]` define machine-readable promotion and rollback artifacts
-- `[ ]` document supported provider combinations and limits
-- `[ ]` document when humans should intervene
+- `[x]` document install, promotion, and rollback for blueprint-aware releases
+- `[x]` define machine-readable promotion and rollback artifacts
+- `[x]` document supported provider combinations and limits
+- `[x]` document when humans should intervene
 
 Acceptance:
 
@@ -623,11 +624,12 @@ Acceptance:
 
 The next concrete slices should be:
 
-1. add richer machine-readable blueprint state
-2. add chat-native blueprint discussion before issue creation
-3. introduce the first repo-local `work item` abstraction
-4. derive the first planned work items from the blueprint
-5. add the first general discovery source
+1. live-proof the chat-native setup path on a real operator host after the new
+   plugin-activation and auth-completion hardening
+2. close the remaining runtime-steering and handoff persistence gaps in
+   Phases M6 and M7
+3. run the first blueprint-first end-to-end proof on the refreshed sync branch
+4. repeat the same proof on the long-lived baseline
 
 ## Short Summary
 
