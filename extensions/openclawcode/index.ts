@@ -1891,6 +1891,20 @@ function buildPendingApprovalActionLines(params: {
   return [`  action: /occode-start ${params.entry.issueKey}`];
 }
 
+function buildRunningActionLines(issueKey: string): string[] {
+  return [
+    `  action: /occode-status ${issueKey}`,
+    `  takeover: /occode-takeover ${issueKey} [note]`,
+  ];
+}
+
+function buildQueuedActionLines(issueKey: string): string[] {
+  return [
+    `  action: /occode-status ${issueKey}`,
+    `  skip: /occode-skip ${issueKey} [reason]`,
+  ];
+}
+
 function buildPrecheckedEscalationStatus(params: {
   issue: { owner: string; repo: string; number: number };
   summary: string;
@@ -3865,6 +3879,7 @@ function buildInboxMessage(params: {
           trimToSingleLine(params.state.statusByIssue[entry.issueKey]) ?? "Running."
         }`,
       );
+      lines.push(...buildRunningActionLines(entry.issueKey));
       lines.push(...buildPolicyShortcutLines({ issueKey: entry.issueKey, snapshot }));
       lines.push(
         ...buildRerunLedgerLines({
@@ -3896,6 +3911,7 @@ function buildInboxMessage(params: {
       lines.push(
         `- ${entry.issueKey} | ${trimToSingleLine(params.state.statusByIssue[entry.issueKey]) ?? "Queued."}`,
       );
+      lines.push(...buildQueuedActionLines(entry.issueKey));
       lines.push(...buildPolicyShortcutLines({ issueKey: entry.issueKey, snapshot }));
       lines.push(
         ...buildRerunLedgerLines({

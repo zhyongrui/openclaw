@@ -4980,8 +4980,12 @@ describe("openclawcode extension", () => {
           "  action: /occode-start zhyongrui/openclawcode#301",
           "Running: 1",
           "- zhyongrui/openclawcode#303 | Running.",
+          "  action: /occode-status zhyongrui/openclawcode#303",
+          "  takeover: /occode-takeover zhyongrui/openclawcode#303 [note]",
           "Queued: 1",
           "- zhyongrui/openclawcode#302 | Queued.",
+          "  action: /occode-status zhyongrui/openclawcode#302",
+          "  skip: /occode-skip zhyongrui/openclawcode#302 [reason]",
           "  rerun: run-301 | from Changes Requested | 2026-03-11T02:50:00.000Z",
           "  reason: Address GitHub review feedback",
           "Recent ledger: 2",
@@ -5123,6 +5127,8 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain(
         "- zhyongrui/openclawcode#306 | Queued after explicit override approval.",
       );
+      expect(result?.text).toContain("  action: /occode-status zhyongrui/openclawcode#306");
+      expect(result?.text).toContain("  skip: /occode-skip zhyongrui/openclawcode#306 [reason]");
       expect(result?.text).toContain("  policy: /occode-policy zhyongrui/openclawcode#306");
     } finally {
       await cleanupPluginFixture(fixture);
