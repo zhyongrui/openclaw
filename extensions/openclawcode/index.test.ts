@@ -6032,6 +6032,7 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain(
         "Selected: Add a chat summary for the next selected work item. | work-item-inventory | planned",
       );
+      expect(result?.text).toContain("Execution mode: feature");
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });

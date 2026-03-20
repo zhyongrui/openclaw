@@ -2002,6 +2002,7 @@ function logProjectNextWorkSelection(params: {
       `Selected work item: ${selection.selectedWorkItem.id} | ${selection.selectedWorkItem.title}`,
     );
     runtime.log(`Selected from: ${selection.selectedWorkItem.selectedFrom}`);
+    runtime.log(`Execution mode: ${selection.selectedWorkItem.executionMode}`);
     runtime.log(`Issue draft: ${selection.selectedWorkItem.githubIssueDraftTitle}`);
   }
   if (selection.selectedReason) {

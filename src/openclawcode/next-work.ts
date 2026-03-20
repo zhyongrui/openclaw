@@ -16,6 +16,7 @@ import {
   deriveProjectWorkItemInventory,
   readProjectWorkItemInventory,
   type ProjectWorkItem,
+  type ProjectWorkItemExecutionMode,
 } from "./work-items.js";
 
 export const PROJECT_NEXT_WORK_SELECTION_SCHEMA_VERSION = 1;
@@ -33,6 +34,7 @@ export interface ProjectNextWorkCandidate {
   id: string;
   kind: ProjectWorkItem["kind"];
   status: ProjectWorkItem["status"];
+  executionMode: ProjectWorkItemExecutionMode;
   title: string;
   summary: string;
   selectedFrom: "discovery" | "work-item-inventory";
@@ -139,12 +141,58 @@ function toSelectedWorkItem(
     id: workItem.id,
     kind: workItem.kind,
     status: workItem.status,
+    executionMode: workItem.executionMode,
     title: workItem.title,
     summary: workItem.summary,
     selectedFrom,
     blueprintRevisionId: workItem.blueprintRevisionId,
     githubIssueDraftTitle: workItem.githubIssueDraft.title,
   };
+}
+
+function requiresExecutionStartApprovalForMode(
+  executionMode: ProjectWorkItemExecutionMode,
+): boolean {
+  return executionMode === "refactor" || executionMode === "research";
+}
+
+function buildExecutionModeGuidance(
+  executionMode: ProjectWorkItemExecutionMode,
+): { blockers: string[]; suggestions: string[] } {
+  switch (executionMode) {
+    case "bugfix":
+      return {
+        blockers: [],
+        suggestions: [
+          "Confirm the observed behavior, expected behavior, and regression proof before broad code changes.",
+        ],
+      };
+    case "refactor":
+      return {
+        blockers: [
+          "The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
+        ],
+        suggestions: [
+          "Confirm the invariant behavior and first safe checkpoint, then record an execution-start approval.",
+        ],
+      };
+    case "research":
+      return {
+        blockers: [
+          "The selected work item is a research slice, so execution-start should be explicitly approved before open-ended investigation begins.",
+        ],
+        suggestions: [
+          "Confirm the research question, required evidence, and expected next executable slice before approving execution-start.",
+        ],
+      };
+    default:
+      return {
+        blockers: [],
+        suggestions: [
+          "Keep the selected work item as one demoable vertical slice with public-behavior proof.",
+        ],
+      };
+  }
 }
 
 function pickSelectedWorkItem(params: {
@@ -258,10 +306,26 @@ export async function deriveProjectNextWorkSelection(
     blockingGateId = "execution-routing";
     blockers = [...roleRouting.blockers];
     suggestions = [...roleRouting.suggestions];
+  } else if (
+    selection.selectedWorkItem &&
+    requiresExecutionStartApprovalForMode(selection.selectedWorkItem.executionMode)
+  ) {
+    decision = "blocked-on-human";
+    blockingGateId = "execution-start";
+    const modeGuidance = buildExecutionModeGuidance(selection.selectedWorkItem.executionMode);
+    blockers = [...modeGuidance.blockers];
+    suggestions = [
+      `Selected work item execution mode: ${selection.selectedWorkItem.executionMode}.`,
+      ...modeGuidance.suggestions,
+      `Draft GitHub issue title: ${selection.selectedWorkItem.githubIssueDraftTitle}`,
+    ];
   } else if (selection.selectedWorkItem) {
+    const modeGuidance = buildExecutionModeGuidance(selection.selectedWorkItem.executionMode);
     decision = "ready-to-execute";
     suggestions = [
       "Use the selected work item as the next issue-materialization candidate.",
+      `Selected work item execution mode: ${selection.selectedWorkItem.executionMode}.`,
+      ...modeGuidance.suggestions,
       `Draft GitHub issue title: ${selection.selectedWorkItem.githubIssueDraftTitle}`,
     ];
   } else {
@@ -291,6 +355,11 @@ export async function deriveProjectNextWorkSelection(
     Number(!blueprint.hasAgreementCheckpoint) +
     Number(discovery.evidenceCount > 0) +
     Number(roleRouting.unresolvedRoleCount > 0) +
+    Number(
+      selection.selectedWorkItem
+        ? requiresExecutionStartApprovalForMode(selection.selectedWorkItem.executionMode)
+        : false,
+    ) +
     1;
 
   return {

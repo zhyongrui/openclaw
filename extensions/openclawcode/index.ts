@@ -2974,6 +2974,7 @@ function buildNextWorkSummaryMessage(params: {
     lines.push(
       `Selected: ${params.selection.selectedWorkItem.title} | ${params.selection.selectedWorkItem.selectedFrom} | ${params.selection.selectedWorkItem.kind}`,
     );
+    lines.push(`Execution mode: ${params.selection.selectedWorkItem.executionMode}`);
     lines.push(`Issue draft: ${params.selection.selectedWorkItem.githubIssueDraftTitle}`);
   }
   if (params.selection.selectedReason) {
@@ -4499,6 +4500,9 @@ async function processNextQueuedRun(
   api: OpenClawPluginApi,
   store: OpenClawCodeChatopsStore,
 ): Promise<void> {
+  if (!runnerReady) {
+    return;
+  }
   if (workerActive) {
     return;
   }
@@ -7353,6 +7357,7 @@ export default {
           store,
           repoConfigs: pluginConfig.repos,
         });
+        workerActive = false;
         runnerReady = true;
         pollTimer = setInterval(() => {
           void processNextQueuedRun(api, store);
@@ -7362,6 +7367,7 @@ export default {
       },
       stop: async () => {
         runnerReady = false;
+        workerActive = false;
         if (pollTimer) {
           clearInterval(pollTimer);
           pollTimer = null;

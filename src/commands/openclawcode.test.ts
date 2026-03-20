@@ -2682,9 +2682,90 @@ describe("openclawCodeRunCommand", () => {
       selectedWorkItem: {
         id: "planned-01-ship-the-next-work-selection-artifact",
         selectedFrom: "work-item-inventory",
+        executionMode: "feature",
         title: "Ship the next-work selection artifact.",
       },
     });
+  });
+
+  it("holds refactor work behind execution-start human approval in next-work selection", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-next-work-refactor-"));
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Next Work Refactor Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Next Work Refactor Blueprint",
+        "",
+        "## Goal",
+        "Require an explicit execution-start decision for structural refactors.",
+        "",
+        "## Success Criteria",
+        "- The next-work command blocks on human approval for refactor slices.",
+        "",
+        "## Scope",
+        "- In scope: execution-start gating for refactors.",
+        "",
+        "## Non-Goals",
+        "- Live execution.",
+        "",
+        "## Constraints",
+        "- Keep the selected work item deterministic.",
+        "",
+        "## Risks",
+        "- Structural work can drift without an explicit checkpoint.",
+        "",
+        "## Assumptions",
+        "- The blueprint is already agreed.",
+        "",
+        "## Human Gates",
+        "- Execution start: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Refactor role-routing orchestration into a dedicated planning module.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: refactor execution-start baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+
+    await openclawCodeNextWorkShowCommand({ repoRoot, json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.decision).toBe("blocked-on-human");
+    expect(payload.blockingGateId).toBe("execution-start");
+    expect(payload.canContinueAutonomously).toBe(false);
+    expect(payload.selectedWorkItem).toMatchObject({
+      executionMode: "refactor",
+      title: "Refactor role-routing orchestration into a dedicated planning module.",
+    });
+    expect(payload.blockers).toContain(
+      "The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
+    );
   });
 
   it("surfaces missing clarification as the reason autonomous progress cannot continue", async () => {
@@ -3753,6 +3834,88 @@ describe("openclawCodeRunCommand", () => {
           gateId: "execution-start",
           decision: "approved",
           actor: "operator",
+        }),
+      ]),
+    );
+  });
+
+  it("marks execution-start as needing a human decision for refactor work", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-stage-gates-refactor-"));
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Refactor Stage Gate Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Refactor Stage Gate Blueprint",
+        "",
+        "## Goal",
+        "Gate structural refactors at execution-start.",
+        "",
+        "## Success Criteria",
+        "- Stage gates surface a human-decision requirement for refactor work.",
+        "",
+        "## Scope",
+        "- In scope: execution-start stage-gate guidance.",
+        "",
+        "## Non-Goals",
+        "- Full execution.",
+        "",
+        "## Constraints",
+        "- Keep the work item selection deterministic.",
+        "",
+        "## Risks",
+        "- Structural work can drift without a checkpoint.",
+        "",
+        "## Assumptions",
+        "- Blueprint agreement is already recorded.",
+        "",
+        "## Human Gates",
+        "- Execution start: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Refactor the stage-gate summary builder into a dedicated module.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: refactor stage-gate baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeRoleRoutingRefreshCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeStageGatesRefreshCommand({ repoRoot, json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.gates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          gateId: "execution-start",
+          readiness: "needs-human-decision",
+          blockers: expect.arrayContaining([
+            "Selected refactor slice requires explicit execution-start approval: Refactor the stage-gate summary builder into a dedicated module.",
+          ]),
         }),
       ]),
     );

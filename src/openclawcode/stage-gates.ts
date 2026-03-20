@@ -3,7 +3,10 @@ import path from "node:path";
 import { readProjectBlueprintDocument } from "./blueprint.js";
 import { readProjectDiscoveryInventory } from "./discovery.js";
 import { deriveProjectRoleRoutingPlan, readProjectRoleRoutingPlan } from "./role-routing.js";
-import { readProjectWorkItemInventory } from "./work-items.js";
+import {
+  readProjectWorkItemInventory,
+  type ProjectWorkItem,
+} from "./work-items.js";
 
 export const PROJECT_STAGE_GATE_SCHEMA_VERSION = 1;
 export const PROJECT_STAGE_GATE_IDS = [
@@ -191,6 +194,72 @@ function finalizeGateRecord(params: {
   };
 }
 
+function selectExecutionStartCandidate(
+  workItems: Awaited<ReturnType<typeof readProjectWorkItemInventory>>,
+): ProjectWorkItem | null {
+  return (
+    workItems.workItems.find((item) => item.status !== "completed" && item.status !== "canceled") ??
+    null
+  );
+}
+
+function buildExecutionStartModeGuidance(
+  workItem: ProjectWorkItem | null,
+): {
+  readiness: ProjectStageGateReadinessId;
+  blockers: string[];
+  suggestions: string[];
+} {
+  if (!workItem) {
+    return {
+      readiness: "ready",
+      blockers: [],
+      suggestions: ["No execution candidate is currently selected."],
+    };
+  }
+
+  switch (workItem.executionMode) {
+    case "bugfix":
+      return {
+        readiness: "ready",
+        blockers: [],
+        suggestions: [
+          `Selected bug-fix slice: ${workItem.title}`,
+          "Confirm observed behavior, expected behavior, and regression proof before broad edits.",
+        ],
+      };
+    case "refactor":
+      return {
+        readiness: "needs-human-decision",
+        blockers: [
+          `Selected refactor slice requires explicit execution-start approval: ${workItem.title}`,
+        ],
+        suggestions: [
+          "Confirm the invariant behavior and first safe checkpoint before approving execution-start.",
+        ],
+      };
+    case "research":
+      return {
+        readiness: "needs-human-decision",
+        blockers: [
+          `Selected research slice requires explicit execution-start approval: ${workItem.title}`,
+        ],
+        suggestions: [
+          "Confirm the research question, required evidence, and expected next executable slice before approving execution-start.",
+        ],
+      };
+    default:
+      return {
+        readiness: "ready",
+        blockers: [],
+        suggestions: [
+          `Selected feature slice: ${workItem.title}`,
+          "Keep the execution slice demoable and verify public behavior before broadening scope.",
+        ],
+      };
+  }
+}
+
 export async function deriveProjectStageGateArtifact(
   repoRootInput: string,
 ): Promise<ProjectStageGateArtifact> {
@@ -220,6 +289,8 @@ export async function deriveProjectStageGateArtifact(
 
   const decisions = existing.decisions;
   const gates: ProjectStageGateRecord[] = [];
+  const executionCandidate = selectExecutionStartCandidate(workItems);
+  const executionModeGuidance = buildExecutionStartModeGuidance(executionCandidate);
 
   gates.push(
     finalizeGateRecord({
@@ -272,13 +343,19 @@ export async function deriveProjectStageGateArtifact(
       title: "Execution start",
       summary:
         "Discovery signals and stale artifacts should be resolved or consciously accepted before execution starts.",
-      readiness: discovery.evidenceCount === 0 ? "ready" : "needs-human-decision",
+      readiness:
+        discovery.evidenceCount === 0 ? executionModeGuidance.readiness : "needs-human-decision",
       decisionRequired: true,
-      blockers: discovery.blockers,
+      blockers: discovery.evidenceCount === 0
+        ? executionModeGuidance.blockers
+        : [...discovery.blockers, ...executionModeGuidance.blockers],
       suggestions:
         discovery.evidenceCount > 0
-          ? discovery.evidence.map((entry) => `${entry.source}: ${entry.summary}`)
-          : ["No discovery signals are currently blocking execution."],
+          ? [
+              ...discovery.evidence.map((entry) => `${entry.source}: ${entry.summary}`),
+              ...executionModeGuidance.suggestions,
+            ]
+          : executionModeGuidance.suggestions,
       latestDecision: latestDecisionForGate(decisions, "execution-start"),
     }),
   );

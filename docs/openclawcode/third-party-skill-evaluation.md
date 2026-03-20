@@ -381,3 +381,26 @@ Why this matters:
 - it absorbs the useful part of `triage-issue` into chat-native bug shaping
 - it absorbs the useful part of `request-refactor-plan` into intake and issue
   generation without creating another parallel planning document
+
+The third direct absorption into `openclawcode` is now:
+
+- next-work selection now carries `executionMode` through the selected
+  candidate
+- execution mode now affects autonomy policy:
+  - `feature`
+    - can remain `ready-to-execute`
+  - `bugfix`
+    - can remain autonomous, but with explicit regression-proof guidance
+  - `refactor`
+    - now pauses at `execution-start`
+  - `research`
+    - now pauses at `execution-start`
+- stage-gate derivation now uses execution mode to explain *why* a work item is
+  paused, instead of treating every selected item as equally safe
+
+Why this matters:
+
+- it pushes `request-refactor-plan` beyond issue text and into actual control
+  flow
+- it prevents structural work from being treated like routine tracer-bullet
+  feature slices

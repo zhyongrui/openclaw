@@ -183,6 +183,16 @@ It currently carries:
   - work-item inventory availability
   - discovery inventory availability
   - role-routing availability
+- execution-start guidance now also reflects the selected work-item execution
+  mode:
+  - `feature`
+    - ready by default, with tracer-bullet verification guidance
+  - `bugfix`
+    - ready by default, with regression-proof reminders
+  - `refactor`
+    - defaults to `needs-human-decision`
+  - `research`
+    - defaults to `needs-human-decision`
 - persisted decision records with:
   - actor
   - note
@@ -211,3 +221,7 @@ It currently carries:
 
 All eleven commands support `--json` so the blueprint state is already
 machine-readable enough for follow-on automation and staged handoff.
+
+The next-work artifact now also carries the selected work-item execution mode so
+chat and CLI surfaces can distinguish routine feature slices from refactor or
+research work that should pause at execution-start.
