@@ -776,6 +776,9 @@ Additional rollout note from the latest refreshed-branch proof:
 - operator overrides:
   - `OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS`
   - `OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS`
+- policy references:
+  - `policy.md`
+  - `auto-merge-policy.md`
 - generic non-provider failures now also persist
   `failureDiagnostics.summary`, so timeout-style failures stay visible in saved
   workflow artifacts and chat-visible status output

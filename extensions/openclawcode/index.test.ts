@@ -4548,6 +4548,7 @@ describe("openclawcode extension", () => {
           "Provider auto-pause classes: provider-internal-error",
           "Suitability override path: /occode-start-override zhyongrui/openclawcode#123",
           "Merge override path: /occode-gate-decide zhyongrui/openclawcode merge-promotion approved [note]",
+          "Auto-merge policy doc: docs/openclawcode/auto-merge-policy.md",
           "Use /occode-status owner/repo#issue to inspect the latest tracked policy decision for a specific run.",
         ].join("\n"),
       });
@@ -4603,6 +4604,7 @@ describe("openclawcode extension", () => {
           "Current auto-merge: blocked | Not eligible for auto-merge: manual suitability overrides still require a human merge decision.",
           "Suitability override path: /occode-start-override zhyongrui/openclawcode#6627",
           "Merge override path: /occode-gate-decide zhyongrui/openclawcode merge-promotion approved [note]",
+          "Auto-merge policy doc: docs/openclawcode/auto-merge-policy.md",
           "Use /occode-status owner/repo#issue to inspect the latest tracked policy decision for a specific run.",
         ].join("\n"),
       });
@@ -4989,6 +4991,7 @@ describe("openclawcode extension", () => {
           "- zhyongrui/openclawcode#305 | Ready For Human Review | final: awaiting human review | 2026-03-11T02:58:00.000Z",
           "  events: review approved @ 2026-03-11T02:58:30.000Z",
           "  suitability: needs-human-review | Suitability recommends human review before autonomous execution. Issue is classified as mixed scope instead of command-layer.",
+          "  policy: /occode-policy zhyongrui/openclawcode#305",
           "  rerun: run-300 | from Changes Requested | 2026-03-11T02:40:00.000Z",
           "  reason: Address GitHub review feedback",
           "  notify: sent | feishu:user:review-chat | 2026-03-11T02:59:00.000Z",
@@ -5023,6 +5026,72 @@ describe("openclawcode extension", () => {
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows policy shortcuts for queued policy-sensitive issues through /occode-inbox", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.recordWorkflowRunStatus(
+        createWorkflowRun({
+          issueNumber: 306,
+          stage: "ready-for-human-review",
+          updatedAt: "2026-03-11T03:05:00.000Z",
+          suitability: {
+            decision: "auto-run",
+            summary: "Suitability override accepted for this run.",
+            reasons: ["Operator approved a narrow exception."],
+            classification: "mixed",
+            riskLevel: "medium",
+            evaluatedAt: "2026-03-11T03:04:00.000Z",
+            allowlisted: false,
+            denylisted: false,
+            originalDecision: "needs-human-review",
+            overrideApplied: true,
+            overrideActor: "user:operator",
+            overrideReason: "Approved for this queued rerun.",
+          },
+        }),
+        "Queued after explicit override approval.",
+      );
+      await fixture.store.enqueue(
+        {
+          issueKey: "zhyongrui/openclawcode#306",
+          notifyChannel: "telegram",
+          notifyTarget: "chat:override",
+          request: {
+            owner: "zhyongrui",
+            repo: "openclawcode",
+            issueNumber: 306,
+            repoRoot: fixture.repoRoot,
+            baseBranch: "main",
+            branchName: "openclawcode/issue-306-rerun",
+            builderAgent: "main",
+            verifierAgent: "main",
+            testCommands: [
+              "pnpm exec vitest run --config vitest.openclawcode.config.mjs --pool threads",
+            ],
+            openPullRequest: true,
+            mergeOnApprove: false,
+          },
+        },
+        "Queued after explicit override approval.",
+      );
+
+      const result = await fixture.commands.get("occode-inbox")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-inbox",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain(
+        "- zhyongrui/openclawcode#306 | Queued after explicit override approval.",
+      );
+      expect(result?.text).toContain("  policy: /occode-policy zhyongrui/openclawcode#306");
+    } finally {
+      await cleanupPluginFixture(fixture);
     }
   });
 

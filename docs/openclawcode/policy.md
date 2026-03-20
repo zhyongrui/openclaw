@@ -129,6 +129,9 @@ Auto-merge is blocked when:
 Merge-policy exceptions remain explicit human actions through the
 `merge-promotion` gate.
 
+The narrow auto-merge eligibility contract is documented separately in
+`auto-merge-policy.md`.
+
 ## Builder Guardrails
 
 Current repo-local guardrails:

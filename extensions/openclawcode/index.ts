@@ -1853,6 +1853,24 @@ function buildTopLevelAutoMergePolicyLines(snapshot: OpenClawCodeIssueStatusSnap
   return [`Auto-merge policy: blocked | ${trimToSingleLine(snapshot.autoMergePolicyReason)}`];
 }
 
+function buildPolicyShortcutLines(params: {
+  issueKey: string;
+  snapshot?: OpenClawCodeIssueStatusSnapshot;
+}): string[] {
+  const snapshot = params.snapshot;
+  if (!snapshot) {
+    return [];
+  }
+  if (
+    snapshot.suitabilityDecision === "auto-run" &&
+    !snapshot.suitabilityOverrideApplied &&
+    snapshot.autoMergePolicyEligible !== false
+  ) {
+    return [];
+  }
+  return [`  policy: /occode-policy ${params.issueKey}`];
+}
+
 function buildPrecheckedEscalationStatus(params: {
   issue: { owner: string; repo: string; number: number };
   summary: string;
@@ -3085,6 +3103,7 @@ function buildPolicySnapshotMessage(params: {
   lines.push(
     `Merge override path: /occode-gate-decide ${formatRepoKey(params.repo)} merge-promotion approved [note]`,
   );
+  lines.push("Auto-merge policy doc: docs/openclawcode/auto-merge-policy.md");
   lines.push(
     "Use /occode-status owner/repo#issue to inspect the latest tracked policy decision for a specific run.",
   );
@@ -3804,11 +3823,13 @@ function buildInboxMessage(params: {
   if (pending.length > 0) {
     lines.push(`Pending approvals: ${pending.length}`);
     for (const entry of pending) {
+      const snapshot = params.state.statusSnapshotsByIssue[entry.issueKey];
       lines.push(
         `- ${entry.issueKey} | ${
           trimToSingleLine(params.state.statusByIssue[entry.issueKey]) ?? "Awaiting chat approval."
         }`,
       );
+      lines.push(...buildPolicyShortcutLines({ issueKey: entry.issueKey, snapshot }));
     }
   } else {
     lines.push("Pending approvals: 0");
@@ -3817,11 +3838,13 @@ function buildInboxMessage(params: {
   if (running.length > 0) {
     lines.push(`Running: ${running.length}`);
     for (const entry of running) {
+      const snapshot = params.state.statusSnapshotsByIssue[entry.issueKey];
       lines.push(
         `- ${entry.issueKey} | ${
           trimToSingleLine(params.state.statusByIssue[entry.issueKey]) ?? "Running."
         }`,
       );
+      lines.push(...buildPolicyShortcutLines({ issueKey: entry.issueKey, snapshot }));
       lines.push(
         ...buildRerunLedgerLines({
           priorRunId: entry.request.rerunContext?.priorRunId,
@@ -3848,9 +3871,11 @@ function buildInboxMessage(params: {
   if (queued.length > 0) {
     lines.push(`Queued: ${queued.length}`);
     for (const entry of queued) {
+      const snapshot = params.state.statusSnapshotsByIssue[entry.issueKey];
       lines.push(
         `- ${entry.issueKey} | ${trimToSingleLine(params.state.statusByIssue[entry.issueKey]) ?? "Queued."}`,
       );
+      lines.push(...buildPolicyShortcutLines({ issueKey: entry.issueKey, snapshot }));
       lines.push(
         ...buildRerunLedgerLines({
           priorRunId: entry.request.rerunContext?.priorRunId,
@@ -3903,6 +3928,7 @@ function buildInboxMessage(params: {
         );
       }
       lines.push(...buildSuitabilityLedgerLines(entry));
+      lines.push(...buildPolicyShortcutLines({ issueKey: entry.issueKey, snapshot: entry }));
       lines.push(
         ...buildRerunLedgerLines({
           priorRunId: entry.rerunPriorRunId,
