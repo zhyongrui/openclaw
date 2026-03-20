@@ -230,6 +230,10 @@ The project-progress artifact now also carries:
 
 - `nextWorkBlockingGateId`
 - `nextWorkPrimaryBlocker`
+- `activeWorkstreamIndex`
+- `activeWorkstreamCount`
+- `activeWorkstreamTitle`
+- `activeWorkstreamSummary`
 - `selectedWorkItemExecutionMode`
 - `roleRouteSummary`
 - `operator.currentRunStage`
@@ -245,6 +249,10 @@ The autonomous-loop artifact now also carries:
 - `iterations`
 - `nextWorkBlockingGateId`
 - `nextWorkPrimaryBlocker`
+- `activeWorkstreamIndex`
+- `activeWorkstreamCount`
+- `activeWorkstreamTitle`
+- `activeWorkstreamSummary`
 - `selectedWorkItemExecutionMode`
 - `roleRouteSummary`
 - `queuedRunCount`

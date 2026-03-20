@@ -27,6 +27,7 @@ export interface ProjectAutonomousLoopIteration {
   queuedIssueKey: string | null;
   stopReason: string | null;
   message: string | null;
+  activeWorkstreamSummary: string | null;
 }
 
 export interface ProjectAutonomousLoopQueueIssueResult {
@@ -56,6 +57,10 @@ export interface ProjectAutonomousLoopArtifact {
   nextWorkDecision: string;
   nextWorkBlockingGateId: string | null;
   nextWorkPrimaryBlocker: string | null;
+  activeWorkstreamIndex: number | null;
+  activeWorkstreamCount: number;
+  activeWorkstreamTitle: string | null;
+  activeWorkstreamSummary: string | null;
   nextSuggestedCommand: string | null;
   nextSuggestedChatCommand: string | null;
   selectedWorkItemId: string | null;
@@ -101,6 +106,10 @@ export async function setProjectAutonomousLoopDisabled(params: {
     nextWorkDecision: "no-actionable-work-item",
     nextWorkBlockingGateId: null,
     nextWorkPrimaryBlocker: null,
+    activeWorkstreamIndex: null,
+    activeWorkstreamCount: 0,
+    activeWorkstreamTitle: null,
+    activeWorkstreamSummary: null,
     nextSuggestedCommand: null,
     nextSuggestedChatCommand: null,
     selectedWorkItemId: null,
@@ -152,6 +161,10 @@ export async function readProjectAutonomousLoopArtifact(
       nextWorkDecision: "no-actionable-work-item",
       nextWorkBlockingGateId: null,
       nextWorkPrimaryBlocker: null,
+      activeWorkstreamIndex: null,
+      activeWorkstreamCount: 0,
+      activeWorkstreamTitle: null,
+      activeWorkstreamSummary: null,
       nextSuggestedCommand: null,
       nextSuggestedChatCommand: null,
       selectedWorkItemId: null,
@@ -198,6 +211,10 @@ export async function readProjectAutonomousLoopArtifact(
     nextWorkDecision: parsed.nextWorkDecision ?? "no-actionable-work-item",
     nextWorkBlockingGateId: parsed.nextWorkBlockingGateId ?? null,
     nextWorkPrimaryBlocker: parsed.nextWorkPrimaryBlocker ?? null,
+    activeWorkstreamIndex: parsed.activeWorkstreamIndex ?? null,
+    activeWorkstreamCount: parsed.activeWorkstreamCount ?? 0,
+    activeWorkstreamTitle: parsed.activeWorkstreamTitle ?? null,
+    activeWorkstreamSummary: parsed.activeWorkstreamSummary ?? null,
     nextSuggestedCommand: parsed.nextSuggestedCommand ?? null,
     nextSuggestedChatCommand:
       parsed.nextSuggestedChatCommand ??
@@ -312,6 +329,10 @@ async function runProjectAutonomousLoopIteration(params: {
       nextWorkDecision: progress.nextWorkDecision,
       nextWorkBlockingGateId: progress.nextWorkBlockingGateId,
       nextWorkPrimaryBlocker: progress.nextWorkPrimaryBlocker,
+      activeWorkstreamIndex: progress.activeWorkstreamIndex,
+      activeWorkstreamCount: progress.activeWorkstreamCount,
+      activeWorkstreamTitle: progress.activeWorkstreamTitle,
+      activeWorkstreamSummary: progress.activeWorkstreamSummary,
       nextSuggestedCommand,
       nextSuggestedChatCommand,
       selectedWorkItemId: issueMaterialization.selectedWorkItemId,
@@ -355,6 +376,10 @@ async function runProjectAutonomousLoopIteration(params: {
     nextWorkDecision: progress.nextWorkDecision,
     nextWorkBlockingGateId: progress.nextWorkBlockingGateId,
     nextWorkPrimaryBlocker: progress.nextWorkPrimaryBlocker,
+    activeWorkstreamIndex: progress.activeWorkstreamIndex,
+    activeWorkstreamCount: progress.activeWorkstreamCount,
+    activeWorkstreamTitle: progress.activeWorkstreamTitle,
+    activeWorkstreamSummary: progress.activeWorkstreamSummary,
     nextSuggestedCommand,
     nextSuggestedChatCommand,
     selectedWorkItemId: progress.selectedWorkItemId,
@@ -438,6 +463,7 @@ export async function runProjectAutonomousLoop(params: {
     queuedIssueKey: latest.queuedIssueKey,
     stopReason: latest.stopReason,
     message: latest.message,
+    activeWorkstreamSummary: latest.activeWorkstreamSummary,
   });
 
   for (let iteration = 2; iteration <= maxIterations; iteration += 1) {
@@ -478,6 +504,7 @@ export async function runProjectAutonomousLoop(params: {
       queuedIssueKey: latest.queuedIssueKey,
       stopReason: latest.stopReason,
       message: latest.message,
+      activeWorkstreamSummary: latest.activeWorkstreamSummary,
     });
   }
 

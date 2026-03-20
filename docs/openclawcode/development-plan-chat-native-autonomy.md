@@ -165,6 +165,7 @@ Status:
   and `/occode-progress`
 - active-run context was deepened later the same day so progress/autopilot now
   also expose:
+  - active workstream summary
   - current run stage
   - current run branch / PR
   - resolved role-route summary

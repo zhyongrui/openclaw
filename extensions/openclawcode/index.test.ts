@@ -6340,6 +6340,9 @@ describe("openclawcode extension", () => {
       });
       expect(progressResult?.text).toContain("openclawcode progress for zhyongrui/openclawcode");
       expect(progressResult?.text).toContain("Next work: ready-to-execute");
+      expect(progressResult?.text).toContain(
+        "Active workstream: Workstream 1/1 | Show project progress in chat.",
+      );
       expect(progressResult?.text).toContain("Execution mode: feature");
       expect(progressResult?.text).toContain("Next: /occode-materialize zhyongrui/openclawcode");
 
@@ -6357,6 +6360,9 @@ describe("openclawcode extension", () => {
       const progressArtifact = await readProjectProgressArtifact(fixture.repoRoot);
       expect(progressArtifact.nextWorkDecision).toBe("ready-to-execute");
       expect(progressArtifact.selectedWorkItemExecutionMode).toBe("feature");
+      expect(progressArtifact.activeWorkstreamSummary).toBe(
+        "Workstream 1/1 | Show project progress in chat.",
+      );
       expect(progressArtifact.nextSuggestedChatCommand).toBe(
         "/occode-materialize zhyongrui/openclawcode",
       );
@@ -6437,6 +6443,9 @@ describe("openclawcode extension", () => {
       });
       expect(progressResult?.text).toContain("Next work: blocked-on-human");
       expect(progressResult?.text).toContain("Next-work gate: execution-start");
+      expect(progressResult?.text).toContain(
+        "Active workstream: Workstream 1/1 | Refactor chat progress formatting into a dedicated presenter.",
+      );
       expect(progressResult?.text).toContain("Execution mode: refactor");
       expect(progressResult?.text).toContain(
         "Primary blocker: The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
@@ -6451,6 +6460,9 @@ describe("openclawcode extension", () => {
       });
       expect(onceResult?.text).toContain("Status: blocked");
       expect(onceResult?.text).toContain("Next-work gate: execution-start");
+      expect(onceResult?.text).toContain(
+        "Active workstream: Workstream 1/1 | Refactor chat progress formatting into a dedicated presenter.",
+      );
       expect(onceResult?.text).toContain("Execution mode: refactor");
       expect(onceResult?.text).toContain(
         "Primary blocker: The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
@@ -6568,14 +6580,17 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain("Mode: repeat");
       expect(result?.text).toContain("Status: blocked");
       expect(result?.text).toContain("Iterations: 2/2");
+      expect(result?.text).toContain(
+        "Active workstream: Workstream 1/1 | Run a bounded repeat autopilot loop from chat.",
+      );
       expect(result?.text).toContain("Operator: queued=1 | currentRun=no | pause=no");
       expect(result?.text).toContain("Stop reason: A run is already queued for this repository.");
       expect(result?.text).toContain(`Next: /occode-progress zhyongrui/openclawcode`);
       expect(result?.text).toContain(
-        "- iteration 1: materialized-and-queued | ready-to-execute | #88 | zhyongrui/openclawcode#88",
+        "- iteration 1: materialized-and-queued | ready-to-execute | #88 | zhyongrui/openclawcode#88 | message=Queued zhyongrui/openclawcode#88 after issue materialization. | workstream=Workstream 1/1 | Run a bounded repeat autopilot loop from chat.",
       );
       expect(result?.text).toContain(
-        "- iteration 2: blocked | ready-to-execute | #88 | stop=A run is already queued for this repository.",
+        "- iteration 2: blocked | ready-to-execute | #88 | stop=A run is already queued for this repository. | workstream=Workstream 1/1 | Run a bounded repeat autopilot loop from chat.",
       );
 
       const artifact = await readProjectAutonomousLoopArtifact(fixture.repoRoot);
@@ -6586,6 +6601,7 @@ describe("openclawcode extension", () => {
         completedIterationCount: 2,
         queuedRunCount: 1,
         stopReason: "A run is already queued for this repository.",
+        activeWorkstreamSummary: "Workstream 1/1 | Run a bounded repeat autopilot loop from chat.",
         nextSuggestedChatCommand: "/occode-progress zhyongrui/openclawcode",
       });
       expect(artifact.iterations).toEqual([
@@ -6594,12 +6610,16 @@ describe("openclawcode extension", () => {
           status: "materialized-and-queued",
           selectedIssueNumber: 88,
           queuedIssueKey: "zhyongrui/openclawcode#88",
+          activeWorkstreamSummary:
+            "Workstream 1/1 | Run a bounded repeat autopilot loop from chat.",
         }),
         expect.objectContaining({
           iteration: 2,
           status: "blocked",
           selectedIssueNumber: 88,
           stopReason: "A run is already queued for this repository.",
+          activeWorkstreamSummary:
+            "Workstream 1/1 | Run a bounded repeat autopilot loop from chat.",
         }),
       ]);
 

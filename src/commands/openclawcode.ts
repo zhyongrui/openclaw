@@ -2084,6 +2084,9 @@ function logProjectProgressArtifact(params: {
   if (artifact.nextWorkBlockingGateId) {
     runtime.log(`Next-work gate: ${artifact.nextWorkBlockingGateId}`);
   }
+  if (artifact.activeWorkstreamSummary) {
+    runtime.log(`Active workstream: ${artifact.activeWorkstreamSummary}`);
+  }
   runtime.log(
     `Signals: workItems=${artifact.workItemCount} | unresolvedRoles=${artifact.unresolvedRoleCount} | blockedGates=${artifact.blockedGateCount} | needsHuman=${artifact.needsHumanDecisionCount}`,
   );
@@ -2148,6 +2151,9 @@ function logProjectAutonomousLoopArtifact(params: {
   if (artifact.nextWorkBlockingGateId) {
     runtime.log(`Next-work gate: ${artifact.nextWorkBlockingGateId}`);
   }
+  if (artifact.activeWorkstreamSummary) {
+    runtime.log(`Active workstream: ${artifact.activeWorkstreamSummary}`);
+  }
   runtime.log(
     `Operator: queued=${artifact.queuedRunCount} | currentRun=${artifact.currentRunPresent ? "yes" : "no"} | pause=${artifact.providerPauseActive ? "yes" : "no"}`,
   );
@@ -2200,6 +2206,9 @@ function logProjectAutonomousLoopArtifact(params: {
         iteration.queuedIssueKey ? `queued=${iteration.queuedIssueKey}` : undefined,
         iteration.stopReason ? `stop=${iteration.stopReason}` : undefined,
         iteration.message ? `message=${iteration.message}` : undefined,
+        iteration.activeWorkstreamSummary
+          ? `workstream=${iteration.activeWorkstreamSummary}`
+          : undefined,
       ]
         .filter(Boolean)
         .join(" | ");

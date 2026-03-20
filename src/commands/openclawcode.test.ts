@@ -2683,6 +2683,7 @@ describe("openclawCodeRunCommand", () => {
         id: "planned-01-ship-the-next-work-selection-artifact",
         selectedFrom: "work-item-inventory",
         executionMode: "feature",
+        workstreamIndex: 1,
         title: "Ship the next-work selection artifact.",
       },
     });
@@ -2761,6 +2762,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.canContinueAutonomously).toBe(false);
     expect(payload.selectedWorkItem).toMatchObject({
       executionMode: "refactor",
+      workstreamIndex: 1,
       title: "Refactor role-routing orchestration into a dedicated planning module.",
     });
     expect(payload.blockers).toContain(
@@ -2935,6 +2937,7 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.selectedWorkItem).toMatchObject({
       id: "discovered-refresh-stale-work-item-artifact",
       selectedFrom: "discovery",
+      workstreamIndex: null,
       title: "Refresh the repo-local work-item inventory after blueprint changes.",
     });
   });
@@ -3157,6 +3160,11 @@ describe("openclawCodeRunCommand", () => {
       exists: true,
       nextWorkDecision: "ready-to-execute",
       nextWorkPrimaryBlocker: null,
+      activeWorkstreamIndex: 1,
+      activeWorkstreamCount: 1,
+      activeWorkstreamTitle: "Show blueprint-aware progress in one artifact.",
+      activeWorkstreamSummary:
+        "Workstream 1/1 | Show blueprint-aware progress in one artifact.",
       nextSuggestedCommand:
         `openclaw code issue-materialize --repo-root ${repoRoot}`,
       nextSuggestedChatCommand: "/occode-materialize openclaw/openclaw",
@@ -3186,6 +3194,11 @@ describe("openclawCodeRunCommand", () => {
       requestedIterationCount: 1,
       completedIterationCount: 1,
       nextWorkDecision: "ready-to-execute",
+      activeWorkstreamIndex: 1,
+      activeWorkstreamCount: 1,
+      activeWorkstreamTitle: "Show blueprint-aware progress in one artifact.",
+      activeWorkstreamSummary:
+        "Workstream 1/1 | Show blueprint-aware progress in one artifact.",
       nextSuggestedCommand:
         `openclaw code run --issue 654 --repo-root ${repoRoot}`,
       nextSuggestedChatCommand: "/occode-start openclaw/openclaw#654",
@@ -3216,6 +3229,9 @@ describe("openclawCodeRunCommand", () => {
     const loopLines = runtime.log.mock.calls.map((call) => String(call[0]));
     expect(loopLines).toContain("Mode: once");
     expect(loopLines).toContain("Status: materialized-only");
+    expect(loopLines).toContain(
+      "Active workstream: Workstream 1/1 | Show blueprint-aware progress in one artifact.",
+    );
     expect(
       loopLines.some((line) =>
         line.startsWith("Next suggested command: openclaw code run --issue ") &&
@@ -3231,7 +3247,9 @@ describe("openclawCodeRunCommand", () => {
     expect(
       loopLines.some((line) =>
         line.startsWith("- 1: status=materialized-only | decision=ready-to-execute | issue=#") &&
-        line.endsWith(" | message=Materialized the next issue."),
+        line.includes(
+          " | message=Materialized the next issue. | workstream=Workstream 1/1 | Show blueprint-aware progress in one artifact.",
+        ),
       ),
     ).toBe(true);
 
@@ -3344,6 +3362,9 @@ describe("openclawCodeRunCommand", () => {
       `openclaw code stage-gates-show --repo-root ${repoRoot}`,
     );
     expect(loop.nextSuggestedChatCommand).toBe("/occode-gates openclaw/openclaw");
+    expect(loop.activeWorkstreamSummary).toBe(
+      "Workstream 1/1 | Refactor autonomous-loop queue handoff into a dedicated coordinator.",
+    );
   });
 
   it("records repeat-loop iteration history when no queue handoff is configured", async () => {
@@ -3435,10 +3456,15 @@ describe("openclawCodeRunCommand", () => {
     expect(loop.nextSuggestedChatCommand).toBe(
       `/occode-start openclaw/openclaw#${loop.selectedIssueNumber}`,
     );
+    expect(loop.activeWorkstreamSummary).toBe(
+      "Workstream 1/1 | Show supervised repeat-loop history in the artifact.",
+    );
     expect(loop.iterations).toEqual([
       expect.objectContaining({
         iteration: 1,
         status: "materialized-only",
+        activeWorkstreamSummary:
+          "Workstream 1/1 | Show supervised repeat-loop history in the artifact.",
       }),
     ]);
   });

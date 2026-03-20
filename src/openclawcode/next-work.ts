@@ -35,6 +35,7 @@ export interface ProjectNextWorkCandidate {
   kind: ProjectWorkItem["kind"];
   status: ProjectWorkItem["status"];
   executionMode: ProjectWorkItemExecutionMode;
+  workstreamIndex: number | null;
   title: string;
   summary: string;
   selectedFrom: "discovery" | "work-item-inventory";
@@ -142,6 +143,7 @@ function toSelectedWorkItem(
     kind: workItem.kind,
     status: workItem.status,
     executionMode: workItem.executionMode,
+    workstreamIndex: workItem.workstreamIndex > 0 ? workItem.workstreamIndex : null,
     title: workItem.title,
     summary: workItem.summary,
     selectedFrom,
@@ -416,14 +418,40 @@ export async function readProjectNextWorkSelection(
 
   try {
     const raw = await readFile(artifactPath, "utf8");
-    const parsed = JSON.parse(raw) as ProjectNextWorkSelection;
+    const parsed = JSON.parse(raw) as Partial<ProjectNextWorkSelection>;
     return {
-      ...parsed,
       repoRoot,
       artifactPath,
+      exists: parsed.exists ?? true,
+      schemaVersion: parsed.schemaVersion ?? PROJECT_NEXT_WORK_SELECTION_SCHEMA_VERSION,
+      generatedAt: parsed.generatedAt ?? null,
       blueprintExists: blueprint.exists,
       blueprintPath: blueprint.blueprintPath,
       blueprintRevisionId: blueprint.revisionId,
+      decision: parsed.decision ?? "no-actionable-work-item",
+      canContinueAutonomously: parsed.canContinueAutonomously ?? false,
+      blockingGateId: parsed.blockingGateId ?? null,
+      selectedWorkItem: parsed.selectedWorkItem
+        ? {
+            ...parsed.selectedWorkItem,
+            workstreamIndex: parsed.selectedWorkItem.workstreamIndex ?? null,
+          }
+        : null,
+      selectedReason: parsed.selectedReason ?? null,
+      blockerCount: parsed.blockerCount ?? 0,
+      blockers: parsed.blockers ?? [],
+      suggestionCount: parsed.suggestionCount ?? 0,
+      suggestions: parsed.suggestions ?? [],
+      clarificationQuestionCount: parsed.clarificationQuestionCount ?? 0,
+      clarificationQuestions: parsed.clarificationQuestions ?? [],
+      discoveryEvidenceCount: parsed.discoveryEvidenceCount ?? 0,
+      highestDiscoveryPriority: parsed.highestDiscoveryPriority ?? null,
+      workItemCount: parsed.workItemCount ?? 0,
+      plannedWorkItemCount: parsed.plannedWorkItemCount ?? 0,
+      discoveredWorkItemCount: parsed.discoveredWorkItemCount ?? 0,
+      blockedGateCount: parsed.blockedGateCount ?? 0,
+      needsHumanDecisionCount: parsed.needsHumanDecisionCount ?? 0,
+      unresolvedRoleCount: parsed.unresolvedRoleCount ?? 0,
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {

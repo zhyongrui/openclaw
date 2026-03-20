@@ -49,6 +49,10 @@ export interface ProjectProgressArtifact {
   nextWorkDecision: string;
   nextWorkBlockingGateId: string | null;
   nextWorkPrimaryBlocker: string | null;
+  activeWorkstreamIndex: number | null;
+  activeWorkstreamCount: number;
+  activeWorkstreamTitle: string | null;
+  activeWorkstreamSummary: string | null;
   selectedWorkItemId: string | null;
   selectedWorkItemTitle: string | null;
   selectedWorkItemExecutionMode: string | null;
@@ -68,6 +72,40 @@ export interface ProjectProgressArtifact {
 
 function resolveProjectProgressArtifactPath(repoRootInput: string): string {
   return path.join(path.resolve(repoRootInput), ".openclawcode", "project-progress.json");
+}
+
+function resolveActiveWorkstreamDetails(params: {
+  selectedWorkItem: Awaited<ReturnType<typeof readProjectNextWorkSelection>>["selectedWorkItem"];
+  plannedWorkItemCount: number;
+}): {
+  index: number | null;
+  count: number;
+  title: string | null;
+  summary: string | null;
+} {
+  const count = Math.max(0, params.plannedWorkItemCount);
+  if (!params.selectedWorkItem) {
+    return {
+      index: null,
+      count,
+      title: null,
+      summary: null,
+    };
+  }
+  if (params.selectedWorkItem.selectedFrom === "discovery" || params.selectedWorkItem.workstreamIndex == null) {
+    return {
+      index: null,
+      count,
+      title: params.selectedWorkItem.title,
+      summary: `Discovery follow-up | ${params.selectedWorkItem.title}`,
+    };
+  }
+  return {
+    index: params.selectedWorkItem.workstreamIndex,
+    count: Math.max(count, params.selectedWorkItem.workstreamIndex),
+    title: params.selectedWorkItem.title,
+    summary: `Workstream ${params.selectedWorkItem.workstreamIndex}/${Math.max(count, params.selectedWorkItem.workstreamIndex)} | ${params.selectedWorkItem.title}`,
+  };
 }
 
 function buildOperatorSummary(params: {
@@ -159,6 +197,10 @@ export async function writeProjectProgressArtifact(params: {
     repo: params.repo,
     command: nextSuggestedCommand,
   });
+  const activeWorkstream = resolveActiveWorkstreamDetails({
+    selectedWorkItem: nextWork.selectedWorkItem,
+    plannedWorkItemCount: workItems.plannedWorkItemCount,
+  });
 
   const artifact: ProjectProgressArtifact = {
     repoRoot,
@@ -175,6 +217,10 @@ export async function writeProjectProgressArtifact(params: {
     nextWorkDecision: nextWork.decision,
     nextWorkBlockingGateId: nextWork.blockingGateId,
     nextWorkPrimaryBlocker: nextWork.blockers[0] ?? null,
+    activeWorkstreamIndex: activeWorkstream.index,
+    activeWorkstreamCount: activeWorkstream.count,
+    activeWorkstreamTitle: activeWorkstream.title,
+    activeWorkstreamSummary: activeWorkstream.summary,
     selectedWorkItemId: nextWork.selectedWorkItem?.id ?? null,
     selectedWorkItemTitle: nextWork.selectedWorkItem?.title ?? null,
     selectedWorkItemExecutionMode: nextWork.selectedWorkItem?.executionMode ?? null,
@@ -228,6 +274,10 @@ export async function readProjectProgressArtifact(
       nextWorkDecision: "no-actionable-work-item",
       nextWorkBlockingGateId: null,
       nextWorkPrimaryBlocker: null,
+      activeWorkstreamIndex: null,
+      activeWorkstreamCount: 0,
+      activeWorkstreamTitle: null,
+      activeWorkstreamSummary: null,
       selectedWorkItemId: null,
       selectedWorkItemTitle: null,
       selectedWorkItemExecutionMode: null,
@@ -261,6 +311,10 @@ export async function readProjectProgressArtifact(
     nextWorkDecision: parsed.nextWorkDecision ?? "no-actionable-work-item",
     nextWorkBlockingGateId: parsed.nextWorkBlockingGateId ?? null,
     nextWorkPrimaryBlocker: parsed.nextWorkPrimaryBlocker ?? null,
+    activeWorkstreamIndex: parsed.activeWorkstreamIndex ?? null,
+    activeWorkstreamCount: parsed.activeWorkstreamCount ?? 0,
+    activeWorkstreamTitle: parsed.activeWorkstreamTitle ?? null,
+    activeWorkstreamSummary: parsed.activeWorkstreamSummary ?? null,
     selectedWorkItemId: parsed.selectedWorkItemId ?? null,
     selectedWorkItemTitle: parsed.selectedWorkItemTitle ?? null,
     selectedWorkItemExecutionMode: parsed.selectedWorkItemExecutionMode ?? null,

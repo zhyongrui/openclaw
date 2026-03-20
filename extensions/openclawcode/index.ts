@@ -3057,6 +3057,9 @@ function buildProjectProgressSummaryMessage(params: {
   if (params.artifact.nextWorkBlockingGateId) {
     lines.push(`Next-work gate: ${params.artifact.nextWorkBlockingGateId}`);
   }
+  if (params.artifact.activeWorkstreamSummary) {
+    lines.push(`Active workstream: ${params.artifact.activeWorkstreamSummary}`);
+  }
   if (params.artifact.selectedWorkItemTitle) {
     lines.push(`Selected work item: ${params.artifact.selectedWorkItemTitle}`);
   }
@@ -3114,6 +3117,9 @@ function buildAutonomousLoopSummaryMessage(params: {
   if (params.artifact.nextWorkBlockingGateId) {
     lines.push(`Next-work gate: ${params.artifact.nextWorkBlockingGateId}`);
   }
+  if (params.artifact.activeWorkstreamSummary) {
+    lines.push(`Active workstream: ${params.artifact.activeWorkstreamSummary}`);
+  }
   lines.push(
     `Operator: queued=${params.artifact.queuedRunCount} | currentRun=${params.artifact.currentRunPresent ? "yes" : "no"} | pause=${params.artifact.providerPauseActive ? "yes" : "no"}`,
   );
@@ -3167,6 +3173,7 @@ function buildAutonomousLoopSummaryMessage(params: {
       iteration.queuedIssueKey,
       iteration.stopReason ? `stop=${iteration.stopReason}` : null,
       iteration.message ? `message=${iteration.message}` : null,
+      iteration.activeWorkstreamSummary ? `workstream=${iteration.activeWorkstreamSummary}` : null,
     ].filter((part): part is string => Boolean(part));
     lines.push(`- iteration ${iteration.iteration}: ${iterationParts.join(" | ")}`);
   }
