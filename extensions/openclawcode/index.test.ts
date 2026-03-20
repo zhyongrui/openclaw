@@ -4977,6 +4977,7 @@ describe("openclawcode extension", () => {
           "openclawcode inbox for zhyongrui/openclawcode",
           "Pending approvals: 1",
           "- zhyongrui/openclawcode#301 | Awaiting chat approval.",
+          "  action: /occode-start zhyongrui/openclawcode#301",
           "Running: 1",
           "- zhyongrui/openclawcode#303 | Running.",
           "Queued: 1",
@@ -5026,6 +5027,39 @@ describe("openclawcode extension", () => {
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows execution-start approval actions through /occode-inbox", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.upsertPendingApproval(
+        {
+          issueKey: "zhyongrui/openclawcode#307",
+          notifyChannel: "telegram",
+          notifyTarget: "chat:primary",
+          approvalKind: "execution-start-gated",
+        },
+        "Awaiting execution-start gate approval.",
+      );
+
+      const result = await fixture.commands.get("occode-inbox")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-inbox",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain(
+        "- zhyongrui/openclawcode#307 | Awaiting execution-start gate approval.",
+      );
+      expect(result?.text).toContain("  action: /occode-gates zhyongrui/openclawcode");
+      expect(result?.text).toContain(
+        "  approve: /occode-gate-decide zhyongrui/openclawcode execution-start approved [note]",
+      );
+    } finally {
+      await cleanupPluginFixture(fixture);
     }
   });
 

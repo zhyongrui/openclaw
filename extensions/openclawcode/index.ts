@@ -1871,6 +1871,26 @@ function buildPolicyShortcutLines(params: {
   return [`  policy: /occode-policy ${params.issueKey}`];
 }
 
+function buildPendingApprovalActionLines(params: {
+  entry: {
+    issueKey: string;
+    approvalKind?: "manual" | "execution-start-gated";
+  };
+}): string[] {
+  if (params.entry.approvalKind === "execution-start-gated") {
+    const parsed = parseIssueKey(params.entry.issueKey);
+    if (!parsed) {
+      return [];
+    }
+    const repoKey = `${parsed.owner}/${parsed.repo}`;
+    return [
+      `  action: /occode-gates ${repoKey}`,
+      `  approve: /occode-gate-decide ${repoKey} execution-start approved [note]`,
+    ];
+  }
+  return [`  action: /occode-start ${params.entry.issueKey}`];
+}
+
 function buildPrecheckedEscalationStatus(params: {
   issue: { owner: string; repo: string; number: number };
   summary: string;
@@ -3829,6 +3849,7 @@ function buildInboxMessage(params: {
           trimToSingleLine(params.state.statusByIssue[entry.issueKey]) ?? "Awaiting chat approval."
         }`,
       );
+      lines.push(...buildPendingApprovalActionLines({ entry }));
       lines.push(...buildPolicyShortcutLines({ issueKey: entry.issueKey, snapshot }));
     }
   } else {
