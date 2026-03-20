@@ -5061,7 +5061,7 @@ describe("openclawcode extension", () => {
         `- blueprint: agreed | revision ${inventory.blueprintRevisionId}`,
       );
       expect(result?.text).toContain(
-        "- issue projection: ready | execution: ready | blockers=0 | suggestions=1",
+        "- issue projection: ready | execution: ready | blockers=0 | suggestions=3",
       );
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
@@ -5149,14 +5149,20 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain("Provider strategy: planner=Claude Code, coder=Codex");
       expect(result?.text).toContain("Clarifications: 1");
       expect(result?.text).toContain(
+        "Priority question: Confirm the remaining `Open Questions` entries or replace them with `- None.` when settled.",
+      );
+      expect(result?.text).toContain(
         "- Confirm the remaining `Open Questions` entries or replace them with `- None.` when settled.",
       );
-      expect(result?.text).toContain("Suggestions: 2");
+      expect(result?.text).toContain("Suggestions: 3");
       expect(result?.text).toContain(
         "- When the team agrees on the target, record it with `openclaw code blueprint-set-status --status agreed`.",
       );
       expect(result?.text).toContain(
         "- Record explicit assignments for Reviewer, Verifier, and Doc-writer under `Provider Strategy` when you want a fixed multi-agent plan.",
+      );
+      expect(result?.text).toContain(
+        "- Capture at least one user or operator story in `Scope` or `Workstreams` so the first slice has a concrete beneficiary.",
       );
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
@@ -5178,6 +5184,7 @@ describe("openclawcode extension", () => {
 
       expect(result?.text).toContain("updated the blueprint goal");
       expect(result?.text).toContain("Goal: Move the operator from issue-first execution");
+      expect(result?.text).toContain("Priority question:");
       expect(result?.text).toContain("Clarifications:");
 
       const content = await fs.readFile(

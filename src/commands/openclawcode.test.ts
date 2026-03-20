@@ -2245,6 +2245,9 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.exists).toBe(true);
     expect(payload.questionCount).toBeGreaterThan(0);
     expect(payload.suggestionCount).toBeGreaterThan(0);
+    expect(payload.priorityQuestion).toBe(
+      "Replace the default Goal placeholder with the actual project objective.",
+    );
     expect(payload.questions).toContain(
       "Replace the default Goal placeholder with the actual project objective.",
     );
@@ -2370,6 +2373,7 @@ describe("openclawCodeRunCommand", () => {
       id: "planned-01-build-repo-local-work-item-inventory-persistence",
       kind: "planned",
       status: "planned",
+      executionMode: "feature",
       title: "Build repo-local work item inventory persistence.",
       workstreamIndex: 1,
     });
@@ -2383,10 +2387,96 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.workItems[0].githubIssueDraft.title).toBe(
       "[Blueprint]: Build repo-local work item inventory persistence.",
     );
+    expect(payload.workItems[0].githubIssueDraft.body).toContain("Delivery policy");
+    expect(payload.workItems[0].githubIssueDraft.body).toContain("Testing policy");
+    expect(payload.workItems[0].githubIssueDraft.body).toContain("- Execution mode: Feature");
     const artifact = JSON.parse(
       await readFile(path.join(repoRoot, ".openclawcode", "work-items.json"), "utf8"),
     );
     expect(artifact.workItemCount).toBe(2);
+  });
+
+  it("adds bug-triage and refactor guardrails to blueprint-derived issue drafts", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-work-item-guidance-"));
+    const blueprintPath = path.join(repoRoot, "PROJECT-BLUEPRINT.md");
+
+    await writeFile(
+      blueprintPath,
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Guided Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Guided Blueprint",
+        "",
+        "## Goal",
+        "Improve issue shaping for bug fixes and refactors.",
+        "",
+        "## Success Criteria",
+        "- A bug-fix draft asks for reproduction and regression proof.",
+        "- A refactor draft preserves working-state guardrails.",
+        "",
+        "## Scope",
+        "- In scope: issue-draft policy.",
+        "",
+        "## Non-Goals",
+        "- Live execution.",
+        "",
+        "## Constraints",
+        "- Keep the drafts machine-readable.",
+        "",
+        "## Risks",
+        "- Generic issue templates lead to shallow execution.",
+        "",
+        "## Assumptions",
+        "- Workstream wording can drive issue policy.",
+        "",
+        "## Human Gates",
+        "- Goal agreement: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "",
+        "## Workstreams",
+        "- Fix duplicate issue materialization when the blueprint revision changes.",
+        "- Refactor role-routing summary formatting into a dedicated module.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: guidance baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.workItems[0].executionMode).toBe("bugfix");
+    expect(payload.workItems[0].githubIssueDraft.body).toContain("Bug triage expectations");
+    expect(payload.workItems[0].githubIssueDraft.body).toContain(
+      "Add a regression proof before or alongside the fix",
+    );
+    expect(payload.workItems[1].executionMode).toBe("refactor");
+    expect(payload.workItems[1].githubIssueDraft.body).toContain("Refactor guardrails");
+    expect(payload.workItems[1].githubIssueDraft.body).toContain(
+      "Keep the repository working after each small checkpoint.",
+    );
   });
 
   it("shows missing repo-local work-item inventory before decomposition has run", async () => {

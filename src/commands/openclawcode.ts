@@ -1843,6 +1843,7 @@ function logProjectBlueprintClarificationReport(params: {
   }
 
   logProjectBlueprintSummary({ summary: report, runtime, json: false });
+  runtime.log(`Priority question: ${report.priorityQuestion ?? "none"}`);
   runtime.log(`Questions: ${report.questionCount}`);
   for (const question of report.questions) {
     runtime.log(`- question: ${question}`);

@@ -18,9 +18,16 @@ export const PROJECT_WORK_ITEM_STATUSES = [
   "canceled",
 ] as const;
 export const PROJECT_WORK_ITEM_KINDS = ["planned", "discovered"] as const;
+export const PROJECT_WORK_ITEM_EXECUTION_MODES = [
+  "feature",
+  "bugfix",
+  "refactor",
+  "research",
+] as const;
 
 export type ProjectWorkItemStatus = (typeof PROJECT_WORK_ITEM_STATUSES)[number];
 export type ProjectWorkItemKind = (typeof PROJECT_WORK_ITEM_KINDS)[number];
+export type ProjectWorkItemExecutionMode = (typeof PROJECT_WORK_ITEM_EXECUTION_MODES)[number];
 
 export interface ProjectWorkItemIssueDraft {
   title: string;
@@ -31,6 +38,7 @@ export interface ProjectWorkItem {
   id: string;
   kind: ProjectWorkItemKind;
   status: ProjectWorkItemStatus;
+  executionMode: ProjectWorkItemExecutionMode;
   title: string;
   summary: string;
   source: "blueprint";
@@ -101,12 +109,96 @@ function slugifyWorkItemIdSegment(value: string): string {
     .slice(0, 48);
 }
 
+function classifyProjectWorkItemExecutionMode(workItem: string): ProjectWorkItemExecutionMode {
+  if (/\b(fix|bug|regression|broken|crash|error|failure)\b/i.test(workItem)) {
+    return "bugfix";
+  }
+  if (
+    /\b(refactor|cleanup|clean up|rename|extract|restructure|reorganize|dedupe|simplify)\b/i.test(
+      workItem,
+    )
+  ) {
+    return "refactor";
+  }
+  if (/\b(investigate|diagnose|triage|research|spike|explore)\b/i.test(workItem)) {
+    return "research";
+  }
+  return "feature";
+}
+
+function buildDeliveryPolicyLines(
+  executionMode: ProjectWorkItemExecutionMode,
+): string[] {
+  const base = [
+    "- Keep this work item as one demoable vertical slice.",
+    "- Prefer the smallest user-visible or operator-visible change that proves progress.",
+    "- Avoid splitting the work into front-end-only, back-end-only, or tests-only subprojects unless the blueprint explicitly requires it.",
+  ];
+  if (executionMode === "research") {
+    return [
+      ...base,
+      "- End with a recommendation or next executable slice instead of leaving an open-ended investigation.",
+    ];
+  }
+  return base;
+}
+
+function buildTestingPolicyLines(
+  executionMode: ProjectWorkItemExecutionMode,
+): string[] {
+  const lines = [
+    "- Start with a failing proof or executable check when practical.",
+    "- Prefer public-behavior tests, CLI proofs, or chat-visible verification over implementation-only assertions.",
+    "- Follow a red -> green -> refactor loop and keep the proof green before broadening scope.",
+  ];
+  if (executionMode === "refactor") {
+    lines.push("- Preserve existing behavior unless the acceptance criteria explicitly say otherwise.");
+  }
+  return lines;
+}
+
+function buildExecutionModeSpecificLines(
+  executionMode: ProjectWorkItemExecutionMode,
+): { heading: string; lines: string[] } | null {
+  switch (executionMode) {
+    case "bugfix":
+      return {
+        heading: "Bug triage expectations",
+        lines: [
+          "- Record the observed behavior, the expected behavior, and the smallest known reproduction path.",
+          "- Identify the likely root-cause area before broad code changes.",
+          "- Add a regression proof before or alongside the fix so the failure cannot silently return.",
+        ],
+      };
+    case "refactor":
+      return {
+        heading: "Refactor guardrails",
+        lines: [
+          "- Keep the repository working after each small checkpoint.",
+          "- Preserve external behavior unless a success criterion explicitly changes it.",
+          "- Separate structural movement from behavior changes whenever the work can be split safely.",
+        ],
+      };
+    case "research":
+      return {
+        heading: "Research exit criteria",
+        lines: [
+          "- End with a concrete recommendation, not only observations.",
+          "- Name the next smallest executable slice once the investigation is complete.",
+        ],
+      };
+    default:
+      return null;
+  }
+}
+
 function resolveProjectWorkItemIssueDraft(params: {
   blueprintTitle: string | null;
   blueprintGoal: string | null;
   blueprintRevisionId: string | null;
   workItemId: string;
   workItem: string;
+  executionMode: ProjectWorkItemExecutionMode;
   acceptanceCriteria: string[];
   openQuestions: string[];
   humanGates: string[];
@@ -134,6 +226,12 @@ function resolveProjectWorkItemIssueDraft(params: {
     params.humanGates.length > 0
       ? params.humanGates.map((item) => `- ${item}`)
       : ["- Follow the default autonomous policy for this repository."];
+  const executionModeLabel = params.executionMode.replace(/(^|-)([a-z])/g, (_match, dash, char) =>
+    `${dash}${String(char).toUpperCase()}`,
+  );
+  const deliveryPolicyLines = buildDeliveryPolicyLines(params.executionMode);
+  const testingPolicyLines = buildTestingPolicyLines(params.executionMode);
+  const executionModeSpecific = buildExecutionModeSpecificLines(params.executionMode);
 
   return {
     title: `[Blueprint]: ${params.workItem}`,
@@ -145,10 +243,20 @@ function resolveProjectWorkItemIssueDraft(params: {
       `- Blueprint: ${params.blueprintTitle ?? "Untitled project blueprint"}`,
       `- Revision: ${params.blueprintRevisionId ?? "unknown"}`,
       `- Goal: ${params.blueprintGoal ?? "No goal summary recorded."}`,
+      `- Execution mode: ${executionModeLabel}`,
       "",
       "Acceptance criteria",
       ...acceptanceCriteriaLines,
       "",
+      "Delivery policy",
+      ...deliveryPolicyLines,
+      "",
+      "Testing policy",
+      ...testingPolicyLines,
+      "",
+      ...(executionModeSpecific
+        ? [executionModeSpecific.heading, ...executionModeSpecific.lines, ""]
+        : []),
       "Open questions",
       ...openQuestionLines,
       "",
@@ -270,10 +378,12 @@ export async function deriveProjectWorkItemInventory(
     const id = `planned-${String(index + 1).padStart(2, "0")}-${slugifyWorkItemIdSegment(
       workstream,
     )}`;
+    const executionMode = classifyProjectWorkItemExecutionMode(workstream);
     return {
       id,
       kind: "planned" as const,
       status: "planned" as const,
+      executionMode,
       title: workstream,
       summary: workstream,
       source: "blueprint" as const,
@@ -291,6 +401,7 @@ export async function deriveProjectWorkItemInventory(
         blueprintRevisionId: blueprint.revisionId,
         workItemId: id,
         workItem: workstream,
+        executionMode,
         acceptanceCriteria,
         openQuestions,
         humanGates,

@@ -2555,6 +2555,9 @@ function buildBlueprintGoalUpdateMessage(params: {
     params.executionStartReadiness
       ? `Execution-start gate: ${params.executionStartReadiness}`
       : undefined,
+    params.clarification.priorityQuestion
+      ? `Priority question: ${params.clarification.priorityQuestion}`
+      : undefined,
     `Clarifications: ${params.clarification.questionCount}`,
     ...params.clarification.questions.slice(0, 3).map((question) => `- ${question}`),
     `Suggestions: ${params.clarification.suggestionCount}`,
@@ -2807,6 +2810,9 @@ function buildBlueprintSummaryMessage(params: {
   }
 
   lines.push(`Clarifications: ${params.clarification.questionCount}`);
+  if (params.clarification.priorityQuestion) {
+    lines.push(`Priority question: ${params.clarification.priorityQuestion}`);
+  }
   for (const question of params.clarification.questions.slice(0, 5)) {
     lines.push(`- ${question}`);
   }

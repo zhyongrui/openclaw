@@ -107,6 +107,7 @@ export interface ProjectBlueprintSummary {
 }
 
 export interface ProjectBlueprintClarificationReport extends ProjectBlueprintSummary {
+  priorityQuestion: string | null;
   questions: string[];
   suggestions: string[];
   questionCount: number;
@@ -307,6 +308,19 @@ function joinNaturalLanguageList(values: string[]): string {
   return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`;
 }
 
+function pushUniqueOrdered(
+  target: Array<{ priority: number; text: string }>,
+  seen: Set<string>,
+  text: string,
+  priority: number,
+): void {
+  if (seen.has(text)) {
+    return;
+  }
+  seen.add(text);
+  target.push({ priority, text });
+}
+
 function splitFrontmatter(content: string): { frontmatter: string | null; body: string } {
   const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   if (!normalized.startsWith("---\n")) {
@@ -358,6 +372,68 @@ function parseProjectBlueprintRoleAssignments(
   }
 
   return assignments;
+}
+
+function sectionContainsPhrase(
+  sectionBodies: Partial<Record<string, string>>,
+  sectionName: string,
+  pattern: RegExp,
+): boolean {
+  const body = sectionBodies[sectionName];
+  return typeof body === "string" ? pattern.test(body) : false;
+}
+
+function isLikelyHorizontalWorkstream(workstream: string): boolean {
+  const normalized = workstream.toLowerCase();
+  if (
+    /\b(fix|bug|regression|broken|crash|error|refactor|cleanup|clean up|rename|extract|investigate|diagnose|triage|research|spike)\b/.test(
+      normalized,
+    )
+  ) {
+    return false;
+  }
+
+  const layerWords = [
+    "frontend",
+    "backend",
+    "api",
+    "database",
+    "schema",
+    "migration",
+    "ui",
+    "server",
+    "client",
+    "tests",
+    "test",
+    "docs",
+    "documentation",
+    "infra",
+    "infrastructure",
+  ];
+  const outcomeWords = [
+    "user",
+    "operator",
+    "customer",
+    "chat",
+    "cli",
+    "command",
+    "issue",
+    "blueprint",
+    "workflow",
+    "setup",
+    "status",
+    "progress",
+    "summary",
+    "materialize",
+    "autonomous",
+    "notification",
+    "webhook",
+  ];
+
+  return (
+    layerWords.some((word) => normalized.includes(word)) &&
+    !outcomeWords.some((word) => normalized.includes(word))
+  );
 }
 
 function defaultedProjectBlueprintSections(
@@ -838,25 +914,73 @@ export async function inspectProjectBlueprintClarifications(
   repoRootInput: string,
 ): Promise<ProjectBlueprintClarificationReport> {
   const summary = await readProjectBlueprintDocument(repoRootInput);
-  const questions = new Set<string>();
-  const suggestions = new Set<string>();
+  const questions: Array<{ priority: number; text: string }> = [];
+  const questionSet = new Set<string>();
+  const suggestions: Array<{ priority: number; text: string }> = [];
+  const suggestionSet = new Set<string>();
 
   if (!summary.exists) {
-    questions.add(
+    pushUniqueOrdered(
+      questions,
+      questionSet,
       "No project blueprint exists yet. Run `openclaw code blueprint-init` before trying to decompose work.",
+      0,
     );
+    const orderedQuestions = questions
+      .toSorted((left, right) => left.priority - right.priority || left.text.localeCompare(right.text))
+      .map((entry) => entry.text);
+    const orderedSuggestions = suggestions
+      .toSorted((left, right) => left.priority - right.priority || left.text.localeCompare(right.text))
+      .map((entry) => entry.text);
     return {
       ...summary,
-      questions: [...questions],
-      suggestions: [...suggestions],
-      questionCount: questions.size,
-      suggestionCount: suggestions.size,
+      priorityQuestion: orderedQuestions[0] ?? null,
+      questions: orderedQuestions,
+      suggestions: orderedSuggestions,
+      questionCount: orderedQuestions.length,
+      suggestionCount: orderedSuggestions.length,
     };
   }
 
+  const openQuestions = extractMarkdownListItems(summary.sectionBodies["Open Questions"]);
+  const workstreams = extractMarkdownListItems(summary.sectionBodies.Workstreams);
+  const hasUserStory =
+    sectionContainsPhrase(summary.sectionBodies, "Goal", /\bas a\b/i) ||
+    sectionContainsPhrase(summary.sectionBodies, "Scope", /\bas a\b/i) ||
+    sectionContainsPhrase(summary.sectionBodies, "Workstreams", /\bas a\b/i) ||
+    workstreams.some((item) => /\b(user|operator|customer)\b/i.test(item));
+  const hasProofOrTestSignal =
+    sectionContainsPhrase(
+      summary.sectionBodies,
+      "Success Criteria",
+      /\b(test|proof|verify|verified|demo|observable|repeat|reproduce|cli|chat)\b|`[^`]+`/i,
+    ) || sectionContainsPhrase(summary.sectionBodies, "Constraints", /\btest|verify|proof\b/i);
+  const hasBugFixWorkstream = workstreams.some((item) =>
+    /\b(fix|bug|regression|broken|crash|error|failure)\b/i.test(item),
+  );
+  const hasRefactorWorkstream = workstreams.some((item) =>
+    /\b(refactor|cleanup|clean up|rename|extract|restructure|reorganize|dedupe|simplify)\b/i.test(
+      item,
+    ),
+  );
+  const horizontalWorkstreams = workstreams.filter((item) => isLikelyHorizontalWorkstream(item));
+
   for (const section of summary.missingRequiredSections) {
-    questions.add(
+    const priority =
+      section === "Goal"
+        ? 10
+        : section === "Scope"
+          ? 20
+          : section === "Success Criteria"
+            ? 30
+            : section === "Workstreams"
+              ? 40
+              : 90;
+    pushUniqueOrdered(
+      questions,
+      questionSet,
       `Fill the \`${section}\` section in PROJECT-BLUEPRINT.md before deriving work items.`,
+      priority,
     );
   }
 
@@ -870,49 +994,87 @@ export async function inspectProjectBlueprintClarifications(
     }
     switch (section) {
       case "Goal":
-        questions.add("Replace the default Goal placeholder with the actual project objective.");
+        pushUniqueOrdered(
+          questions,
+          questionSet,
+          "Replace the default Goal placeholder with the actual project objective.",
+          10,
+        );
         break;
       case "Success Criteria":
-        questions.add("Replace the default Success Criteria bullets with concrete proof targets.");
+        pushUniqueOrdered(
+          questions,
+          questionSet,
+          "Replace the default Success Criteria bullets with concrete proof targets.",
+          30,
+        );
         break;
       case "Scope":
-        questions.add("List what is explicitly in scope and out of scope for this blueprint.");
+        pushUniqueOrdered(
+          questions,
+          questionSet,
+          "List what is explicitly in scope and out of scope for this blueprint.",
+          20,
+        );
         break;
       case "Workstreams":
-        questions.add(
+        pushUniqueOrdered(
+          questions,
+          questionSet,
           "Break the blueprint into initial workstreams before autonomous issue creation.",
+          40,
         );
         break;
       case "Provider Strategy":
-        suggestions.add(
+        pushUniqueOrdered(
+          suggestions,
+          suggestionSet,
           "Choose preferred providers or defaults for planner, coder, reviewer, verifier, and doc-writer roles.",
+          110,
         );
         break;
       case "Human Gates":
-        suggestions.add(
+        pushUniqueOrdered(
+          suggestions,
+          suggestionSet,
           "Decide which stages must pause for human approval versus continuing autonomously.",
+          120,
         );
         break;
       default:
-        suggestions.add(`Replace the default placeholder text in the \`${section}\` section.`);
+        pushUniqueOrdered(
+          suggestions,
+          suggestionSet,
+          `Replace the default placeholder text in the \`${section}\` section.`,
+          130,
+        );
         break;
     }
   }
 
   if (summary.status === "draft") {
-    suggestions.add(
+    pushUniqueOrdered(
+      suggestions,
+      suggestionSet,
       "Once the blueprint is clarified, record that checkpoint with `openclaw code blueprint-set-status --status clarified`.",
+      200,
     );
   }
   if (!summary.hasAgreementCheckpoint) {
-    suggestions.add(
+    pushUniqueOrdered(
+      suggestions,
+      suggestionSet,
       "When the team agrees on the target, record it with `openclaw code blueprint-set-status --status agreed`.",
+      210,
     );
   }
 
   if (summary.openQuestionCount > 0) {
-    questions.add(
+    pushUniqueOrdered(
+      questions,
+      questionSet,
       "Confirm the remaining `Open Questions` entries or replace them with `- None.` when settled.",
+      45,
     );
   }
 
@@ -924,16 +1086,72 @@ export async function inspectProjectBlueprintClarifications(
     .filter(([, assignment]) => !assignment || assignment.trim().length === 0)
     .map(([roleId]) => PROJECT_BLUEPRINT_PROVIDER_ROLE_LABELS[roleId]);
   if (unresolvedProviderRoles.length > 0) {
-    suggestions.add(
+    pushUniqueOrdered(
+      suggestions,
+      suggestionSet,
       `Record explicit assignments for ${joinNaturalLanguageList(unresolvedProviderRoles)} under \`Provider Strategy\` when you want a fixed multi-agent plan.`,
+      220,
     );
   }
 
+  if (!hasUserStory) {
+    pushUniqueOrdered(
+      suggestions,
+      suggestionSet,
+      "Capture at least one user or operator story in `Scope` or `Workstreams` so the first slice has a concrete beneficiary.",
+      300,
+    );
+  }
+
+  if (!hasProofOrTestSignal) {
+    pushUniqueOrdered(
+      suggestions,
+      suggestionSet,
+      "Record the first proof in `Success Criteria` as a public behavior, CLI command, chat-visible demo, or repeatable verification step.",
+      310,
+    );
+  }
+
+  if (horizontalWorkstreams.length > 0) {
+    pushUniqueOrdered(
+      suggestions,
+      suggestionSet,
+      "Rewrite layer-only workstreams into thin vertical slices that can be demonstrated end-to-end.",
+      320,
+    );
+  }
+
+  if (hasBugFixWorkstream) {
+    pushUniqueOrdered(
+      suggestions,
+      suggestionSet,
+      "For bug-fix workstreams, record observed behavior, expected behavior, and reproduction clues before execution starts.",
+      330,
+    );
+  }
+
+  if (hasRefactorWorkstream) {
+    pushUniqueOrdered(
+      suggestions,
+      suggestionSet,
+      "For refactor workstreams, state the invariant behavior and the first safe checkpoint before code movement starts.",
+      340,
+    );
+  }
+
+  const orderedQuestions = questions
+    .toSorted((left, right) => left.priority - right.priority || left.text.localeCompare(right.text))
+    .map((entry) => entry.text);
+  const orderedSuggestions = suggestions
+    .toSorted((left, right) => left.priority - right.priority || left.text.localeCompare(right.text))
+    .map((entry) => entry.text);
+
   return {
     ...summary,
-    questions: [...questions],
-    suggestions: [...suggestions],
-    questionCount: questions.size,
-    suggestionCount: suggestions.size,
+    priorityQuestion: orderedQuestions[0] ?? openQuestions[0] ?? null,
+    questions: orderedQuestions,
+    suggestions: orderedSuggestions,
+    questionCount: orderedQuestions.length,
+    suggestionCount: orderedSuggestions.length,
   };
 }

@@ -83,6 +83,18 @@ The machine-readable blueprint summary currently includes:
   - `humanGateCount`
   - `providerRoleAssignments`
 
+The clarification report from `openclaw code blueprint-clarify` now also
+includes:
+
+- `priorityQuestion`
+  - the highest-impact next clarification to answer first
+- planning guidance absorbed from the evaluated third-party skills:
+  - PRD-style reminders to capture a user or operator story
+  - proof-oriented success-criteria guidance
+  - vertical-slice warnings when workstreams look layer-only
+  - bug-triage prompts for bug-fix workstreams
+  - refactor-safety prompts for refactor workstreams
+
 The first repo-local work-item artifact now lives at:
 
 `/repo/.openclawcode/work-items.json`
@@ -103,9 +115,35 @@ It currently carries:
 - planned work items:
   - stable ids
   - source section and workstream index
+  - `executionMode`
+    - `feature`
+    - `bugfix`
+    - `refactor`
+    - `research`
   - provider-role assignments
   - acceptance criteria
   - GitHub issue drafts
+
+Blueprint-derived GitHub issue drafts now also embed execution policy directly:
+
+- `Delivery policy`
+  - keep the work item as one demoable vertical slice
+  - avoid layer-only decomposition by default
+- `Testing policy`
+  - bias toward failing proof first when practical
+  - prefer public-behavior verification over implementation-only checks
+  - keep a red -> green -> refactor loop
+- execution-mode-specific guidance:
+  - `bugfix`
+    - observed vs expected behavior
+    - reproduction path
+    - regression proof
+  - `refactor`
+    - invariant behavior
+    - small safe checkpoints
+    - preserve working state
+  - `research`
+    - exit with a concrete next executable slice
 
 The first repo-local discovery artifact now lives at:
 
