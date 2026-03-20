@@ -74,7 +74,7 @@ describe("runOnboardingOpenClawCode", () => {
     }) as never;
   });
 
-  it("shows gh auth guidance when GitHub auth is missing", async () => {
+  it("shows chat-first auth guidance when GitHub auth is missing", async () => {
     const note = vi.fn(async () => {});
     const prompter = buildWizardPrompter({
       note,
@@ -86,7 +86,9 @@ describe("runOnboardingOpenClawCode", () => {
 
     const noteCalls = note.mock.calls as unknown as Array<[string, string?]>;
     expect(noteCalls.some((call) => call[1] === "OpenClaw Code")).toBe(true);
+    expect(noteCalls.at(-1)?.[0]).toContain("/occode-setup");
     expect(noteCalls.at(-1)?.[0]).toContain("gh auth login");
+    expect(noteCalls.at(-1)?.[0]).toContain("OpenClaw will launch GitHub device auth for you");
   });
 
   it("creates and bootstraps a new repo with a placeholder empty-repo test command", async () => {
