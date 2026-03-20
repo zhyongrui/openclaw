@@ -29,14 +29,11 @@ const resolveGatewayInstallToken = vi.hoisted(() =>
 );
 const isSystemdUserServiceAvailable = vi.hoisted(() => vi.fn(async () => true));
 const runOnboardingOpenClawCode = vi.hoisted(() => vi.fn(async () => {}));
+const readSystemdUserLingerStatus = vi.hoisted(() =>
+  vi.fn(async () => ({ user: "test-user", linger: "yes" as const })),
+);
 const resolveSetupSecretInputString = vi.hoisted(() =>
   vi.fn<() => Promise<string | undefined>>(async () => undefined),
-);
-const readSystemdUserLingerStatus = vi.hoisted(() =>
-  vi.fn(async () => ({
-    linger: "yes" as const,
-    user: "test-user",
-  })),
 );
 
 vi.mock("../commands/onboard-helpers.js", () => ({
@@ -166,6 +163,8 @@ describe("finalizeSetupWizard", () => {
     resolveGatewayInstallToken.mockClear();
     isSystemdUserServiceAvailable.mockReset();
     isSystemdUserServiceAvailable.mockResolvedValue(true);
+    readSystemdUserLingerStatus.mockReset();
+    readSystemdUserLingerStatus.mockResolvedValue({ user: "test-user", linger: "yes" });
     resolveSetupSecretInputString.mockReset();
     resolveSetupSecretInputString.mockResolvedValue(undefined);
   });
