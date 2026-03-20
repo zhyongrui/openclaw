@@ -438,12 +438,12 @@ Acceptance:
 Status:
 
 - `[x]` first repo-local work-item model landed
-- `[ ]` GitHub projection and richer classes still open
+- `[x]` GitHub projection and richer classes landed for blueprint-backed work
 
 Tasks:
 
 - `[x]` define a first internal `work item` type independent from GitHub
-- `[ ]` support work-item classes:
+- `[x]` support work-item classes:
   - feature
   - bugfix
   - docs
@@ -453,7 +453,7 @@ Tasks:
 - `[x]` store work items under repo-local state
 - `[x]` give work items durable ids and statuses
 - `[x]` map work items to GitHub issue drafts when external tracking is needed
-- `[ ]` map work items to live GitHub issues when external tracking is needed
+- `[x]` map work items to live GitHub issues when external tracking is needed
 
 Acceptance:
 
@@ -465,20 +465,21 @@ Acceptance:
 Status:
 
 - `[x]` first planned work-item decomposition landed
-- `[ ]` incremental and discovered decomposition still open
+- `[x]` incremental decomposition landed
+- `[ ]` broader discovered decomposition still open
 
 Tasks:
 
 - `[x]` derive workstreams from `PROJECT-BLUEPRINT.md`
 - `[x]` generate work items from each workstream
 - `[x]` classify initial blueprint-derived items as planned
-- `[ ]` support decomposition of:
+- `[x]` support decomposition of:
   - feature slices
   - docs slices
   - rollout work
   - validation work
   - sync work
-- `[ ]` support incremental decomposition when the blueprint changes
+- `[x]` support incremental decomposition when the blueprint changes
 
 Acceptance:
 
@@ -506,7 +507,7 @@ Tasks:
 - `[x]` add dedupe keys
 - `[x]` add severity and priority scoring
 - `[x]` turn evidence into draft work items
-- `[ ]` prevent noisy duplicate issue creation
+- `[x]` prevent noisy duplicate issue creation
 
 Acceptance:
 

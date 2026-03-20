@@ -2448,9 +2448,15 @@ describe("openclawCodeRunCommand", () => {
       id: "planned-01-build-repo-local-work-item-inventory-persistence",
       kind: "planned",
       status: "planned",
+      class: "feature",
       executionMode: "feature",
       title: "Build repo-local work item inventory persistence.",
       workstreamIndex: 1,
+    });
+    expect(payload.workItems[0].fingerprint).toMatch(/^[a-f0-9]{40}$/);
+    expect(payload.workItems[0].githubIssue).toEqual({
+      current: null,
+      history: [],
     });
     expect(payload.workItems[0].providerRoleAssignments).toMatchObject({
       planner: "Claude Code",
@@ -2542,6 +2548,7 @@ describe("openclawCodeRunCommand", () => {
     );
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.workItems[0].class).toBe("bugfix");
     expect(payload.workItems[0].executionMode).toBe("bugfix");
     expect(payload.workItems[0].githubIssueDraft.body).toContain("Bug triage expectations");
     expect(payload.workItems[0].githubIssueDraft.body).toContain(
@@ -2551,6 +2558,269 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.workItems[1].githubIssueDraft.body).toContain("Refactor guardrails");
     expect(payload.workItems[1].githubIssueDraft.body).toContain(
       "Keep the repository working after each small checkpoint.",
+    );
+  });
+
+  it("classifies blueprint-derived work items into richer work-item classes", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-work-item-classes-"));
+    const blueprintPath = path.join(repoRoot, "PROJECT-BLUEPRINT.md");
+
+    await writeFile(
+      blueprintPath,
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Work Item Classes Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Work Item Classes Blueprint",
+        "",
+        "## Goal",
+        "Classify blueprint work into richer internal classes.",
+        "",
+        "## Success Criteria",
+        "- Docs, sync, validation, and incident slices classify distinctly.",
+        "",
+        "## Scope",
+        "- In scope: work-item metadata only.",
+        "",
+        "## Non-Goals",
+        "- Live execution.",
+        "",
+        "## Constraints",
+        "- Keep the result machine-readable.",
+        "",
+        "## Risks",
+        "- Flat classification would hide planning differences.",
+        "",
+        "## Assumptions",
+        "- Workstream wording is descriptive enough.",
+        "",
+        "## Human Gates",
+        "- Goal agreement: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "",
+        "## Workstreams",
+        "- Document the new-machine install runbook for operators.",
+        "- Sync upstream main into the mirrored fork branch.",
+        "- Validate the bootstrap flow on a clean host.",
+        "- Ship a hotfix for the pairing outage.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.workItems.map((item: { class: string }) => item.class)).toEqual([
+      "docs",
+      "sync",
+      "validation",
+      "incident",
+    ]);
+  });
+
+  it("preserves work-item ids, status, and GitHub links across incremental re-decomposition", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-work-item-incremental-"));
+    const blueprintPath = path.join(repoRoot, "PROJECT-BLUEPRINT.md");
+
+    await writeFile(
+      blueprintPath,
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Incremental Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Incremental Blueprint",
+        "",
+        "## Goal",
+        "Preserve incremental backlog state when the blueprint changes.",
+        "",
+        "## Success Criteria",
+        "- Existing work keeps its id and status.",
+        "- Removed work becomes superseded instead of disappearing.",
+        "",
+        "## Scope",
+        "- In scope: work-item inventory behavior.",
+        "",
+        "## Non-Goals",
+        "- Live execution.",
+        "",
+        "## Constraints",
+        "- Keep state deterministic.",
+        "",
+        "## Risks",
+        "- Rebuilding the backlog could drop operator context.",
+        "",
+        "## Assumptions",
+        "- Workstream text stays stable for preserved items.",
+        "",
+        "## Human Gates",
+        "- Goal agreement: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "",
+        "## Workstreams",
+        "- Build the stable backlog projection layer.",
+        "- Validate incremental decomposition after blueprint edits.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const inventoryPath = path.join(repoRoot, ".openclawcode", "work-items.json");
+    const firstPass = JSON.parse(await readFile(inventoryPath, "utf8"));
+    const preservedItem = firstPass.workItems[1];
+    preservedItem.status = "queued";
+    preservedItem.githubIssue = {
+      current: {
+        issueNumber: 55,
+        issueUrl: "https://github.com/openclaw/openclaw/issues/55",
+        issueTitle: "[Blueprint]: Validate incremental decomposition after blueprint edits.",
+        issueState: "open",
+        linkedAt: "2026-03-20T00:10:00.000Z",
+        linkedFrom: "created",
+        blueprintRevisionId: firstPass.blueprintRevisionId,
+      },
+      history: [
+        {
+          issueNumber: 55,
+          issueUrl: "https://github.com/openclaw/openclaw/issues/55",
+          issueTitle: "[Blueprint]: Validate incremental decomposition after blueprint edits.",
+          issueState: "open",
+          linkedAt: "2026-03-20T00:10:00.000Z",
+          linkedFrom: "created",
+          blueprintRevisionId: firstPass.blueprintRevisionId,
+        },
+      ],
+    };
+    await writeFile(inventoryPath, `${JSON.stringify(firstPass, null, 2)}\n`, "utf8");
+
+    await writeFile(
+      blueprintPath,
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Incremental Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T01:00:00.000Z",
+        "statusChangedAt: 2026-03-20T01:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Incremental Blueprint",
+        "",
+        "## Goal",
+        "Preserve incremental backlog state when the blueprint changes.",
+        "",
+        "## Success Criteria",
+        "- Existing work keeps its id and status.",
+        "- Removed work becomes superseded instead of disappearing.",
+        "",
+        "## Scope",
+        "- In scope: work-item inventory behavior.",
+        "",
+        "## Non-Goals",
+        "- Live execution.",
+        "",
+        "## Constraints",
+        "- Keep state deterministic.",
+        "",
+        "## Risks",
+        "- Rebuilding the backlog could drop operator context.",
+        "",
+        "## Assumptions",
+        "- Workstream text stays stable for preserved items.",
+        "",
+        "## Human Gates",
+        "- Goal agreement: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "",
+        "## Workstreams",
+        "- Validate incremental decomposition after blueprint edits.",
+        "- Add a new workstream after backlog churn.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    runtime.log.mockClear();
+    await openclawCodeBlueprintDecomposeCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.workItemCount).toBe(2);
+    expect(payload.supersededWorkItemCount).toBe(1);
+    expect(payload.workItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: preservedItem.id,
+          title: "Validate incremental decomposition after blueprint edits.",
+          status: "queued",
+          githubIssue: expect.objectContaining({
+            current: expect.objectContaining({
+              issueNumber: 55,
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          title: "Build the stable backlog projection layer.",
+          status: "superseded",
+        }),
+        expect.objectContaining({
+          title: "Add a new workstream after backlog churn.",
+          status: "planned",
+        }),
+      ]),
     );
   });
 
@@ -3229,6 +3499,192 @@ describe("openclawCodeRunCommand", () => {
         stale: false,
       }),
     ]);
+
+    const workItems = JSON.parse(
+      await readFile(path.join(repoRoot, ".openclawcode", "work-items.json"), "utf8"),
+    );
+    expect(workItems.workItems[0].githubIssue.current).toMatchObject({
+      issueNumber: 321,
+      issueUrl: "https://github.com/openclaw/openclaw/issues/321",
+      linkedFrom: "created",
+    });
+  });
+
+  it("reuses an existing linked GitHub issue after blueprint revision changes without reopening duplicates", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-issue-materialize-reuse-"));
+    const blueprintPath = path.join(repoRoot, "PROJECT-BLUEPRINT.md");
+
+    await writeFile(
+      blueprintPath,
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Reuse Materialization Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Reuse Materialization Blueprint",
+        "",
+        "## Goal",
+        "Reuse linked issues when the blueprint revision changes but the work item does not.",
+        "",
+        "## Success Criteria",
+        "- Issue materialization reuses the existing issue after a non-functional blueprint edit.",
+        "",
+        "## Scope",
+        "- In scope: issue projection reuse.",
+        "",
+        "## Non-Goals",
+        "- Execution.",
+        "",
+        "## Constraints",
+        "- Keep markers deterministic.",
+        "",
+        "## Risks",
+        "- Revision churn could reopen duplicates.",
+        "",
+        "## Assumptions",
+        "- The work item text stays the same.",
+        "",
+        "## Human Gates",
+        "- Merge promotion: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Materialize one stable work item into GitHub.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    mocks.createIssue.mockResolvedValueOnce({
+      owner: "openclaw",
+      repo: "openclaw",
+      number: 444,
+      title: "[Blueprint]: Materialize one stable work item into GitHub.",
+      body: "Issue body",
+      labels: [],
+      url: "https://github.com/openclaw/openclaw/issues/444",
+    });
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeIssueMaterializeCommand(
+      {
+        owner: "openclaw",
+        repo: "openclaw",
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const createdIssueBody = String(mocks.createIssue.mock.calls.at(-1)?.[0]?.body ?? "");
+
+    await writeFile(
+      blueprintPath,
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Reuse Materialization Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T02:00:00.000Z",
+        "statusChangedAt: 2026-03-20T02:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Reuse Materialization Blueprint",
+        "",
+        "## Goal",
+        "Reuse linked issues when the blueprint revision changes but the work item does not.",
+        "",
+        "## Success Criteria",
+        "- Issue materialization reuses the existing issue after a non-functional blueprint edit.",
+        "- The changelog can move without reopening duplicates.",
+        "",
+        "## Scope",
+        "- In scope: issue projection reuse.",
+        "",
+        "## Non-Goals",
+        "- Execution.",
+        "",
+        "## Constraints",
+        "- Keep markers deterministic.",
+        "",
+        "## Risks",
+        "- Revision churn could reopen duplicates.",
+        "",
+        "## Assumptions",
+        "- The work item text stays the same.",
+        "",
+        "## Human Gates",
+        "- Merge promotion: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Materialize one stable work item into GitHub.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: revised metadata only.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    mocks.listIssues.mockResolvedValueOnce([
+      {
+        owner: "openclaw",
+        repo: "openclaw",
+        number: 444,
+        title: "[Blueprint]: Materialize one stable work item into GitHub.",
+        body: createdIssueBody,
+        labels: [],
+        url: "https://github.com/openclaw/openclaw/issues/444",
+        state: "open",
+        createdAt: "2026-03-20T00:00:00.000Z",
+        updatedAt: "2026-03-20T00:00:00.000Z",
+      },
+    ]);
+
+    runtime.log.mockClear();
+    await openclawCodeIssueMaterializeCommand(
+      {
+        owner: "openclaw",
+        repo: "openclaw",
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.outcome).toBe("reused");
+    expect(payload.selectedIssueNumber).toBe(444);
+    expect(mocks.createIssue).toHaveBeenCalledTimes(1);
   });
 
   it("summarizes project progress and the autonomous loop artifact", async () => {

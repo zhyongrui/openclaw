@@ -198,8 +198,12 @@ function selectExecutionStartCandidate(
   workItems: Awaited<ReturnType<typeof readProjectWorkItemInventory>>,
 ): ProjectWorkItem | null {
   return (
-    workItems.workItems.find((item) => item.status !== "completed" && item.status !== "canceled") ??
-    null
+    workItems.workItems.find(
+      (item) =>
+        item.status !== "completed" &&
+        item.status !== "canceled" &&
+        item.status !== "superseded",
+    ) ?? null
   );
 }
 

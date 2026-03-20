@@ -114,7 +114,17 @@ It currently carries:
   - `suggestions`
 - planned work items:
   - stable ids
+  - stable content fingerprints
+  - work-item classes:
+    - `feature`
+    - `bugfix`
+    - `docs`
+    - `sync`
+    - `validation`
+    - `incident`
   - source section and workstream index
+  - durable statuses, including `superseded` for work removed by later
+    blueprint revisions
   - `executionMode`
     - `feature`
     - `bugfix`
@@ -123,6 +133,9 @@ It currently carries:
   - provider-role assignments
   - acceptance criteria
   - GitHub issue drafts
+  - live GitHub projection state:
+    - `githubIssue.current`
+    - `githubIssue.history`
 
 Blueprint-derived GitHub issue drafts now also embed execution policy directly:
 
@@ -144,6 +157,13 @@ Blueprint-derived GitHub issue drafts now also embed execution policy directly:
     - preserve working state
   - `research`
     - exit with a concrete next executable slice
+
+Issue materialization now also writes the selected live GitHub issue back into
+the work-item inventory so the repo-local backlog can retain:
+
+- the current linked issue number, URL, title, and state
+- whether the issue was newly created or reused
+- link history across blueprint revisions and repeated materialization passes
 
 The first repo-local discovery artifact now lives at:
 

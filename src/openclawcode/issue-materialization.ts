@@ -18,6 +18,7 @@ export const PROJECT_ISSUE_MATERIALIZATION_SCHEMA_VERSION = 1;
 
 const WORK_ITEM_ID_MARKER = "openclawcode-work-item-id";
 const BLUEPRINT_REVISION_MARKER = "openclawcode-blueprint-revision";
+const WORK_ITEM_FINGERPRINT_MARKER = "openclawcode-work-item-fingerprint";
 
 export interface ProjectIssueMaterializationEntry {
   workItemId: string;
@@ -128,6 +129,12 @@ function buildDraftFingerprint(workItem: Pick<ProjectWorkItem, "githubIssueDraft
     .digest("hex");
 }
 
+function buildProjectionFingerprint(
+  workItem: Pick<ProjectWorkItem, "fingerprint" | "githubIssueDraft">,
+): string {
+  return workItem.fingerprint || buildDraftFingerprint(workItem);
+}
+
 function readMarker(body: string | undefined, marker: string): string | null {
   if (!body) {
     return null;
@@ -151,10 +158,14 @@ function sortEntries(entries: ProjectIssueMaterializationEntry[]): ProjectIssueM
 export function buildProjectWorkItemIssueMarkers(params: {
   workItemId: string;
   blueprintRevisionId: string | null;
+  workItemFingerprint?: string | null;
 }): string[] {
   return [
     `<!-- ${WORK_ITEM_ID_MARKER}: ${params.workItemId} -->`,
     `<!-- ${BLUEPRINT_REVISION_MARKER}: ${params.blueprintRevisionId ?? "unknown"} -->`,
+    ...(params.workItemFingerprint
+      ? [`<!-- ${WORK_ITEM_FINGERPRINT_MARKER}: ${params.workItemFingerprint} -->`]
+      : []),
   ];
 }
 
@@ -182,9 +193,11 @@ async function findReusableIssue(params: {
   for (const issue of issues) {
     const workItemId = readMarker(issue.body, WORK_ITEM_ID_MARKER);
     const revisionId = readMarker(issue.body, BLUEPRINT_REVISION_MARKER);
+    const fingerprint = readMarker(issue.body, WORK_ITEM_FINGERPRINT_MARKER);
     if (
       workItemId === params.workItem.id &&
-      revisionId === (params.workItem.blueprintRevisionId ?? "unknown")
+      (fingerprint === params.workItem.fingerprint ||
+        revisionId === (params.workItem.blueprintRevisionId ?? "unknown"))
     ) {
       return {
         issueNumber: issue.number,
@@ -298,6 +311,61 @@ export async function readProjectIssueMaterializationArtifact(
   };
 }
 
+async function writeLinkedWorkItemBackToInventory(params: {
+  repoRoot: string;
+  workItem: ProjectWorkItem;
+  materializedAt: string;
+  linkedFrom: "created" | "reused";
+  issueNumber: number;
+  issueUrl: string;
+  issueTitle: string;
+  issueState: "open" | "closed";
+}): Promise<void> {
+  const inventory = await readProjectWorkItemInventory(params.repoRoot);
+  if (!inventory.blueprintExists || inventory.workItems.length === 0) {
+    return;
+  }
+  const linkedEntry = {
+    issueNumber: params.issueNumber,
+    issueUrl: params.issueUrl,
+    issueTitle: params.issueTitle,
+    issueState: params.issueState,
+    linkedAt: params.materializedAt,
+    linkedFrom: params.linkedFrom,
+    blueprintRevisionId: params.workItem.blueprintRevisionId,
+  } as const;
+  const workItems = inventory.workItems.map((entry) => {
+    if (entry.id !== params.workItem.id) {
+      return entry;
+    }
+    const history = [
+      linkedEntry,
+      ...entry.githubIssue.history.filter(
+        (candidate) =>
+          !(
+            candidate.issueNumber === linkedEntry.issueNumber &&
+            candidate.issueUrl === linkedEntry.issueUrl
+          ),
+      ),
+    ].toSorted((left, right) => right.linkedAt.localeCompare(left.linkedAt));
+    return {
+      ...entry,
+      githubIssue: {
+        current: linkedEntry,
+        history,
+      },
+    };
+  });
+  const persisted = {
+    ...inventory,
+    exists: true,
+    generatedAt: inventory.generatedAt ?? params.materializedAt,
+    workItems,
+  };
+  await mkdir(path.dirname(inventory.inventoryPath), { recursive: true });
+  await writeFile(inventory.inventoryPath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
+}
+
 export async function writeProjectIssueMaterializationArtifact(params: {
   repoRoot: string;
   owner: string;
@@ -395,7 +463,7 @@ export async function writeProjectIssueMaterializationArtifact(params: {
     issueState: materialized.issueState,
     materializedAt: now,
     reusedExisting: materialized.reusedExisting,
-    draftFingerprint: buildDraftFingerprint(workItem),
+    draftFingerprint: buildProjectionFingerprint(workItem),
     stale: false,
   };
 
@@ -421,5 +489,15 @@ export async function writeProjectIssueMaterializationArtifact(params: {
 
   await mkdir(path.dirname(artifactPath), { recursive: true });
   await writeFile(artifactPath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
+  await writeLinkedWorkItemBackToInventory({
+    repoRoot,
+    workItem,
+    materializedAt: now,
+    linkedFrom: materialized.reusedExisting ? "reused" : "created",
+    issueNumber: nextEntry.issueNumber,
+    issueUrl: nextEntry.issueUrl,
+    issueTitle: nextEntry.issueTitle,
+    issueState: nextEntry.issueState,
+  });
   return persisted;
 }

@@ -213,7 +213,7 @@ function pickSelectedWorkItem(params: {
   }
 
   const planned = params.workItems.workItems.find((item) =>
-    item.status !== "completed" && item.status !== "canceled",
+    item.status !== "completed" && item.status !== "canceled" && item.status !== "superseded",
   );
   if (!planned) {
     return { selectedWorkItem: null, selectedReason: null };

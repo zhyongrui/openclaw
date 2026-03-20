@@ -105,10 +105,21 @@ function makeDiscoveredWorkItem(params: {
   priority: ProjectDiscoveryPriority;
   dedupeKey: string;
 }): ProjectWorkItem {
+  const executionMode =
+    params.source === "blueprint-open-questions"
+      ? "research"
+      : "feature";
+  const workItemClass =
+    params.source === "work-item-artifact-missing" || params.source === "work-item-artifact-stale"
+      ? "sync"
+      : "feature";
   return {
     id: params.id,
     kind: "discovered",
     status: "planned",
+    class: workItemClass,
+    executionMode,
+    fingerprint: params.dedupeKey,
     title: params.title,
     summary: params.summary,
     source: "blueprint",
@@ -131,6 +142,10 @@ function makeDiscoveredWorkItem(params: {
       priority: params.priority,
       dedupeKey: params.dedupeKey,
     }),
+    githubIssue: {
+      current: null,
+      history: [],
+    },
   };
 }
 
