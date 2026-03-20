@@ -6341,6 +6341,7 @@ describe("openclawcode extension", () => {
       expect(progressResult?.text).toContain("openclawcode progress for zhyongrui/openclawcode");
       expect(progressResult?.text).toContain("Next work: ready-to-execute");
       expect(progressResult?.text).toContain("Execution mode: feature");
+      expect(progressResult?.text).toContain("Next: /occode-materialize zhyongrui/openclawcode");
 
       const offResult = await fixture.commands.get("occode-autopilot")?.handler({
         channel: "telegram",
@@ -6356,6 +6357,9 @@ describe("openclawcode extension", () => {
       const progressArtifact = await readProjectProgressArtifact(fixture.repoRoot);
       expect(progressArtifact.nextWorkDecision).toBe("ready-to-execute");
       expect(progressArtifact.selectedWorkItemExecutionMode).toBe("feature");
+      expect(progressArtifact.nextSuggestedChatCommand).toBe(
+        "/occode-materialize zhyongrui/openclawcode",
+      );
     } finally {
       await cleanupPluginFixture(fixture);
     }
@@ -6582,6 +6586,7 @@ describe("openclawcode extension", () => {
         completedIterationCount: 2,
         queuedRunCount: 1,
         stopReason: "A run is already queued for this repository.",
+        nextSuggestedChatCommand: "/occode-progress zhyongrui/openclawcode",
       });
       expect(artifact.iterations).toEqual([
         expect.objectContaining({
@@ -6734,6 +6739,7 @@ describe("openclawcode extension", () => {
         selectedIssueNumber: null,
         queuedIssueKey: null,
         stopReason: "A run is already queued for this repository.",
+        nextSuggestedChatCommand: "/occode-progress zhyongrui/openclawcode",
       });
     } finally {
       await cleanupPluginFixture(fixture);

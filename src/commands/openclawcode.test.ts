@@ -3157,6 +3157,9 @@ describe("openclawCodeRunCommand", () => {
       exists: true,
       nextWorkDecision: "ready-to-execute",
       nextWorkPrimaryBlocker: null,
+      nextSuggestedCommand:
+        `openclaw code issue-materialize --repo-root ${repoRoot}`,
+      nextSuggestedChatCommand: "/occode-materialize openclaw/openclaw",
       selectedWorkItemId: "planned-01-show-blueprint-aware-progress-in-one-artifact",
       selectedWorkItemExecutionMode: "feature",
       selectedIssueNumber: null,
@@ -3185,6 +3188,7 @@ describe("openclawCodeRunCommand", () => {
       nextWorkDecision: "ready-to-execute",
       nextSuggestedCommand:
         `openclaw code run --issue 654 --repo-root ${repoRoot}`,
+      nextSuggestedChatCommand: "/occode-start openclaw/openclaw#654",
       selectedWorkItemId: "planned-01-show-blueprint-aware-progress-in-one-artifact",
       selectedWorkItemExecutionMode: "feature",
       selectedIssueNumber: 654,
@@ -3216,6 +3220,11 @@ describe("openclawCodeRunCommand", () => {
       loopLines.some((line) =>
         line.startsWith("Next suggested command: openclaw code run --issue ") &&
         line.endsWith(` --repo-root ${repoRoot}`),
+      ),
+    ).toBe(true);
+    expect(
+      loopLines.some((line) =>
+        line.startsWith("Next suggested chat command: /occode-start openclaw/openclaw#"),
       ),
     ).toBe(true);
     expect(loopLines).toContain("Iteration history:");
@@ -3334,6 +3343,7 @@ describe("openclawCodeRunCommand", () => {
     expect(loop.nextSuggestedCommand).toBe(
       `openclaw code stage-gates-show --repo-root ${repoRoot}`,
     );
+    expect(loop.nextSuggestedChatCommand).toBe("/occode-gates openclaw/openclaw");
   });
 
   it("records repeat-loop iteration history when no queue handoff is configured", async () => {
@@ -3422,6 +3432,9 @@ describe("openclawCodeRunCommand", () => {
     });
     expect(loop.nextSuggestedCommand).toContain(`openclaw code run --issue `);
     expect(loop.nextSuggestedCommand).toContain(` --repo-root ${repoRoot}`);
+    expect(loop.nextSuggestedChatCommand).toBe(
+      `/occode-start openclaw/openclaw#${loop.selectedIssueNumber}`,
+    );
     expect(loop.iterations).toEqual([
       expect.objectContaining({
         iteration: 1,

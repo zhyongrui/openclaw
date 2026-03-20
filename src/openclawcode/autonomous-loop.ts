@@ -5,6 +5,10 @@ import type { OpenClawCodeOperatorStatusSnapshot } from "./operator-status.js";
 import {
   writeProjectIssueMaterializationArtifact,
 } from "./issue-materialization.js";
+import {
+  parseRepoRefFromRepoKey,
+  resolveChatNextSuggestedCommand,
+} from "./next-suggested-command.js";
 import { writeProjectProgressArtifact } from "./project-progress.js";
 
 export const PROJECT_AUTONOMOUS_LOOP_SCHEMA_VERSION = 1;
@@ -53,6 +57,7 @@ export interface ProjectAutonomousLoopArtifact {
   nextWorkBlockingGateId: string | null;
   nextWorkPrimaryBlocker: string | null;
   nextSuggestedCommand: string | null;
+  nextSuggestedChatCommand: string | null;
   selectedWorkItemId: string | null;
   selectedWorkItemExecutionMode: string | null;
   roleRouteSummary: string[];
@@ -97,6 +102,7 @@ export async function setProjectAutonomousLoopDisabled(params: {
     nextWorkBlockingGateId: null,
     nextWorkPrimaryBlocker: null,
     nextSuggestedCommand: null,
+    nextSuggestedChatCommand: null,
     selectedWorkItemId: null,
     selectedWorkItemExecutionMode: null,
     roleRouteSummary: [],
@@ -147,6 +153,7 @@ export async function readProjectAutonomousLoopArtifact(
       nextWorkBlockingGateId: null,
       nextWorkPrimaryBlocker: null,
       nextSuggestedCommand: null,
+      nextSuggestedChatCommand: null,
       selectedWorkItemId: null,
       selectedWorkItemExecutionMode: null,
       roleRouteSummary: [],
@@ -192,6 +199,12 @@ export async function readProjectAutonomousLoopArtifact(
     nextWorkBlockingGateId: parsed.nextWorkBlockingGateId ?? null,
     nextWorkPrimaryBlocker: parsed.nextWorkPrimaryBlocker ?? null,
     nextSuggestedCommand: parsed.nextSuggestedCommand ?? null,
+    nextSuggestedChatCommand:
+      parsed.nextSuggestedChatCommand ??
+      resolveChatNextSuggestedCommand({
+        repo: parseRepoRefFromRepoKey(parsed.repoKey),
+        command: parsed.nextSuggestedCommand ?? null,
+      }),
     selectedWorkItemId: parsed.selectedWorkItemId ?? null,
     selectedWorkItemExecutionMode: parsed.selectedWorkItemExecutionMode ?? null,
     roleRouteSummary: Array.isArray(parsed.roleRouteSummary) ? parsed.roleRouteSummary : [],
@@ -226,6 +239,7 @@ async function runProjectAutonomousLoopIteration(params: {
   const currentRunPresent = progress.operator.currentRunCount > 0;
   const providerPauseActive = progress.operator.providerPauseActive;
   let nextSuggestedCommand: string | null = null;
+  let nextSuggestedChatCommand: string | null = null;
 
   let status: ProjectAutonomousLoopArtifact["status"] = "blocked";
   let stopReason: string | null = null;
@@ -247,6 +261,7 @@ async function runProjectAutonomousLoopIteration(params: {
   } else if (progress.nextWorkDecision !== "ready-to-execute") {
     stopReason = `Autonomous progress is blocked at ${progress.nextWorkDecision}.`;
     nextSuggestedCommand = progress.nextSuggestedCommand;
+    nextSuggestedChatCommand = progress.nextSuggestedChatCommand;
   } else {
     const issueMaterialization = await writeProjectIssueMaterializationArtifact({
       repoRoot,
@@ -276,6 +291,10 @@ async function runProjectAutonomousLoopIteration(params: {
           `openclaw code run --issue ${issueMaterialization.selectedIssueNumber} --repo-root ${repoRoot}`;
       }
     }
+    nextSuggestedChatCommand = resolveChatNextSuggestedCommand({
+      repo: params.repo,
+      command: nextSuggestedCommand,
+    });
     const artifact: ProjectAutonomousLoopArtifact = {
       repoRoot,
       artifactPath,
@@ -294,6 +313,7 @@ async function runProjectAutonomousLoopIteration(params: {
       nextWorkBlockingGateId: progress.nextWorkBlockingGateId,
       nextWorkPrimaryBlocker: progress.nextWorkPrimaryBlocker,
       nextSuggestedCommand,
+      nextSuggestedChatCommand,
       selectedWorkItemId: issueMaterialization.selectedWorkItemId,
       selectedWorkItemExecutionMode: issueMaterialization.selectedWorkItemExecutionMode,
       roleRouteSummary: progress.roleRouteSummary,
@@ -313,6 +333,10 @@ async function runProjectAutonomousLoopIteration(params: {
     await writeFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
     return artifact;
   }
+  nextSuggestedChatCommand = resolveChatNextSuggestedCommand({
+    repo: params.repo,
+    command: nextSuggestedCommand,
+  });
 
   const artifact: ProjectAutonomousLoopArtifact = {
     repoRoot,
@@ -332,6 +356,7 @@ async function runProjectAutonomousLoopIteration(params: {
     nextWorkBlockingGateId: progress.nextWorkBlockingGateId,
     nextWorkPrimaryBlocker: progress.nextWorkPrimaryBlocker,
     nextSuggestedCommand,
+    nextSuggestedChatCommand,
     selectedWorkItemId: progress.selectedWorkItemId,
     selectedWorkItemExecutionMode: progress.selectedWorkItemExecutionMode,
     roleRouteSummary: progress.roleRouteSummary,

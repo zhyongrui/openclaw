@@ -2120,6 +2120,9 @@ function logProjectProgressArtifact(params: {
   if (artifact.nextSuggestedCommand) {
     runtime.log(`Next suggested command: ${artifact.nextSuggestedCommand}`);
   }
+  if (artifact.nextSuggestedChatCommand) {
+    runtime.log(`Next suggested chat command: ${artifact.nextSuggestedChatCommand}`);
+  }
 }
 
 function logProjectAutonomousLoopArtifact(params: {
@@ -2183,6 +2186,9 @@ function logProjectAutonomousLoopArtifact(params: {
   }
   if (artifact.nextSuggestedCommand) {
     runtime.log(`Next suggested command: ${artifact.nextSuggestedCommand}`);
+  }
+  if (artifact.nextSuggestedChatCommand) {
+    runtime.log(`Next suggested chat command: ${artifact.nextSuggestedChatCommand}`);
   }
   if (artifact.iterations.length > 0) {
     runtime.log("Iteration history:");

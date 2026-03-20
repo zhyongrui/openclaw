@@ -6,6 +6,10 @@ import {
   writeProjectIssueMaterializationArtifact,
 } from "./issue-materialization.js";
 import type { RepoRef } from "./github/index.js";
+import {
+  parseRepoRefFromRepoKey,
+  resolveChatNextSuggestedCommand,
+} from "./next-suggested-command.js";
 import type { OpenClawCodeOperatorStatusSnapshot } from "./operator-status.js";
 import { readProjectNextWorkSelection, writeProjectNextWorkSelection } from "./next-work.js";
 import { readProjectRoleRoutingPlan, writeProjectRoleRoutingPlan } from "./role-routing.js";
@@ -58,6 +62,7 @@ export interface ProjectProgressArtifact {
   blockedGateCount: number;
   needsHumanDecisionCount: number;
   nextSuggestedCommand: string | null;
+  nextSuggestedChatCommand: string | null;
   operator: ProjectProgressOperatorSummary;
 }
 
@@ -150,6 +155,10 @@ export async function writeProjectProgressArtifact(params: {
     : nextWork.blockingGateId
       ? `openclaw code stage-gates-show --repo-root ${repoRoot}`
       : null;
+  const nextSuggestedChatCommand = resolveChatNextSuggestedCommand({
+    repo: params.repo,
+    command: nextSuggestedCommand,
+  });
 
   const artifact: ProjectProgressArtifact = {
     repoRoot,
@@ -179,6 +188,7 @@ export async function writeProjectProgressArtifact(params: {
     blockedGateCount: stageGates.blockedGateCount,
     needsHumanDecisionCount: stageGates.needsHumanDecisionCount,
     nextSuggestedCommand,
+    nextSuggestedChatCommand,
     operator: buildOperatorSummary({
       repo: params.repo,
       snapshot: params.operatorSnapshot,
@@ -231,8 +241,59 @@ export async function readProjectProgressArtifact(
       blockedGateCount: 0,
       needsHumanDecisionCount: 0,
       nextSuggestedCommand: null,
+      nextSuggestedChatCommand: null,
       operator: buildOperatorSummary({}),
     };
   }
-  return JSON.parse(raw) as ProjectProgressArtifact;
+  const parsed = JSON.parse(raw) as Partial<ProjectProgressArtifact>;
+  return {
+    repoRoot,
+    artifactPath,
+    exists: parsed.exists ?? true,
+    schemaVersion: parsed.schemaVersion ?? PROJECT_PROGRESS_SCHEMA_VERSION,
+    generatedAt: parsed.generatedAt ?? null,
+    repoKey: parsed.repoKey ?? null,
+    blueprintPath: parsed.blueprintPath ?? blueprint.blueprintPath,
+    blueprintStatus: parsed.blueprintStatus ?? blueprint.status,
+    blueprintRevisionId: parsed.blueprintRevisionId ?? blueprint.revisionId,
+    workItemCount: parsed.workItemCount ?? 0,
+    plannedWorkItemCount: parsed.plannedWorkItemCount ?? 0,
+    nextWorkDecision: parsed.nextWorkDecision ?? "no-actionable-work-item",
+    nextWorkBlockingGateId: parsed.nextWorkBlockingGateId ?? null,
+    nextWorkPrimaryBlocker: parsed.nextWorkPrimaryBlocker ?? null,
+    selectedWorkItemId: parsed.selectedWorkItemId ?? null,
+    selectedWorkItemTitle: parsed.selectedWorkItemTitle ?? null,
+    selectedWorkItemExecutionMode: parsed.selectedWorkItemExecutionMode ?? null,
+    selectedIssueNumber: parsed.selectedIssueNumber ?? null,
+    selectedIssueUrl: parsed.selectedIssueUrl ?? null,
+    selectedIssueTitle: parsed.selectedIssueTitle ?? null,
+    issueMaterializationOutcome: parsed.issueMaterializationOutcome ?? null,
+    roleRoutingMixedMode: parsed.roleRoutingMixedMode ?? false,
+    roleRouteSummary: Array.isArray(parsed.roleRouteSummary) ? parsed.roleRouteSummary : [],
+    unresolvedRoleCount: parsed.unresolvedRoleCount ?? 0,
+    blockedGateCount: parsed.blockedGateCount ?? 0,
+    needsHumanDecisionCount: parsed.needsHumanDecisionCount ?? 0,
+    nextSuggestedCommand: parsed.nextSuggestedCommand ?? null,
+    nextSuggestedChatCommand:
+      parsed.nextSuggestedChatCommand ??
+      resolveChatNextSuggestedCommand({
+        repo: parseRepoRefFromRepoKey(parsed.repoKey),
+        command: parsed.nextSuggestedCommand ?? null,
+      }),
+    operator: {
+      available: parsed.operator?.available ?? false,
+      repoKey: parsed.operator?.repoKey ?? parsed.repoKey ?? null,
+      bindingPresent: parsed.operator?.bindingPresent ?? false,
+      pendingApprovalCount: parsed.operator?.pendingApprovalCount ?? 0,
+      queuedRunCount: parsed.operator?.queuedRunCount ?? 0,
+      currentRunCount: parsed.operator?.currentRunCount ?? 0,
+      currentRunIssueKey: parsed.operator?.currentRunIssueKey ?? null,
+      currentRunStage: parsed.operator?.currentRunStage ?? null,
+      currentRunBranchName: parsed.operator?.currentRunBranchName ?? null,
+      currentRunPullRequestNumber: parsed.operator?.currentRunPullRequestNumber ?? null,
+      currentRunPullRequestUrl: parsed.operator?.currentRunPullRequestUrl ?? null,
+      currentRunStatusUpdatedAt: parsed.operator?.currentRunStatusUpdatedAt ?? null,
+      providerPauseActive: parsed.operator?.providerPauseActive ?? false,
+    },
+  };
 }
