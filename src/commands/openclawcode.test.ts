@@ -3156,7 +3156,9 @@ describe("openclawCodeRunCommand", () => {
       repoRoot,
       exists: true,
       nextWorkDecision: "ready-to-execute",
+      nextWorkPrimaryBlocker: null,
       selectedWorkItemId: "planned-01-show-blueprint-aware-progress-in-one-artifact",
+      selectedWorkItemExecutionMode: "feature",
       selectedIssueNumber: null,
     });
 
@@ -3177,7 +3179,9 @@ describe("openclawCodeRunCommand", () => {
       repoRoot,
       exists: true,
       status: "materialized-only",
+      nextWorkDecision: "ready-to-execute",
       selectedWorkItemId: "planned-01-show-blueprint-aware-progress-in-one-artifact",
+      selectedWorkItemExecutionMode: "feature",
       selectedIssueNumber: 654,
     });
 
@@ -3193,6 +3197,99 @@ describe("openclawCodeRunCommand", () => {
     const shown = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
     expect(shown.status).toBe("materialized-only");
     expect(shown.selectedIssueNumber).toBe(654);
+    expect(shown.selectedWorkItemExecutionMode).toBe("feature");
+  });
+
+  it("keeps autonomous loop blocked with explicit execution-mode context for refactor work", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-autonomous-loop-refactor-"));
+
+    await writeFile(
+      path.join(repoRoot, "PROJECT-BLUEPRINT.md"),
+      [
+        "---",
+        "schemaVersion: 1",
+        "title: Refactor Loop Blueprint",
+        "status: agreed",
+        "createdAt: 2026-03-20T00:00:00.000Z",
+        "updatedAt: 2026-03-20T00:00:00.000Z",
+        "statusChangedAt: 2026-03-20T00:00:00.000Z",
+        "agreedAt: 2026-03-20T00:00:00.000Z",
+        "---",
+        "",
+        "# Refactor Loop Blueprint",
+        "",
+        "## Goal",
+        "Keep refactor work paused until execution-start is explicitly approved.",
+        "",
+        "## Success Criteria",
+        "- The autonomous loop stays blocked with a clear reason for refactor work.",
+        "",
+        "## Scope",
+        "- In scope: execution-mode-aware autonomous blocking.",
+        "",
+        "## Non-Goals",
+        "- Real queue execution.",
+        "",
+        "## Constraints",
+        "- Keep the stop reason machine-readable enough for operators.",
+        "",
+        "## Risks",
+        "- Structural work could auto-start without an explicit checkpoint.",
+        "",
+        "## Assumptions",
+        "- The repository can resolve its GitHub remote.",
+        "",
+        "## Human Gates",
+        "- Execution start: required",
+        "",
+        "## Provider Strategy",
+        "- Planner: Claude Code",
+        "- Coder: Codex",
+        "- Reviewer: Claude Code",
+        "- Verifier: Codex",
+        "- Doc-writer: Codex",
+        "",
+        "## Workstreams",
+        "- Refactor autonomous-loop queue handoff into a dedicated coordinator.",
+        "",
+        "## Open Questions",
+        "- None.",
+        "",
+        "## Change Log",
+        "- 2026-03-20: autonomous-loop refactor baseline.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await openclawCodeBlueprintDecomposeCommand({ repoRoot, json: true }, runtime);
+    runtime.log.mockClear();
+    await openclawCodeAutonomousLoopRunCommand(
+      {
+        owner: "openclaw",
+        repo: "openclaw",
+        repoRoot,
+        once: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    const loop = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(loop).toMatchObject({
+      repoRoot,
+      exists: true,
+      status: "blocked",
+      nextWorkDecision: "blocked-on-human",
+      nextWorkBlockingGateId: "execution-start",
+      selectedWorkItemExecutionMode: "refactor",
+    });
+    expect(loop.selectedWorkItemId).toContain(
+      "refactor-autonomous-loop-queue-handoff-into-a-de",
+    );
+    expect(loop.nextWorkPrimaryBlocker).toBe(
+      "The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
+    );
   });
 
   it("shows an empty operator status snapshot when no chatops state file exists", async () => {

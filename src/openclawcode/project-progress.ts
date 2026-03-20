@@ -39,8 +39,10 @@ export interface ProjectProgressArtifact {
   plannedWorkItemCount: number;
   nextWorkDecision: string;
   nextWorkBlockingGateId: string | null;
+  nextWorkPrimaryBlocker: string | null;
   selectedWorkItemId: string | null;
   selectedWorkItemTitle: string | null;
+  selectedWorkItemExecutionMode: string | null;
   selectedIssueNumber: number | null;
   selectedIssueUrl: string | null;
   selectedIssueTitle: string | null;
@@ -139,8 +141,10 @@ export async function writeProjectProgressArtifact(params: {
     plannedWorkItemCount: workItems.plannedWorkItemCount,
     nextWorkDecision: nextWork.decision,
     nextWorkBlockingGateId: nextWork.blockingGateId,
+    nextWorkPrimaryBlocker: nextWork.blockers[0] ?? null,
     selectedWorkItemId: nextWork.selectedWorkItem?.id ?? null,
     selectedWorkItemTitle: nextWork.selectedWorkItem?.title ?? null,
+    selectedWorkItemExecutionMode: nextWork.selectedWorkItem?.executionMode ?? null,
     selectedIssueNumber: issueMaterialization.selectedIssueNumber,
     selectedIssueUrl: issueMaterialization.selectedIssueUrl,
     selectedIssueTitle: issueMaterialization.selectedIssueTitle,
@@ -188,8 +192,10 @@ export async function readProjectProgressArtifact(
       plannedWorkItemCount: 0,
       nextWorkDecision: "no-actionable-work-item",
       nextWorkBlockingGateId: null,
+      nextWorkPrimaryBlocker: null,
       selectedWorkItemId: null,
       selectedWorkItemTitle: null,
+      selectedWorkItemExecutionMode: null,
       selectedIssueNumber: null,
       selectedIssueUrl: null,
       selectedIssueTitle: null,

@@ -225,3 +225,19 @@ machine-readable enough for follow-on automation and staged handoff.
 The next-work artifact now also carries the selected work-item execution mode so
 chat and CLI surfaces can distinguish routine feature slices from refactor or
 research work that should pause at execution-start.
+
+The project-progress artifact now also carries:
+
+- `nextWorkBlockingGateId`
+- `nextWorkPrimaryBlocker`
+- `selectedWorkItemExecutionMode`
+
+The autonomous-loop artifact now also carries:
+
+- `nextWorkBlockingGateId`
+- `nextWorkPrimaryBlocker`
+- `selectedWorkItemExecutionMode`
+
+This lets `/occode-progress`, `/occode-autopilot`, and the CLI summaries answer
+the operator question "what is waiting, and why?" without reopening the stage
+gate artifact manually.

@@ -2080,14 +2080,23 @@ function logProjectProgressArtifact(params: {
   runtime.log(`Generated at: ${artifact.generatedAt ?? "not yet generated"}`);
   runtime.log(`Blueprint: ${artifact.blueprintStatus ?? "unknown"} | ${artifact.blueprintRevisionId ?? "unknown"}`);
   runtime.log(`Next work: ${artifact.nextWorkDecision}`);
+  if (artifact.nextWorkBlockingGateId) {
+    runtime.log(`Next-work gate: ${artifact.nextWorkBlockingGateId}`);
+  }
   runtime.log(
     `Signals: workItems=${artifact.workItemCount} | unresolvedRoles=${artifact.unresolvedRoleCount} | blockedGates=${artifact.blockedGateCount} | needsHuman=${artifact.needsHumanDecisionCount}`,
   );
   if (artifact.selectedWorkItemTitle) {
     runtime.log(`Selected work item: ${artifact.selectedWorkItemTitle}`);
   }
+  if (artifact.selectedWorkItemExecutionMode) {
+    runtime.log(`Execution mode: ${artifact.selectedWorkItemExecutionMode}`);
+  }
   if (artifact.selectedIssueNumber != null) {
     runtime.log(`Selected issue: #${artifact.selectedIssueNumber} | ${artifact.selectedIssueTitle}`);
+  }
+  if (artifact.nextWorkPrimaryBlocker) {
+    runtime.log(`Primary blocker: ${artifact.nextWorkPrimaryBlocker}`);
   }
   runtime.log(
     `Operator: available=${artifact.operator.available ? "yes" : "no"} | binding=${artifact.operator.bindingPresent ? "yes" : "no"} | pending=${artifact.operator.pendingApprovalCount} | queued=${artifact.operator.queuedRunCount} | current=${artifact.operator.currentRunCount} | pause=${artifact.operator.providerPauseActive ? "yes" : "no"}`,
@@ -2116,10 +2125,16 @@ function logProjectAutonomousLoopArtifact(params: {
   runtime.log(`Mode: ${artifact.mode}`);
   runtime.log(`Status: ${artifact.status}`);
   runtime.log(`Next work: ${artifact.nextWorkDecision}`);
+  if (artifact.nextWorkBlockingGateId) {
+    runtime.log(`Next-work gate: ${artifact.nextWorkBlockingGateId}`);
+  }
   runtime.log(`Provider pause: ${artifact.providerPauseActive ? "yes" : "no"}`);
   runtime.log(`Current run present: ${artifact.currentRunPresent ? "yes" : "no"}`);
   if (artifact.selectedWorkItemId) {
     runtime.log(`Selected work item: ${artifact.selectedWorkItemId}`);
+  }
+  if (artifact.selectedWorkItemExecutionMode) {
+    runtime.log(`Execution mode: ${artifact.selectedWorkItemExecutionMode}`);
   }
   if (artifact.selectedIssueNumber != null) {
     runtime.log(`Selected issue: #${artifact.selectedIssueNumber}`);
@@ -2129,6 +2144,9 @@ function logProjectAutonomousLoopArtifact(params: {
   }
   if (artifact.stopReason) {
     runtime.log(`Stop reason: ${artifact.stopReason}`);
+  }
+  if (artifact.nextWorkPrimaryBlocker) {
+    runtime.log(`Primary blocker: ${artifact.nextWorkPrimaryBlocker}`);
   }
   if (artifact.message) {
     runtime.log(`Message: ${artifact.message}`);

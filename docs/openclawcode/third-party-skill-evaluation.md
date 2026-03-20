@@ -404,3 +404,18 @@ Why this matters:
   flow
 - it prevents structural work from being treated like routine tracer-bullet
   feature slices
+
+The fourth direct absorption into `openclawcode` is now:
+
+- project-progress and autonomous-loop artifacts now carry:
+  - `selectedWorkItemExecutionMode`
+  - `nextWorkBlockingGateId`
+  - `nextWorkPrimaryBlocker`
+- chat and CLI progress surfaces now explain not only that work is blocked, but
+  which gate is stopping it and the first blocker to resolve
+
+Why this matters:
+
+- it closes the operator-feedback loop for execution-mode-aware planning
+- it makes refactor/research pauses legible in normal status views instead of
+  only inside raw stage-gate artifacts

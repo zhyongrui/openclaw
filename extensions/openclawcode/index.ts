@@ -3053,13 +3053,22 @@ function buildProjectProgressSummaryMessage(params: {
   lines.push(
     `Signals: workItems=${params.artifact.workItemCount} | unresolvedRoles=${params.artifact.unresolvedRoleCount} | blockedGates=${params.artifact.blockedGateCount} | needsHuman=${params.artifact.needsHumanDecisionCount}`,
   );
+  if (params.artifact.nextWorkBlockingGateId) {
+    lines.push(`Next-work gate: ${params.artifact.nextWorkBlockingGateId}`);
+  }
   if (params.artifact.selectedWorkItemTitle) {
     lines.push(`Selected work item: ${params.artifact.selectedWorkItemTitle}`);
+  }
+  if (params.artifact.selectedWorkItemExecutionMode) {
+    lines.push(`Execution mode: ${params.artifact.selectedWorkItemExecutionMode}`);
   }
   if (params.artifact.selectedIssueNumber != null) {
     lines.push(
       `Selected issue: #${params.artifact.selectedIssueNumber} | ${params.artifact.selectedIssueTitle ?? "untitled"}`,
     );
+  }
+  if (params.artifact.nextWorkPrimaryBlocker) {
+    lines.push(`Primary blocker: ${params.artifact.nextWorkPrimaryBlocker}`);
   }
   lines.push(
     `Operator: binding=${params.artifact.operator.bindingPresent ? "yes" : "no"} | pending=${params.artifact.operator.pendingApprovalCount} | queued=${params.artifact.operator.queuedRunCount} | current=${params.artifact.operator.currentRunCount} | pause=${params.artifact.operator.providerPauseActive ? "yes" : "no"}`,
@@ -3082,11 +3091,17 @@ function buildAutonomousLoopSummaryMessage(params: {
   lines.push(`Status: ${params.artifact.status}`);
   lines.push(`Enabled: ${params.artifact.enabled ? "yes" : "no"}`);
   lines.push(`Next work: ${params.artifact.nextWorkDecision}`);
+  if (params.artifact.nextWorkBlockingGateId) {
+    lines.push(`Next-work gate: ${params.artifact.nextWorkBlockingGateId}`);
+  }
   lines.push(
     `Operator: currentRun=${params.artifact.currentRunPresent ? "yes" : "no"} | pause=${params.artifact.providerPauseActive ? "yes" : "no"}`,
   );
   if (params.artifact.selectedWorkItemId) {
     lines.push(`Selected work item: ${params.artifact.selectedWorkItemId}`);
+  }
+  if (params.artifact.selectedWorkItemExecutionMode) {
+    lines.push(`Execution mode: ${params.artifact.selectedWorkItemExecutionMode}`);
   }
   if (params.artifact.selectedIssueNumber != null) {
     lines.push(`Selected issue: #${params.artifact.selectedIssueNumber}`);
@@ -3096,6 +3111,9 @@ function buildAutonomousLoopSummaryMessage(params: {
   }
   if (params.artifact.stopReason) {
     lines.push(`Stop reason: ${params.artifact.stopReason}`);
+  }
+  if (params.artifact.nextWorkPrimaryBlocker) {
+    lines.push(`Primary blocker: ${params.artifact.nextWorkPrimaryBlocker}`);
   }
   if (params.artifact.message) {
     lines.push(`Message: ${params.artifact.message}`);

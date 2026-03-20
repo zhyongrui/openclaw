@@ -6340,6 +6340,7 @@ describe("openclawcode extension", () => {
       });
       expect(progressResult?.text).toContain("openclawcode progress for zhyongrui/openclawcode");
       expect(progressResult?.text).toContain("Next work: ready-to-execute");
+      expect(progressResult?.text).toContain("Execution mode: feature");
 
       const offResult = await fixture.commands.get("occode-autopilot")?.handler({
         channel: "telegram",
@@ -6354,6 +6355,102 @@ describe("openclawcode extension", () => {
       expect(artifact.status).toBe("disabled");
       const progressArtifact = await readProjectProgressArtifact(fixture.repoRoot);
       expect(progressArtifact.nextWorkDecision).toBe("ready-to-execute");
+      expect(progressArtifact.selectedWorkItemExecutionMode).toBe("feature");
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("shows why autopilot is blocked for refactor work through chat commands", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: Refactor Progress Chat Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-20T00:00:00.000Z",
+          "updatedAt: 2026-03-20T00:00:00.000Z",
+          "statusChangedAt: 2026-03-20T00:00:00.000Z",
+          "agreedAt: 2026-03-20T00:00:00.000Z",
+          "---",
+          "",
+          "# Refactor Progress Chat Blueprint",
+          "",
+          "## Goal",
+          "Show why execution-mode-aware autopilot is blocked in chat.",
+          "",
+          "## Success Criteria",
+          "- /occode-progress and /occode-autopilot explain the execution-start pause.",
+          "",
+          "## Scope",
+          "- In scope: refactor-aware progress and autopilot messaging.",
+          "",
+          "## Non-Goals",
+          "- Full execution.",
+          "",
+          "## Constraints",
+          "- Keep the status concise.",
+          "",
+          "## Risks",
+          "- Structural work may look ready when it is not.",
+          "",
+          "## Assumptions",
+          "- The blueprint is already agreed.",
+          "",
+          "## Human Gates",
+          "- Execution start: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: Codex",
+          "- Doc-writer: Codex",
+          "",
+          "## Workstreams",
+          "- Refactor chat progress formatting into a dedicated presenter.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-20: refactor progress chat proof.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+
+      const progressResult = await fixture.commands.get("occode-progress")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-progress",
+        args: "",
+        config: {},
+      });
+      expect(progressResult?.text).toContain("Next work: blocked-on-human");
+      expect(progressResult?.text).toContain("Next-work gate: execution-start");
+      expect(progressResult?.text).toContain("Execution mode: refactor");
+      expect(progressResult?.text).toContain(
+        "Primary blocker: The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
+      );
+
+      const onceResult = await fixture.commands.get("occode-autopilot")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-autopilot once",
+        args: "once",
+        config: {},
+      });
+      expect(onceResult?.text).toContain("Status: blocked");
+      expect(onceResult?.text).toContain("Next-work gate: execution-start");
+      expect(onceResult?.text).toContain("Execution mode: refactor");
+      expect(onceResult?.text).toContain(
+        "Primary blocker: The selected work item is a refactor slice, so execution-start should be explicitly approved before autonomous execution.",
+      );
     } finally {
       await cleanupPluginFixture(fixture);
     }

@@ -26,7 +26,10 @@ export interface ProjectAutonomousLoopArtifact {
     | "materialized-and-queued";
   stopReason: string | null;
   nextWorkDecision: string;
+  nextWorkBlockingGateId: string | null;
+  nextWorkPrimaryBlocker: string | null;
   selectedWorkItemId: string | null;
+  selectedWorkItemExecutionMode: string | null;
   selectedIssueNumber: number | null;
   selectedIssueUrl: string | null;
   queuedIssueKey: string | null;
@@ -57,7 +60,10 @@ export async function setProjectAutonomousLoopDisabled(params: {
     status: "disabled",
     stopReason: "Autonomous loop is disabled until it is started again.",
     nextWorkDecision: "no-actionable-work-item",
+    nextWorkBlockingGateId: null,
+    nextWorkPrimaryBlocker: null,
     selectedWorkItemId: null,
+    selectedWorkItemExecutionMode: null,
     selectedIssueNumber: null,
     selectedIssueUrl: null,
     queuedIssueKey: null,
@@ -94,7 +100,10 @@ export async function readProjectAutonomousLoopArtifact(
       status: "disabled",
       stopReason: null,
       nextWorkDecision: "no-actionable-work-item",
+      nextWorkBlockingGateId: null,
+      nextWorkPrimaryBlocker: null,
       selectedWorkItemId: null,
+      selectedWorkItemExecutionMode: null,
       selectedIssueNumber: null,
       selectedIssueUrl: null,
       queuedIssueKey: null,
@@ -167,7 +176,10 @@ export async function runProjectAutonomousLoopOnce(params: {
       status,
       stopReason,
       nextWorkDecision: progress.nextWorkDecision,
+      nextWorkBlockingGateId: progress.nextWorkBlockingGateId,
+      nextWorkPrimaryBlocker: progress.nextWorkPrimaryBlocker,
       selectedWorkItemId: issueMaterialization.selectedWorkItemId,
+      selectedWorkItemExecutionMode: issueMaterialization.selectedWorkItemExecutionMode,
       selectedIssueNumber: issueMaterialization.selectedIssueNumber,
       selectedIssueUrl: issueMaterialization.selectedIssueUrl,
       queuedIssueKey,
@@ -192,7 +204,10 @@ export async function runProjectAutonomousLoopOnce(params: {
     status,
     stopReason,
     nextWorkDecision: progress.nextWorkDecision,
+    nextWorkBlockingGateId: progress.nextWorkBlockingGateId,
+    nextWorkPrimaryBlocker: progress.nextWorkPrimaryBlocker,
     selectedWorkItemId: progress.selectedWorkItemId,
+    selectedWorkItemExecutionMode: progress.selectedWorkItemExecutionMode,
     selectedIssueNumber: progress.selectedIssueNumber,
     selectedIssueUrl: progress.selectedIssueUrl,
     queuedIssueKey,
