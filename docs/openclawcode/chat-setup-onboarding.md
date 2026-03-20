@@ -301,7 +301,37 @@ control-plane steps.
   - bootstrap failures
   - blueprint-sync failures
 
-### 3. handoff into autonomous progress
+### 3. plugin activation visibility and readiness
+
+- new-machine testing showed a real operator confusion point around
+  `/occode-setup` appearing unresponsive when the `openclawcode` plugin
+  activation prerequisite was not obvious in the primary onboarding path
+- the intended fix is:
+  - keep bootstrap as the only path that auto-writes the default plugin
+    activation state
+  - expose plugin allowlist / enabled-entry status in bootstrap summaries
+  - make setup-check report plugin activation as a first-class readiness item
+  - make onboarding/chat summaries explicitly say whether slash-command routing
+    should be expected to work yet
+- this is deliberately not a second auto-enable mechanism; it is a visibility
+  and proof-of-readiness fix around the existing bootstrap write path
+
+### 4. proactive GitHub auth completion feedback
+
+- new-machine testing also showed that browser-side `gh auth login --web`
+  completion currently does not push a status update back into chat
+- today the operator must manually send `/occode-setup-status`, which makes the
+  flow feel stalled even when auth already succeeded
+- the planned fix is:
+  - extend the plugin service poll loop to watch setup sessions in
+    `awaiting-github-device-auth`
+  - run the same `syncChatSetupSession()` transition logic in the background
+  - automatically notify the originating chat when auth becomes authorized or
+    fails/expires
+  - keep `/occode-setup-status` and `/occode-setup-retry` as explicit recovery
+    controls
+
+### 5. handoff into autonomous progress
 
 - `openclaw code next-work-show` now persists `.openclawcode/next-work.json`
   and explains:
@@ -328,4 +358,6 @@ control-plane steps.
 
 1. live operator proof
 2. live-proof the new failure recovery paths
-3. live-proof the bounded repeat-loop autopilot on the real operator host
+3. land plugin activation visibility/readiness hardening
+4. land proactive GitHub auth completion push feedback
+5. live-proof the bounded repeat-loop autopilot on the real operator host

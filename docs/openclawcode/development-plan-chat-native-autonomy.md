@@ -271,7 +271,22 @@ The remaining setup-specific hardening sequence should be:
 1. live-proof the full `new-project` flow on a real chat + GitHub operator host
 2. live-proof the new recovery messaging for expired auth, repo-create
    failures, bootstrap failures, and blueprint-sync failures
-3. live-proof the bounded repeat-loop behavior on the real operator host and
+3. land plugin activation visibility/readiness hardening for chat-native setup
+   - keep bootstrap as the single writer of:
+     - `plugins.allow += ["openclawcode"]`
+     - `plugins.entries.openclawcode.enabled = true`
+   - surface plugin activation status in bootstrap output, chat setup
+     summaries, and setup-check readiness
+   - fail with an explicit next action when plugin activation is still missing
+     so `/occode-setup` does not look like a silent routing bug
+4. land proactive GitHub auth completion feedback for chat-native setup
+   - while a setup session is in `awaiting-github-device-auth`, the plugin
+     service should keep polling the saved device-auth session
+   - when browser approval succeeds or fails, the plugin should push a
+     completion/failure message back to the originating chat automatically
+   - `/occode-setup-status` should remain as a manual recovery/status command,
+     not the only way to continue
+5. live-proof the bounded repeat-loop behavior on the real operator host and
    decide whether it is ready for longer unattended runs
 
 This setup track remains the operator-surface prerequisite for the later
