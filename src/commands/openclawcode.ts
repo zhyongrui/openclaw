@@ -2243,6 +2243,9 @@ function logProjectAutonomousLoopArtifact(params: {
   if (artifact.queuedIssueKey) {
     runtime.log(`Queued issue: ${artifact.queuedIssueKey}`);
   }
+  if (artifact.currentRunIssueKey) {
+    runtime.log(`Current run: ${artifact.currentRunIssueKey}`);
+  }
   if (artifact.currentRunStage) {
     runtime.log(`Current run stage: ${artifact.currentRunStage}`);
   }

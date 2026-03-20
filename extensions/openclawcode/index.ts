@@ -3138,6 +3138,9 @@ function buildAutonomousLoopSummaryMessage(params: {
   if (params.artifact.queuedIssueKey) {
     lines.push(`Queued issue: ${params.artifact.queuedIssueKey}`);
   }
+  if (params.artifact.currentRunIssueKey) {
+    lines.push(`Current run: ${params.artifact.currentRunIssueKey}`);
+  }
   if (params.artifact.currentRunStage) {
     lines.push(`Current run stage: ${params.artifact.currentRunStage}`);
   }

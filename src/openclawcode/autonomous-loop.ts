@@ -9,6 +9,7 @@ import {
   parseRepoRefFromRepoKey,
   resolveChatNextSuggestedCommand,
 } from "./next-suggested-command.js";
+import type { ProjectRoleRoute } from "./role-routing.js";
 import { writeProjectProgressArtifact } from "./project-progress.js";
 
 export const PROJECT_AUTONOMOUS_LOOP_SCHEMA_VERSION = 1;
@@ -65,6 +66,7 @@ export interface ProjectAutonomousLoopArtifact {
   nextSuggestedChatCommand: string | null;
   selectedWorkItemId: string | null;
   selectedWorkItemExecutionMode: string | null;
+  roleRoutes: ProjectRoleRoute[];
   roleRouteSummary: string[];
   selectedIssueNumber: number | null;
   selectedIssueUrl: string | null;
@@ -72,6 +74,7 @@ export interface ProjectAutonomousLoopArtifact {
   providerPauseActive: boolean;
   queuedRunCount: number;
   currentRunPresent: boolean;
+  currentRunIssueKey: string | null;
   currentRunStage: string | null;
   currentRunBranchName: string | null;
   currentRunPullRequestNumber: number | null;
@@ -114,6 +117,7 @@ export async function setProjectAutonomousLoopDisabled(params: {
     nextSuggestedChatCommand: null,
     selectedWorkItemId: null,
     selectedWorkItemExecutionMode: null,
+    roleRoutes: [],
     roleRouteSummary: [],
     selectedIssueNumber: null,
     selectedIssueUrl: null,
@@ -121,6 +125,7 @@ export async function setProjectAutonomousLoopDisabled(params: {
     providerPauseActive: false,
     queuedRunCount: 0,
     currentRunPresent: false,
+    currentRunIssueKey: null,
     currentRunStage: null,
     currentRunBranchName: null,
     currentRunPullRequestNumber: null,
@@ -169,6 +174,7 @@ export async function readProjectAutonomousLoopArtifact(
       nextSuggestedChatCommand: null,
       selectedWorkItemId: null,
       selectedWorkItemExecutionMode: null,
+      roleRoutes: [],
       roleRouteSummary: [],
       selectedIssueNumber: null,
       selectedIssueUrl: null,
@@ -176,6 +182,7 @@ export async function readProjectAutonomousLoopArtifact(
       providerPauseActive: false,
       queuedRunCount: 0,
       currentRunPresent: false,
+      currentRunIssueKey: null,
       currentRunStage: null,
       currentRunBranchName: null,
       currentRunPullRequestNumber: null,
@@ -224,6 +231,7 @@ export async function readProjectAutonomousLoopArtifact(
       }),
     selectedWorkItemId: parsed.selectedWorkItemId ?? null,
     selectedWorkItemExecutionMode: parsed.selectedWorkItemExecutionMode ?? null,
+    roleRoutes: Array.isArray(parsed.roleRoutes) ? parsed.roleRoutes as ProjectRoleRoute[] : [],
     roleRouteSummary: Array.isArray(parsed.roleRouteSummary) ? parsed.roleRouteSummary : [],
     selectedIssueNumber: parsed.selectedIssueNumber ?? null,
     selectedIssueUrl: parsed.selectedIssueUrl ?? null,
@@ -231,6 +239,7 @@ export async function readProjectAutonomousLoopArtifact(
     providerPauseActive: parsed.providerPauseActive ?? false,
     queuedRunCount: parsed.queuedRunCount ?? 0,
     currentRunPresent: parsed.currentRunPresent ?? false,
+    currentRunIssueKey: parsed.currentRunIssueKey ?? null,
     currentRunStage: parsed.currentRunStage ?? null,
     currentRunBranchName: parsed.currentRunBranchName ?? null,
     currentRunPullRequestNumber: parsed.currentRunPullRequestNumber ?? null,
@@ -342,6 +351,7 @@ async function runProjectAutonomousLoopIteration(params: {
       nextSuggestedChatCommand,
       selectedWorkItemId: issueMaterialization.selectedWorkItemId,
       selectedWorkItemExecutionMode: issueMaterialization.selectedWorkItemExecutionMode,
+      roleRoutes: progress.roleRoutes,
       roleRouteSummary: progress.roleRouteSummary,
       selectedIssueNumber: issueMaterialization.selectedIssueNumber,
       selectedIssueUrl: issueMaterialization.selectedIssueUrl,
@@ -349,6 +359,7 @@ async function runProjectAutonomousLoopIteration(params: {
       providerPauseActive,
       queuedRunCount,
       currentRunPresent,
+      currentRunIssueKey: progress.operator.currentRunIssueKey,
       currentRunStage: progress.operator.currentRunStage,
       currentRunBranchName: progress.operator.currentRunBranchName,
       currentRunPullRequestNumber: progress.operator.currentRunPullRequestNumber,
@@ -389,6 +400,7 @@ async function runProjectAutonomousLoopIteration(params: {
     nextSuggestedChatCommand,
     selectedWorkItemId: progress.selectedWorkItemId,
     selectedWorkItemExecutionMode: progress.selectedWorkItemExecutionMode,
+    roleRoutes: progress.roleRoutes,
     roleRouteSummary: progress.roleRouteSummary,
     selectedIssueNumber: progress.selectedIssueNumber,
     selectedIssueUrl: progress.selectedIssueUrl,
@@ -396,6 +408,7 @@ async function runProjectAutonomousLoopIteration(params: {
     providerPauseActive,
     queuedRunCount,
     currentRunPresent,
+    currentRunIssueKey: progress.operator.currentRunIssueKey,
     currentRunStage: progress.operator.currentRunStage,
     currentRunBranchName: progress.operator.currentRunBranchName,
     currentRunPullRequestNumber: progress.operator.currentRunPullRequestNumber,

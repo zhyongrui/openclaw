@@ -235,7 +235,9 @@ The project-progress artifact now also carries:
 - `activeWorkstreamTitle`
 - `activeWorkstreamSummary`
 - `selectedWorkItemExecutionMode`
+- `roleRoutes`
 - `roleRouteSummary`
+- `operator.currentRunIssueKey`
 - `operator.currentRunStage`
 - `operator.currentRunBranchName`
 - `operator.currentRunPullRequestNumber`
@@ -254,8 +256,10 @@ The autonomous-loop artifact now also carries:
 - `activeWorkstreamTitle`
 - `activeWorkstreamSummary`
 - `selectedWorkItemExecutionMode`
+- `roleRoutes`
 - `roleRouteSummary`
 - `queuedRunCount`
+- `currentRunIssueKey`
 - `currentRunStage`
 - `currentRunBranchName`
 - `currentRunPullRequestNumber`

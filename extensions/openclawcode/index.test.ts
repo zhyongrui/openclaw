@@ -7026,6 +7026,7 @@ describe("openclawcode extension", () => {
       expect(onceResult?.text).toContain(
         "Roles: planner=Claude Code@claude-main, coder=Codex@codex-main, reviewer=Claude Code@claude-main, verifier=Codex@codex-main, doc-writer=Codex@codex-main",
       );
+      expect(onceResult?.text).toContain("Current run: zhyongrui/openclawcode#910");
       expect(onceResult?.text).toContain("Current run stage: building");
       expect(onceResult?.text).toContain("Current run branch: openclawcode/issue-910");
       expect(onceResult?.text).toContain("Current run PR: #9910");
@@ -7039,10 +7040,41 @@ describe("openclawcode extension", () => {
         "verifier=Codex@codex-main",
         "doc-writer=Codex@codex-main",
       ]);
+      expect(progressArtifact.roleRoutes).toEqual([
+        expect.objectContaining({
+          roleId: "planner",
+          resolvedBackend: "Claude Code",
+          resolvedAgentId: "claude-main",
+        }),
+        expect.objectContaining({
+          roleId: "coder",
+          resolvedBackend: "Codex",
+          resolvedAgentId: "codex-main",
+          runtimeCapable: true,
+        }),
+        expect.objectContaining({
+          roleId: "reviewer",
+          resolvedBackend: "Claude Code",
+          resolvedAgentId: "claude-main",
+        }),
+        expect.objectContaining({
+          roleId: "verifier",
+          resolvedBackend: "Codex",
+          resolvedAgentId: "codex-main",
+          rerouteCapable: true,
+        }),
+        expect.objectContaining({
+          roleId: "docWriter",
+          resolvedBackend: "Codex",
+          resolvedAgentId: "codex-main",
+        }),
+      ]);
       expect(progressArtifact.operator.currentRunStage).toBe("building");
 
       const loopArtifact = await readProjectAutonomousLoopArtifact(fixture.repoRoot);
+      expect(loopArtifact.currentRunIssueKey).toBe("zhyongrui/openclawcode#910");
       expect(loopArtifact.currentRunStage).toBe("building");
+      expect(loopArtifact.roleRoutes).toEqual(progressArtifact.roleRoutes);
       expect(loopArtifact.roleRouteSummary).toEqual(progressArtifact.roleRouteSummary);
     } finally {
       await cleanupPluginFixture(fixture);

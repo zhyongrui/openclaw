@@ -12,7 +12,11 @@ import {
 } from "./next-suggested-command.js";
 import type { OpenClawCodeOperatorStatusSnapshot } from "./operator-status.js";
 import { readProjectNextWorkSelection, writeProjectNextWorkSelection } from "./next-work.js";
-import { readProjectRoleRoutingPlan, writeProjectRoleRoutingPlan } from "./role-routing.js";
+import {
+  readProjectRoleRoutingPlan,
+  writeProjectRoleRoutingPlan,
+  type ProjectRoleRoute,
+} from "./role-routing.js";
 import { readProjectStageGateArtifact, writeProjectStageGateArtifact } from "./stage-gates.js";
 import { readProjectWorkItemInventory, writeProjectWorkItemInventory } from "./work-items.js";
 
@@ -61,6 +65,7 @@ export interface ProjectProgressArtifact {
   selectedIssueTitle: string | null;
   issueMaterializationOutcome: string | null;
   roleRoutingMixedMode: boolean;
+  roleRoutes: ProjectRoleRoute[];
   roleRouteSummary: string[];
   unresolvedRoleCount: number;
   blockedGateCount: number;
@@ -229,6 +234,7 @@ export async function writeProjectProgressArtifact(params: {
     selectedIssueTitle: issueMaterialization.selectedIssueTitle,
     issueMaterializationOutcome: issueMaterialization.outcome,
     roleRoutingMixedMode: roleRouting.mixedMode,
+    roleRoutes: roleRouting.routes,
     roleRouteSummary,
     unresolvedRoleCount: roleRouting.unresolvedRoleCount,
     blockedGateCount: stageGates.blockedGateCount,
@@ -286,6 +292,7 @@ export async function readProjectProgressArtifact(
       selectedIssueTitle: null,
       issueMaterializationOutcome: null,
       roleRoutingMixedMode: false,
+      roleRoutes: [],
       roleRouteSummary: [],
       unresolvedRoleCount: 0,
       blockedGateCount: 0,
@@ -323,6 +330,7 @@ export async function readProjectProgressArtifact(
     selectedIssueTitle: parsed.selectedIssueTitle ?? null,
     issueMaterializationOutcome: parsed.issueMaterializationOutcome ?? null,
     roleRoutingMixedMode: parsed.roleRoutingMixedMode ?? false,
+    roleRoutes: Array.isArray(parsed.roleRoutes) ? parsed.roleRoutes as ProjectRoleRoute[] : [],
     roleRouteSummary: Array.isArray(parsed.roleRouteSummary) ? parsed.roleRouteSummary : [],
     unresolvedRoleCount: parsed.unresolvedRoleCount ?? 0,
     blockedGateCount: parsed.blockedGateCount ?? 0,

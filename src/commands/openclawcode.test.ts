@@ -3950,6 +3950,38 @@ describe("openclawCodeRunCommand", () => {
     );
 
     const progress = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(progress.roleRoutes).toEqual([
+      expect.objectContaining({
+        roleId: "planner",
+        resolvedBackend: "Claude Code",
+        resolvedAgentId: "claude-main",
+        appliedSource: "blueprint",
+      }),
+      expect.objectContaining({
+        roleId: "coder",
+        resolvedBackend: "Codex",
+        resolvedAgentId: "codex-main",
+        runtimeCapable: true,
+        rerouteCapable: true,
+      }),
+      expect.objectContaining({
+        roleId: "reviewer",
+        resolvedBackend: "Claude Code",
+        resolvedAgentId: "claude-main",
+      }),
+      expect.objectContaining({
+        roleId: "verifier",
+        resolvedBackend: "Codex",
+        resolvedAgentId: "codex-main",
+        runtimeCapable: true,
+        rerouteCapable: true,
+      }),
+      expect.objectContaining({
+        roleId: "docWriter",
+        resolvedBackend: "Codex",
+        resolvedAgentId: "codex-main",
+      }),
+    ]);
     expect(progress.roleRouteSummary).toEqual([
       "planner=Claude Code@claude-main",
       "coder=Codex@codex-main",
@@ -3984,11 +4016,13 @@ describe("openclawCodeRunCommand", () => {
       status: "blocked",
       stopReason: "A run is already active for this repository.",
       currentRunPresent: true,
+      currentRunIssueKey: "openclaw/openclawcode#910",
       currentRunStage: "building",
       currentRunBranchName: "openclawcode/issue-910",
       currentRunPullRequestNumber: 9910,
       currentRunPullRequestUrl: "https://github.com/openclaw/openclawcode/pull/9910",
     });
+    expect(loop.roleRoutes).toEqual(progress.roleRoutes);
     expect(loop.roleRouteSummary).toEqual(progress.roleRouteSummary);
   });
 
