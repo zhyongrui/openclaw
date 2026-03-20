@@ -2047,6 +2047,9 @@ function logProjectIssueMaterializationArtifact(params: {
   if (artifact.selectedWorkItemId) {
     runtime.log(`Selected work item: ${artifact.selectedWorkItemId}`);
   }
+  if (artifact.selectedWorkItemExecutionMode) {
+    runtime.log(`Execution mode: ${artifact.selectedWorkItemExecutionMode}`);
+  }
   if (artifact.selectedIssueNumber != null) {
     runtime.log(`Selected issue: #${artifact.selectedIssueNumber} | ${artifact.selectedIssueTitle}`);
     runtime.log(`Selected issue URL: ${artifact.selectedIssueUrl}`);

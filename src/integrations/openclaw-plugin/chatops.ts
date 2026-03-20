@@ -105,6 +105,8 @@ export interface OpenClawCodeScopedIssueDraft {
   reason: string;
 }
 
+export type OpenClawCodeChatIssueDraftKind = "feature" | "bugfix" | "refactor" | "research";
+
 export interface OpenClawCodeChatopsRunRequest {
   owner: string;
   repo: string;
@@ -565,16 +567,80 @@ export function parseChatopsIssueDraftCommand(
 }
 
 export function buildMinimalChatIssueBody(title: string): string {
-  return [
-    "Summary",
-    title,
-    "",
-    "Problem to solve",
-    "This issue was drafted directly from chat intake and needs the workflow to translate the request into the concrete code change.",
-    "",
-    "Requested from chat intake",
-    title,
-  ].join("\n");
+  const kind = classifyChatIssueDraftKind(title);
+  switch (kind) {
+    case "bugfix":
+      return [
+        "Summary",
+        title,
+        "",
+        "Observed behavior",
+        "- Describe what is failing right now.",
+        "",
+        "Expected behavior",
+        "- Describe what should happen instead.",
+        "",
+        "Reproduction hints",
+        "- Smallest reproduction path known so far.",
+        "",
+        "Regression proof",
+        "- Add the proof that should fail before the fix and pass after it.",
+        "",
+        "Requested from chat intake",
+        title,
+      ].join("\n");
+    case "refactor":
+      return [
+        "Summary",
+        title,
+        "",
+        "Refactor goal",
+        "This issue was drafted directly from chat intake and should clarify the structural improvement before code movement starts.",
+        "",
+        "Behavior to preserve",
+        "- List the externally visible behavior that must stay unchanged.",
+        "",
+        "Safe checkpoints",
+        "- Name the first small checkpoint that should remain working.",
+        "",
+        "Requested from chat intake",
+        title,
+      ].join("\n");
+    case "research":
+      return [
+        "Summary",
+        title,
+        "",
+        "Question to answer",
+        "This issue was drafted directly from chat intake and should end with a concrete recommendation.",
+        "",
+        "Evidence to collect",
+        "- Name the code path, behavior, or proof to inspect.",
+        "",
+        "Exit criteria",
+        "- State the next executable slice once the investigation finishes.",
+        "",
+        "Requested from chat intake",
+        title,
+      ].join("\n");
+    default:
+      return [
+        "Summary",
+        title,
+        "",
+        "Problem to solve",
+        "This issue was drafted directly from chat intake and needs the workflow to translate the request into the concrete code change.",
+        "",
+        "Requested behavior",
+        "- Describe the visible outcome that should change.",
+        "",
+        "Proof of success",
+        "- Describe the proof, command, or test that should show the request succeeded.",
+        "",
+        "Requested from chat intake",
+        title,
+      ].join("\n");
+  }
 }
 
 export function deriveScopedChatIssueDrafts(title: string): OpenClawCodeScopedIssueDraft[] {
@@ -607,6 +673,23 @@ export function deriveScopedChatIssueDrafts(title: string): OpenClawCodeScopedIs
       reason: `Narrow the request to just ${item}.`,
     };
   });
+}
+
+export function classifyChatIssueDraftKind(input: string): OpenClawCodeChatIssueDraftKind {
+  if (/\b(fix|bug|regression|broken|crash|error|failure)\b/i.test(input)) {
+    return "bugfix";
+  }
+  if (
+    /\b(refactor|cleanup|clean up|rename|extract|restructure|reorganize|dedupe|simplify)\b/i.test(
+      input,
+    )
+  ) {
+    return "refactor";
+  }
+  if (/\b(investigate|diagnose|triage|research|spike|explore)\b/i.test(input)) {
+    return "research";
+  }
+  return "feature";
 }
 
 function defaultBranchName(issueNumber: number): string {

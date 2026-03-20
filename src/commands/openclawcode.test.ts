@@ -2954,6 +2954,7 @@ describe("openclawCodeRunCommand", () => {
       exists: true,
       outcome: "created",
       selectedWorkItemId: "planned-01-materialize-the-selected-work-item-into-a-github",
+      selectedWorkItemExecutionMode: "feature",
       selectedIssueNumber: 321,
       selectedIssueUrl: "https://github.com/openclaw/openclaw/issues/321",
     });

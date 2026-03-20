@@ -1971,8 +1971,12 @@ describe("openclawcode extension", () => {
       });
 
       expect(result?.text).toContain("waiting for confirmation");
+      expect(result?.text).toContain("Intake mode: feature");
+      expect(result?.text).toContain(
+        "Priority question: What exact behavior, contract, or operator surface should change?",
+      );
       expect(result?.text).toContain("Clarifications: 3");
-      expect(result?.text).toContain("Use `/occode-intake-confirm`");
+      expect(result?.text).toContain("Use /occode-intake-confirm zhyongrui/openclawcode");
       expect(fetchMock).not.toHaveBeenCalled();
 
       const snapshot = await fixture.store.snapshot();
@@ -1983,6 +1987,46 @@ describe("openclawcode extension", () => {
         bodySynthesized: true,
         scopedDrafts: [],
       });
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shapes one-line bug-fix intake into a triage-first pending draft", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await fixture.commands.get("occode-intake")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: [
+          "/occode-intake",
+          "Fix duplicate issue materialization after blueprint edits",
+        ].join("\n"),
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      expect(result?.text).toContain("waiting for confirmation");
+      expect(result?.text).toContain("Intake mode: bugfix");
+      expect(result?.text).toContain("Priority question: What is the observed behavior right now?");
+      expect(result?.text).toContain("Clarifications: 3");
+      expect(result?.text).toContain(
+        "Capture observed behavior, expected behavior, and the smallest reproduction before confirming the draft.",
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.pendingIntakeDrafts[0]).toMatchObject({
+        title: "Fix duplicate issue materialization after blueprint edits",
+        bodySynthesized: true,
+      });
+      expect(snapshot.pendingIntakeDrafts[0]?.body).toContain("Observed behavior");
+      expect(snapshot.pendingIntakeDrafts[0]?.body).toContain("Regression proof");
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });
@@ -6094,11 +6138,130 @@ describe("openclawcode extension", () => {
 
       expect(result?.text).toContain("openclawcode issue materialization for zhyongrui/openclawcode");
       expect(result?.text).toContain("Outcome: created");
+      expect(result?.text).toContain("Execution mode: feature");
       expect(result?.text).toContain("Selected issue: #77");
 
       const artifact = await readProjectIssueMaterializationArtifact(fixture.repoRoot);
       expect(artifact.selectedIssueNumber).toBe(77);
+      expect(artifact.selectedWorkItemExecutionMode).toBe("feature");
       expect(artifact.outcome).toBe("created");
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("precheck-escalates /occode-materialize when the blueprint-backed issue body is high risk", async () => {
+    const fixture = await registerPluginFixture({ triggerMode: "auto" });
+    try {
+      await fs.writeFile(
+        path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),
+        [
+          "---",
+          "schemaVersion: 1",
+          "title: High Risk Materialize Blueprint",
+          "status: agreed",
+          "createdAt: 2026-03-20T00:00:00.000Z",
+          "updatedAt: 2026-03-20T00:00:00.000Z",
+          "statusChangedAt: 2026-03-20T00:00:00.000Z",
+          "agreedAt: 2026-03-20T00:00:00.000Z",
+          "---",
+          "",
+          "# High Risk Materialize Blueprint",
+          "",
+          "## Goal",
+          "Tighten setup handling around database migration safety and rollback visibility.",
+          "",
+          "## Success Criteria",
+          "- /occode-materialize escalates high-risk work before queueing it.",
+          "",
+          "## Scope",
+          "- In scope: high-risk materialization precheck.",
+          "",
+          "## Non-Goals",
+          "- Full execution.",
+          "",
+          "## Constraints",
+          "- Keep the issue linkage deterministic.",
+          "",
+          "## Risks",
+          "- Database work should never auto-queue by accident.",
+          "",
+          "## Assumptions",
+          "- GitHub auth is available on the operator host.",
+          "",
+          "## Human Gates",
+          "- Merge promotion: required",
+          "",
+          "## Provider Strategy",
+          "- Planner: Claude Code",
+          "- Coder: Codex",
+          "- Reviewer: Claude Code",
+          "- Verifier: Codex",
+          "- Doc-writer: Codex",
+          "",
+          "## Workstreams",
+          "- Tighten setup logging during risky migrations.",
+          "",
+          "## Open Questions",
+          "- None.",
+          "",
+          "## Change Log",
+          "- 2026-03-20: high-risk materialize proof.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await writeProjectWorkItemInventory(fixture.repoRoot);
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              number: 78,
+              title: "[Blueprint]: Tighten setup logging during risky migrations.",
+              body: "materialized body",
+              html_url: "https://github.com/zhyongrui/openclawcode/issues/78",
+              state: "open",
+              labels: [],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      vi.stubEnv("GH_TOKEN", "test-gh-token");
+
+      const result = await fixture.commands.get("occode-materialize")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-materialize",
+        args: "",
+        senderId: "user:operator",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Outcome: created");
+      expect(result?.text).toContain("Selected issue: #78");
+      expect(result?.text).toContain("Suitability: escalate | Webhook intake precheck escalated");
+
+      const snapshot = await fixture.store.snapshot();
+      expect(snapshot.queue).toEqual([]);
+      expect(snapshot.statusSnapshotsByIssue["zhyongrui/openclawcode#78"]).toMatchObject({
+        stage: "escalated",
+        issueNumber: 78,
+        suitabilityDecision: "escalate",
+      });
+      expect(snapshot.statusByIssue["zhyongrui/openclawcode#78"]).toContain(
+        "Webhook intake precheck escalated the issue before chat approval.",
+      );
     } finally {
       await cleanupPluginFixture(fixture);
     }

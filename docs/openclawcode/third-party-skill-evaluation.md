@@ -356,3 +356,28 @@ The first direct absorption into `openclawcode` is now:
   - TDD-oriented testing policy
   - bug-triage expectations for fixes
   - refactor guardrails for structural changes
+
+The second direct absorption into `openclawcode` is now:
+
+- chat intake now classifies one-line requests as:
+  - `feature`
+  - `bugfix`
+  - `refactor`
+  - `research`
+- synthesized intake drafts now use mode-specific scaffolds instead of one
+  generic body
+  - bug-fix drafts ask for observed behavior, expected behavior, reproduction,
+    and regression proof
+  - refactor drafts ask for invariant behavior and safe checkpoints
+  - research drafts ask for evidence and an executable exit condition
+- pending intake replies now lead with the highest-value next question for the
+  detected work type
+- issue materialization now preserves execution mode in the artifact and uses
+  the full blueprint-derived issue draft body during suitability precheck
+  instead of evaluating only the title
+
+Why this matters:
+
+- it absorbs the useful part of `triage-issue` into chat-native bug shaping
+- it absorbs the useful part of `request-refactor-plan` into intake and issue
+  generation without creating another parallel planning document

@@ -15,6 +15,7 @@ import {
   buildRunRequestFromCommand,
   buildRunStatusMessage,
   buildWorkflowFailureDiagnosticLines,
+  classifyChatIssueDraftKind,
   decideIssueWebhookIntake,
   extractWorkflowRunFromCommandOutput,
   findLatestLocalRunStatusForIssue,
@@ -2105,6 +2106,10 @@ async function materializeAndHandleNextWorkIssue(params: {
     owner: params.repoConfig.owner,
     repo: params.repoConfig.repo,
   });
+  const workItems = await readProjectWorkItemInventory(params.repoConfig.repoRoot);
+  const selectedWorkItem = artifact.selectedWorkItemId
+    ? workItems.workItems.find((entry) => entry.id === artifact.selectedWorkItemId)
+    : undefined;
 
   if (artifact.selectedIssueNumber == null) {
     return {
@@ -2129,6 +2134,7 @@ async function materializeAndHandleNextWorkIssue(params: {
       issue: {
         ...issue,
         title: artifact.selectedIssueTitle ?? "[Blueprint] materialized issue",
+        body: selectedWorkItem?.githubIssueDraft.body,
       },
     }),
     config: {
@@ -2322,43 +2328,112 @@ function buildExecutionStartGateDeferredMessage(params: {
 }
 
 type ChatIntakeClarificationReport = {
+  kind: "feature" | "bugfix" | "refactor" | "research";
   needsConfirmation: boolean;
+  priorityQuestion: string | null;
   questions: string[];
   suggestions: string[];
 };
 
 function analyzeChatIntakeDraft(params: {
   title: string;
+  body: string;
   bodySynthesized: boolean;
 }): ChatIntakeClarificationReport {
-  const questions = new Set<string>();
-  const suggestions = new Set<string>();
+  const questions: string[] = [];
+  const seenQuestions = new Set<string>();
+  const suggestions: string[] = [];
+  const seenSuggestions = new Set<string>();
+  const combinedText = [params.title, params.body].join("\n");
+  const kind = classifyChatIssueDraftKind(combinedText);
   const wordCount = params.title
     .split(/\s+/)
     .map((token) => token.trim())
     .filter(Boolean).length;
 
+  const addQuestion = (question: string): void => {
+    if (!seenQuestions.has(question)) {
+      seenQuestions.add(question);
+      questions.push(question);
+    }
+  };
+  const addSuggestion = (suggestion: string): void => {
+    if (!seenSuggestions.has(suggestion)) {
+      seenSuggestions.add(suggestion);
+      suggestions.push(suggestion);
+    }
+  };
+
   if (params.bodySynthesized) {
-    questions.add("What exact behavior, contract, or operator surface should change?");
-    questions.add("What proof should show the request succeeded?");
-    questions.add("Are there any files, commands, or constraints the workflow must avoid?");
+    switch (kind) {
+      case "bugfix":
+        addQuestion("What is the observed behavior right now?");
+        addQuestion("What should happen instead when the bug is fixed?");
+        addQuestion("What is the smallest reproduction path or failing proof?");
+        break;
+      case "refactor":
+        addQuestion("What behavior must remain unchanged during this refactor?");
+        addQuestion("What first safe checkpoint should still work after the first structural change?");
+        addQuestion("What part of the codebase is in scope, and what should stay untouched?");
+        break;
+      case "research":
+        addQuestion("What concrete question should this investigation answer?");
+        addQuestion("What evidence or proof should the investigation collect?");
+        addQuestion("What next executable slice should come out of the investigation?");
+        break;
+      default:
+        addQuestion("What exact behavior, contract, or operator surface should change?");
+        addQuestion("What proof should show the request succeeded?");
+        addQuestion("Are there any files, commands, or constraints the workflow must avoid?");
+        break;
+    }
   }
   if (wordCount <= 5) {
-    questions.add(
+    addQuestion(
       "Can you restate the request with a slightly more specific user-visible outcome?",
     );
   }
-  suggestions.add(
+  switch (kind) {
+    case "bugfix":
+      addSuggestion(
+        "Capture observed behavior, expected behavior, and the smallest reproduction before confirming the draft.",
+      );
+      addSuggestion(
+        "Prefer a regression proof before the fix so the failure cannot silently return.",
+      );
+      break;
+    case "refactor":
+      addSuggestion(
+        "State the invariant behavior and the first safe checkpoint before confirming the draft.",
+      );
+      addSuggestion(
+        "Split behavior-preserving structure changes from behavior changes whenever possible.",
+      );
+      break;
+    case "research":
+      addSuggestion(
+        "End the draft with a recommendation and the next executable slice, not only observations.",
+      );
+      break;
+    default:
+      addSuggestion(
+        "Describe the public behavior change and the proof of success before confirming the draft.",
+      );
+      break;
+  }
+  addSuggestion(
     "Use `/occode-intake-edit` to refine the generated title or body before issue creation.",
   );
-  suggestions.add(
+  addSuggestion(
     "Use `/occode-intake-confirm` only after the draft is specific enough to execute safely.",
   );
 
   return {
-    needsConfirmation: params.bodySynthesized || questions.size > 0,
-    questions: [...questions],
-    suggestions: [...suggestions],
+    kind,
+    needsConfirmation: params.bodySynthesized || questions.length > 0,
+    priorityQuestion: questions[0] ?? null,
+    questions,
+    suggestions,
   };
 }
 
@@ -2377,10 +2452,14 @@ function buildPendingIntakeDraftMessage(params: {
 }): string {
   return [
     `openclawcode drafted a chat intake issue for ${formatRepoKey(params.repo)} but is waiting for confirmation.`,
+    `Intake mode: ${params.clarification.kind}`,
     `Title: ${params.draft.title}`,
     `Body source: ${params.draft.bodySynthesized ? "generated from one-line intake" : "edited draft"}`,
     "Body preview:",
     params.draft.body,
+    params.clarification.priorityQuestion
+      ? `Priority question: ${params.clarification.priorityQuestion}`
+      : undefined,
     `Clarifications: ${params.clarification.questions.length}`,
     ...params.clarification.questions.slice(0, 3).map((question) => `- ${question}`),
     `Scoped drafts: ${params.draft.scopedDrafts?.length ?? 0}`,
@@ -2925,6 +3004,23 @@ function buildIssueMaterializationSummaryMessage(params: {
   }
   if (params.artifact.selectedWorkItemId) {
     lines.push(`Selected work item: ${params.artifact.selectedWorkItemId}`);
+  }
+  if (params.artifact.selectedWorkItemExecutionMode) {
+    lines.push(`Execution mode: ${params.artifact.selectedWorkItemExecutionMode}`);
+    switch (params.artifact.selectedWorkItemExecutionMode) {
+      case "bugfix":
+        lines.push("Mode guidance: confirm observed behavior, expected behavior, and reproduction before broad edits.");
+        break;
+      case "refactor":
+        lines.push("Mode guidance: preserve current behavior and keep the repository working after each checkpoint.");
+        break;
+      case "research":
+        lines.push("Mode guidance: end with a concrete recommendation and the next executable slice.");
+        break;
+      default:
+        lines.push("Mode guidance: keep the slice demoable and verify public behavior before broadening scope.");
+        break;
+    }
   }
   if (params.artifact.selectedIssueNumber != null) {
     lines.push(
@@ -4616,6 +4712,7 @@ export default {
         if (command.draft.bodySynthesized) {
           const clarification = analyzeChatIntakeDraft({
             title: command.draft.title,
+            body: command.draft.body,
             bodySynthesized: command.draft.bodySynthesized,
           });
           const scopedDrafts = deriveScopedChatIssueDrafts(command.draft.title);
@@ -4720,6 +4817,7 @@ export default {
         const nextBody = restLines.join("\n").trim() || existing.body;
         const clarification = analyzeChatIntakeDraft({
           title: nextTitle,
+          body: nextBody,
           bodySynthesized: false,
         });
         await store.upsertPendingIntakeDraft({
@@ -4825,6 +4923,7 @@ export default {
 
         const clarification = analyzeChatIntakeDraft({
           title: selected.title,
+          body: selected.body,
           bodySynthesized: false,
         });
         await store.upsertPendingIntakeDraft({

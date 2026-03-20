@@ -16,6 +16,14 @@ These are the styles that the current chat intake flow is meant to handle well:
   - field name
   - nested source path
   - expected scalar/boolean shape
+- bug-fix requests when the operator can at least name:
+  - the observed failure
+  - the expected behavior
+  - the smallest known reproduction
+- targeted refactor requests when the operator can at least name:
+  - the module or flow to reshape
+  - the behavior that must remain unchanged
+  - the first safe checkpoint
 
 ## Supported But Human-Reviewed
 
@@ -44,6 +52,16 @@ These should not be treated as direct autonomous-safe intake:
 
 When a one-line intake request is narrow enough, `openclawcode` will generate a
 single pending draft and ask for confirmation.
+
+The current synthesized-draft flow now also classifies one-line requests into:
+
+- `feature`
+- `bugfix`
+- `refactor`
+- `research`
+
+That classification changes both the generated body scaffold and the
+clarification prompts shown in chat.
 
 When a one-line intake request is obviously mixed-scope, the current flow can
 also propose multiple scoped variants. In chat, the operator can:

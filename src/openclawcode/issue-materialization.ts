@@ -10,6 +10,7 @@ import {
 import {
   readProjectWorkItemInventory,
   type ProjectWorkItem,
+  type ProjectWorkItemExecutionMode,
 } from "./work-items.js";
 import { GitHubRestClient, type GitHubIssueClient } from "./github/index.js";
 
@@ -43,6 +44,7 @@ export interface ProjectIssueMaterializationArtifact {
   canContinueAutonomously: boolean;
   blockingGateId: ProjectStageGateId | null;
   selectedWorkItemId: string | null;
+  selectedWorkItemExecutionMode: ProjectWorkItemExecutionMode | null;
   selectedIssueNumber: number | null;
   selectedIssueUrl: string | null;
   selectedIssueTitle: string | null;
@@ -105,6 +107,7 @@ function emptyProjectIssueMaterializationArtifact(params: {
     canContinueAutonomously: params.selection.canContinueAutonomously,
     blockingGateId: params.selection.blockingGateId,
     selectedWorkItemId: params.selection.selectedWorkItem?.id ?? null,
+    selectedWorkItemExecutionMode: null,
     selectedIssueNumber: null,
     selectedIssueUrl: null,
     selectedIssueTitle: null,
@@ -250,6 +253,13 @@ export async function readProjectIssueMaterializationArtifact(
         : parsed.selectedWorkItemId === null
           ? null
           : empty.selectedWorkItemId,
+    selectedWorkItemExecutionMode:
+      parsed.selectedWorkItemExecutionMode === "feature" ||
+      parsed.selectedWorkItemExecutionMode === "bugfix" ||
+      parsed.selectedWorkItemExecutionMode === "refactor" ||
+      parsed.selectedWorkItemExecutionMode === "research"
+        ? parsed.selectedWorkItemExecutionMode
+        : empty.selectedWorkItemExecutionMode,
     selectedIssueNumber:
       typeof parsed.selectedIssueNumber === "number"
         ? parsed.selectedIssueNumber
@@ -312,6 +322,7 @@ export async function writeProjectIssueMaterializationArtifact(params: {
     canContinueAutonomously: selection.canContinueAutonomously,
     blockingGateId: selection.blockingGateId,
     selectedWorkItemId: selection.selectedWorkItem?.id ?? null,
+    selectedWorkItemExecutionMode: null,
     selectedIssueNumber: null,
     selectedIssueUrl: null,
     selectedIssueTitle: null,
@@ -390,6 +401,7 @@ export async function writeProjectIssueMaterializationArtifact(params: {
 
   const persisted: ProjectIssueMaterializationArtifact = {
     ...base,
+    selectedWorkItemExecutionMode: workItem.executionMode,
     selectedIssueNumber: nextEntry.issueNumber,
     selectedIssueUrl: nextEntry.issueUrl,
     selectedIssueTitle: nextEntry.issueTitle,
