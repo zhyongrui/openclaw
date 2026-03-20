@@ -3041,6 +3041,31 @@ function buildIssueMaterializationSummaryMessage(params: {
   return lines.join("\n");
 }
 
+function resolveChatNextSuggestedCommand(params: {
+  repo: { owner: string; repo: string };
+  command: string | null;
+}): string | null {
+  const command = params.command?.trim();
+  if (!command) {
+    return null;
+  }
+  const repoKey = formatRepoKey(params.repo);
+  const issueRunMatch = /^openclaw code run --issue (\d+) --repo-root /.exec(command);
+  if (issueRunMatch) {
+    return `/occode-start ${repoKey}#${issueRunMatch[1]}`;
+  }
+  if (/^openclaw code stage-gates-show --repo-root /.test(command)) {
+    return `/occode-gates ${repoKey}`;
+  }
+  if (/^openclaw code issue-materialize --repo-root /.test(command)) {
+    return `/occode-materialize ${repoKey}`;
+  }
+  if (/^openclaw code project-progress-show --repo-root /.test(command)) {
+    return `/occode-progress ${repoKey}`;
+  }
+  return command;
+}
+
 function buildProjectProgressSummaryMessage(params: {
   repo: { owner: string; repo: string };
   artifact: Awaited<ReturnType<typeof readProjectProgressArtifact>>;
@@ -3088,8 +3113,12 @@ function buildProjectProgressSummaryMessage(params: {
   if (params.artifact.operator.currentRunPullRequestNumber != null) {
     lines.push(`Current run PR: #${params.artifact.operator.currentRunPullRequestNumber}`);
   }
-  if (params.artifact.nextSuggestedCommand) {
-    lines.push(`Next: ${params.artifact.nextSuggestedCommand}`);
+  const nextSuggestedCommand = resolveChatNextSuggestedCommand({
+    repo: params.repo,
+    command: params.artifact.nextSuggestedCommand,
+  });
+  if (nextSuggestedCommand) {
+    lines.push(`Next: ${nextSuggestedCommand}`);
   }
   return lines.join("\n");
 }
@@ -3143,8 +3172,12 @@ function buildAutonomousLoopSummaryMessage(params: {
   if (params.artifact.message) {
     lines.push(`Message: ${params.artifact.message}`);
   }
-  if (params.artifact.nextSuggestedCommand) {
-    lines.push(`Next: ${params.artifact.nextSuggestedCommand}`);
+  const nextSuggestedCommand = resolveChatNextSuggestedCommand({
+    repo: params.repo,
+    command: params.artifact.nextSuggestedCommand,
+  });
+  if (nextSuggestedCommand) {
+    lines.push(`Next: ${nextSuggestedCommand}`);
   }
   for (const iteration of params.artifact.iterations.slice(0, 3)) {
     lines.push(
