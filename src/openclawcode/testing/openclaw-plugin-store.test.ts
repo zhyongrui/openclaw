@@ -453,6 +453,13 @@ describe("OpenClawCodeChatopsStore", () => {
         scopedDrafts: [],
         clarificationQuestions: ["What proof should show the request succeeded?"],
         clarificationSuggestions: ["Use /occode-intake-edit before /occode-intake-confirm."],
+        clarificationResponses: [
+          {
+            question: "What proof should show the request succeeded?",
+            answer: "Add a regression assertion for the top-level field.",
+            answeredAt: createdAt,
+          },
+        ],
         createdAt,
         updatedAt: createdAt,
       };
@@ -475,6 +482,11 @@ describe("OpenClawCodeChatopsStore", () => {
       expect(saved).toMatchObject({
         title: "Expose issueCount and issueRepo in run json",
         bodySynthesized: false,
+        clarificationResponses: [
+          expect.objectContaining({
+            answer: "Add a regression assertion for the top-level field.",
+          }),
+        ],
         createdAt,
       });
 

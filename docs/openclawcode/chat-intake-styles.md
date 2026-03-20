@@ -67,7 +67,20 @@ When a one-line intake request is obviously mixed-scope, the current flow can
 also propose multiple scoped variants. In chat, the operator can:
 
 - reopen the current pending draft with `/occode-intake-preview owner/repo`
+- answer the next clarification directly with
+  `/occode-intake-answer owner/repo [index] <answer...>`
 - inspect the suggested variants in the pending draft message
 - pick one with `/occode-intake-choose owner/repo <index>`
 - keep refining with `/occode-intake-edit`
 - confirm with `/occode-intake-confirm`
+
+## Escalated Intake Requests
+
+High-risk intake requests still create the GitHub issue, but `openclawcode`
+keeps them on an explicit escalation path instead of queueing execution.
+
+The current operator flow is:
+
+- inspect the tracked escalation with `/occode-status owner/repo#issue`
+- only use `/occode-start-override owner/repo#issue` after a human accepts a
+  one-run exception

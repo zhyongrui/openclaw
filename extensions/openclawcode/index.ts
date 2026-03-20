@@ -1862,6 +1862,8 @@ function buildPrecheckedEscalationStatus(params: {
     "Stage: Escalated",
     `Summary: ${params.summary}`,
     "Suitability: escalate",
+    "Escalation path: human review required before execution.",
+    `Next: /occode-start-override ${issueKey} only after a human accepts a one-run exception.`,
   ].join("\n");
 }
 
@@ -2340,7 +2342,9 @@ function buildIntakeEscalatedMessage(params: {
     `Title: ${params.issue.title}`,
     params.issue.url ? `URL: ${params.issue.url}` : undefined,
     `Summary: ${params.summary}`,
+    "Escalation path: human review required before execution.",
     `Use /occode-status ${issueKey} to inspect the tracked status.`,
+    `Use /occode-start-override ${issueKey} only after a human accepts a one-run exception.`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -2392,11 +2396,13 @@ function analyzeChatIntakeDraft(params: {
   title: string;
   body: string;
   bodySynthesized: boolean;
+  answeredQuestions?: string[];
 }): ChatIntakeClarificationReport {
   const questions: string[] = [];
   const seenQuestions = new Set<string>();
   const suggestions: string[] = [];
   const seenSuggestions = new Set<string>();
+  const answeredQuestions = new Set((params.answeredQuestions ?? []).map((value) => value.trim()));
   const combinedText = [params.title, params.body].join("\n");
   const kind = classifyChatIssueDraftKind(combinedText);
   const wordCount = params.title
@@ -2405,6 +2411,9 @@ function analyzeChatIntakeDraft(params: {
     .filter(Boolean).length;
 
   const addQuestion = (question: string): void => {
+    if (answeredQuestions.has(question)) {
+      return;
+    }
     if (!seenQuestions.has(question)) {
       seenQuestions.add(question);
       questions.push(question);
@@ -2496,6 +2505,11 @@ function buildPendingIntakeDraftMessage(params: {
     title: string;
     body: string;
     bodySynthesized: boolean;
+    clarificationResponses?: Array<{
+      question: string;
+      answer: string;
+      answeredAt: string;
+    }>;
     scopedDrafts?: Array<{
       title: string;
       reason: string;
@@ -2504,6 +2518,11 @@ function buildPendingIntakeDraftMessage(params: {
   clarification: ChatIntakeClarificationReport;
   introLine?: string;
 }): string {
+  const clarificationResponses = params.draft.clarificationResponses ?? [];
+  const materializedBody = materializePendingIntakeDraftBody({
+    body: params.draft.body,
+    clarificationResponses,
+  });
   return [
     params.introLine ??
       `openclawcode drafted a chat intake issue for ${formatRepoKey(params.repo)} but is waiting for confirmation.`,
@@ -2511,7 +2530,11 @@ function buildPendingIntakeDraftMessage(params: {
     `Title: ${params.draft.title}`,
     `Body source: ${params.draft.bodySynthesized ? "generated from one-line intake" : "edited draft"}`,
     "Body preview:",
-    params.draft.body,
+    materializedBody,
+    `Clarification answers: ${clarificationResponses.length}`,
+    ...clarificationResponses
+      .slice(-2)
+      .map((response) => `- Answered: ${trimToSingleLine(response.question)}`),
     params.clarification.priorityQuestion
       ? `Priority question: ${params.clarification.priorityQuestion}`
       : undefined,
@@ -2528,10 +2551,39 @@ function buildPendingIntakeDraftMessage(params: {
           `Use /occode-intake-choose ${formatRepoKey(params.repo)} <index> to replace the pending draft with one scoped variant.`,
         ]
       : []),
+    ...(params.clarification.questions.length > 0
+      ? [
+          `Use /occode-intake-answer ${formatRepoKey(params.repo)} [index] <answer...> to answer one clarification and refresh the draft.`,
+        ]
+      : []),
     `Use /occode-intake-preview ${formatRepoKey(params.repo)} to review the pending draft again before creation.`,
     `Use /occode-intake-edit ${formatRepoKey(params.repo)} <title>\\n<body...> to refine the draft.`,
     `Use /occode-intake-confirm ${formatRepoKey(params.repo)} when the draft is ready to create on GitHub.`,
     `Use /occode-intake-reject ${formatRepoKey(params.repo)} [reason] to discard the pending draft.`,
+  ].join("\n");
+}
+
+function materializePendingIntakeDraftBody(params: {
+  body: string;
+  clarificationResponses?: Array<{
+    question: string;
+    answer: string;
+    answeredAt: string;
+  }>;
+}): string {
+  const responses = params.clarificationResponses ?? [];
+  if (responses.length === 0) {
+    return params.body;
+  }
+  return [
+    params.body,
+    "",
+    "Clarifications from operator",
+    ...responses.flatMap((response) => [
+      "",
+      `Q: ${response.question}`,
+      `A: ${response.answer}`,
+    ]),
   ].join("\n");
 }
 
@@ -2572,6 +2624,43 @@ function parseRepoScopedMultilineBody(params: {
   return {
     repo,
     body,
+  };
+}
+
+function parseIntakeAnswerArgs(params: {
+  commandBody: string;
+  defaults: { owner?: string; repo?: string };
+}):
+  | {
+      repo: { owner: string; repo: string };
+      questionIndex: number;
+      answer: string;
+    }
+  | undefined {
+  const parsed = parseRepoScopedMultilineBody({
+    commandBody: params.commandBody,
+    commandName: "occode-intake-answer",
+    defaults: params.defaults,
+  });
+  if (!parsed) {
+    return undefined;
+  }
+  const body = parsed.body.trim();
+  if (!body) {
+    return undefined;
+  }
+  const indexedAnswerMatch = /^(\d+)(?:\s+|\n+)([\s\S]+)$/.exec(body);
+  if (indexedAnswerMatch) {
+    return {
+      repo: parsed.repo,
+      questionIndex: Number.parseInt(indexedAnswerMatch[1] ?? "1", 10),
+      answer: (indexedAnswerMatch[2] ?? "").trim(),
+    };
+  }
+  return {
+    repo: parsed.repo,
+    questionIndex: 1,
+    answer: body,
   };
 }
 
@@ -4896,6 +4985,7 @@ export default {
             scopedDrafts,
             clarificationQuestions: clarification.questions,
             clarificationSuggestions: clarification.suggestions,
+            clarificationResponses: [],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           });
@@ -4904,6 +4994,7 @@ export default {
               repo: command.repo,
               draft: {
                 ...command.draft,
+                clarificationResponses: [],
                 scopedDrafts,
               },
               clarification,
@@ -5001,6 +5092,7 @@ export default {
           scopedDrafts: [],
           clarificationQuestions: clarification.questions,
           clarificationSuggestions: clarification.suggestions,
+          clarificationResponses: [],
           updatedAt: new Date().toISOString(),
         });
         return {
@@ -5010,9 +5102,117 @@ export default {
               title: nextTitle,
               body: nextBody,
               bodySynthesized: false,
+              clarificationResponses: [],
               scopedDrafts: [],
             },
             clarification,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-intake-answer",
+      description: "Answer one pending chat-native intake clarification and refresh the draft.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const parsed = parseIntakeAnswerArgs({
+          commandBody: ctx.commandBody,
+          defaults: {
+            owner: defaultRepo?.owner,
+            repo: defaultRepo?.repo,
+          },
+        });
+        if (!parsed || !parsed.answer) {
+          return {
+            text:
+              "Usage: /occode-intake-answer owner/repo [index] <answer...>\n" +
+              "Or, when exactly one repo is configured: /occode-intake-answer [index] <answer...>",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.repo.owner}/${parsed.repo.repo}.`,
+          };
+        }
+
+        const binding = await store.getRepoBinding(formatRepoKey(parsed.repo));
+        const destination = resolveInteractiveNotificationDestination({
+          ctx,
+          repoConfig,
+          binding,
+        });
+        const draftHandle = {
+          repoKey: formatRepoKey(parsed.repo),
+          notifyChannel: destination.channel,
+          notifyTarget: destination.target,
+        };
+        const existing = await store.getPendingIntakeDraft(draftHandle);
+        if (!existing) {
+          return {
+            text: [
+              `No pending intake draft found for ${formatRepoKey(parsed.repo)} in this chat.`,
+              `Start with /occode-intake ${formatRepoKey(parsed.repo)} <request> first.`,
+            ].join("\n"),
+          };
+        }
+        if (existing.clarificationQuestions.length === 0) {
+          return {
+            text: [
+              `No outstanding clarification prompts remain for ${formatRepoKey(parsed.repo)}.`,
+              `Use /occode-intake-preview ${formatRepoKey(parsed.repo)} to review the draft or /occode-intake-confirm ${formatRepoKey(parsed.repo)} to create the issue.`,
+            ].join("\n"),
+          };
+        }
+
+        const selectedQuestion = existing.clarificationQuestions[parsed.questionIndex - 1];
+        if (!selectedQuestion) {
+          return {
+            text: [
+              `Clarification index ${parsed.questionIndex} is out of range for ${formatRepoKey(parsed.repo)}.`,
+              `Outstanding clarifications: 1-${existing.clarificationQuestions.length}`,
+            ].join("\n"),
+          };
+        }
+
+        const clarificationResponses = [
+          ...(existing.clarificationResponses ?? []),
+          {
+            question: selectedQuestion,
+            answer: parsed.answer,
+            answeredAt: new Date().toISOString(),
+          },
+        ];
+        const clarification = analyzeChatIntakeDraft({
+          title: existing.title,
+          body: existing.body,
+          bodySynthesized: existing.bodySynthesized,
+          answeredQuestions: clarificationResponses.map((response) => response.question),
+        });
+        await store.upsertPendingIntakeDraft({
+          ...existing,
+          ...draftHandle,
+          clarificationQuestions: clarification.questions,
+          clarificationSuggestions: clarification.suggestions,
+          clarificationResponses,
+          updatedAt: new Date().toISOString(),
+        });
+        return {
+          text: buildPendingIntakeDraftMessage({
+            repo: parsed.repo,
+            draft: {
+              title: existing.title,
+              body: existing.body,
+              bodySynthesized: existing.bodySynthesized,
+              clarificationResponses,
+              scopedDrafts: existing.scopedDrafts,
+            },
+            clarification,
+            introLine: `openclawcode refreshed the pending chat intake draft for ${formatRepoKey(parsed.repo)} after recording a clarification answer.`,
           }),
         };
       },
@@ -5077,6 +5277,7 @@ export default {
               title: draft.title,
               body: draft.body,
               bodySynthesized: draft.bodySynthesized,
+              clarificationResponses: draft.clarificationResponses,
               scopedDrafts: draft.scopedDrafts,
             },
             clarification,
@@ -5174,6 +5375,7 @@ export default {
           scopedDrafts: [],
           clarificationQuestions: clarification.questions,
           clarificationSuggestions: clarification.suggestions,
+          clarificationResponses: [],
           updatedAt: new Date().toISOString(),
         });
         return {
@@ -5183,6 +5385,7 @@ export default {
               title: selected.title,
               body: selected.body,
               bodySynthesized: false,
+              clarificationResponses: [],
               scopedDrafts: [],
             },
             clarification,
@@ -5244,7 +5447,10 @@ export default {
           destination,
           draft: {
             title: draft.title,
-            body: draft.body,
+            body: materializePendingIntakeDraftBody({
+              body: draft.body,
+              clarificationResponses: draft.clarificationResponses,
+            }),
           },
         });
         if (result.issueCreated) {

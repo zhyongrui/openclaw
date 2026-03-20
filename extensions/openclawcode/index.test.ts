@@ -1931,7 +1931,9 @@ describe("openclawcode extension", () => {
           "Title: Rotate auth secrets for webhook permissions",
           "URL: https://github.com/zhyongrui/openclawcode/issues/221",
           "Summary: Webhook intake precheck escalated the issue before chat approval. Issue labels matched denylisted high-risk labels: security.",
+          "Escalation path: human review required before execution.",
           "Use /occode-status zhyongrui/openclawcode#221 to inspect the tracked status.",
+          "Use /occode-start-override zhyongrui/openclawcode#221 only after a human accepts a one-run exception.",
         ].join("\n"),
       });
 
@@ -1947,6 +1949,9 @@ describe("openclawcode extension", () => {
       });
       expect(snapshot.statusByIssue["zhyongrui/openclawcode#221"]).toContain(
         "Webhook intake precheck escalated the issue before chat approval",
+      );
+      expect(snapshot.statusByIssue["zhyongrui/openclawcode#221"]).toContain(
+        "Next: /occode-start-override zhyongrui/openclawcode#221 only after a human accepts a one-run exception.",
       );
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
@@ -1978,6 +1983,9 @@ describe("openclawcode extension", () => {
         "Priority question: What exact behavior, contract, or operator surface should change?",
       );
       expect(result?.text).toContain("Clarifications: 3");
+      expect(result?.text).toContain(
+        "Use /occode-intake-answer zhyongrui/openclawcode [index] <answer...>",
+      );
       expect(result?.text).toContain("Use /occode-intake-confirm zhyongrui/openclawcode");
       expect(fetchMock).not.toHaveBeenCalled();
 
@@ -2029,6 +2037,101 @@ describe("openclawcode extension", () => {
       });
       expect(snapshot.pendingIntakeDrafts[0]?.body).toContain("Observed behavior");
       expect(snapshot.pendingIntakeDrafts[0]?.body).toContain("Regression proof");
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("records clarification answers into the pending chat intake draft before confirmation", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      vi.stubEnv("GH_TOKEN", "test-token");
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify(
+            createGitHubIssueResponse({
+              issueNumber: 224,
+              title: "Expose issueCount in openclaw code run --json output",
+              body: [
+                "Summary",
+                "Expose issueCount in openclaw code run --json output",
+                "",
+                "Problem to solve",
+                "This issue was drafted directly from chat intake and needs the workflow to translate the request into the concrete code change.",
+                "",
+                "Requested from chat intake",
+                "Expose issueCount in openclaw code run --json output",
+                "",
+                "Clarifications from operator",
+                "",
+                "Q: What exact behavior, contract, or operator surface should change?",
+                "A: Add a stable top-level `issueCount` mirror to `openclaw code run --json`.",
+              ].join("\n"),
+            }),
+          ),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      await fixture.commands.get("occode-intake")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: [
+          "/occode-intake",
+          "Expose issueCount in openclaw code run --json output",
+        ].join("\n"),
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      const answered = await fixture.commands.get("occode-intake-answer")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: [
+          "/occode-intake-answer",
+          "Add a stable top-level `issueCount` mirror to `openclaw code run --json`.",
+        ].join("\n"),
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      expect(answered?.text).toContain("recording a clarification answer");
+      expect(answered?.text).toContain("Clarification answers: 1");
+      expect(answered?.text).toContain("Clarifications from operator");
+      expect(answered?.text).toContain(
+        "Q: What exact behavior, contract, or operator surface should change?",
+      );
+      expect(answered?.text).toContain(
+        "A: Add a stable top-level `issueCount` mirror to `openclaw code run --json`.",
+      );
+      expect(answered?.text).toContain("Clarifications: 2");
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const confirmed = await fixture.commands.get("occode-intake-confirm")?.handler({
+        channel: "feishu",
+        isAuthorizedSender: true,
+        commandBody: "/occode-intake-confirm",
+        args: "",
+        to: "user:intake-chat",
+        config: {},
+      });
+
+      expect(confirmed?.text).toContain("Issue: zhyongrui/openclawcode#224");
+      const requestPayload = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+      expect(requestPayload).toMatchObject({
+        title: "Expose issueCount in openclaw code run --json output",
+      });
+      expect(String(requestPayload.body)).toContain("Clarifications from operator");
+      expect(String(requestPayload.body)).toContain(
+        "Q: What exact behavior, contract, or operator surface should change?",
+      );
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
       await fs.rm(fixture.stateDir, { recursive: true, force: true });

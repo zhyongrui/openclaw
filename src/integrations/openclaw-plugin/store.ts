@@ -37,8 +37,15 @@ export interface OpenClawCodePendingIntakeDraft {
   scopedDrafts: OpenClawCodeScopedIssueDraft[];
   clarificationQuestions: string[];
   clarificationSuggestions: string[];
+  clarificationResponses: OpenClawCodePendingIntakeClarificationResponse[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OpenClawCodePendingIntakeClarificationResponse {
+  question: string;
+  answer: string;
+  answeredAt: string;
 }
 
 export type OpenClawCodeSetupSessionStage =
@@ -333,6 +340,29 @@ function normalizePendingIntakeDraft(raw: unknown): OpenClawCodePendingIntakeDra
       ? candidate.clarificationSuggestions.filter(
           (value): value is string => typeof value === "string",
         )
+      : [],
+    clarificationResponses: Array.isArray(candidate.clarificationResponses)
+      ? candidate.clarificationResponses.flatMap((entry) => {
+          if (!entry || typeof entry !== "object") {
+            return [];
+          }
+          const candidateResponse =
+            entry as Partial<OpenClawCodePendingIntakeClarificationResponse>;
+          if (
+            typeof candidateResponse.question !== "string" ||
+            typeof candidateResponse.answer !== "string" ||
+            typeof candidateResponse.answeredAt !== "string"
+          ) {
+            return [];
+          }
+          return [
+            {
+              question: candidateResponse.question,
+              answer: candidateResponse.answer,
+              answeredAt: candidateResponse.answeredAt,
+            } satisfies OpenClawCodePendingIntakeClarificationResponse,
+          ];
+        })
       : [],
     createdAt: candidate.createdAt,
     updatedAt: candidate.updatedAt,
