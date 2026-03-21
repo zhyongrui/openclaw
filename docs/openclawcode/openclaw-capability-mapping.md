@@ -634,12 +634,12 @@ Acceptance:
 Status:
 
 - `[x]` docs and repo-local proof contracts landed
-- `[ ]` live blueprint-first operator proofs still pending
+- `[x]` live blueprint-first operator proofs landed
 
 Tasks:
 
-- `[ ]` run one blueprint-first proof on the refreshed sync branch
-- `[ ]` run one blueprint-first proof on the long-lived baseline
+- `[x]` run one blueprint-first proof on the refreshed sync branch
+- `[x]` run one blueprint-first proof on the long-lived baseline
 - `[x]` document install, promotion, and rollback for blueprint-aware releases
 - `[x]` define machine-readable promotion and rollback artifacts
 - `[x]` document supported provider combinations and limits
