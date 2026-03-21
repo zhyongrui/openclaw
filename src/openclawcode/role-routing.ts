@@ -5,6 +5,7 @@ import {
   readProjectBlueprintDocument,
   type ProjectBlueprintRoleId,
 } from "./blueprint.js";
+import type { WorkflowStage } from "./contracts/index.js";
 
 export const PROJECT_ROLE_ROUTING_SCHEMA_VERSION = 1;
 export const PROJECT_ROLE_ADAPTER_IDS = [
@@ -28,6 +29,16 @@ export interface ProjectRoleRoute {
   resolvedBackend: string;
   resolvedAgentId: string | null;
   appliedSource: "blueprint" | "env-role-default" | "openclaw-default";
+  stages: WorkflowStage[];
+}
+
+export interface ProjectStageRoute {
+  stageId: WorkflowStage;
+  roleId: ProjectBlueprintRoleId;
+  adapterId: ProjectRoleAdapterId;
+  resolvedAgentId: string | null;
+  source: ProjectRoleRoute["source"];
+  fallbackChain: string[];
 }
 
 export interface ProjectRoleRoutingPlan {
@@ -43,11 +54,13 @@ export interface ProjectRoleRoutingPlan {
   fallbackConfigured: boolean;
   mixedMode: boolean;
   routeCount: number;
+  stageRouteCount: number;
   unresolvedRoleCount: number;
   blockers: string[];
   suggestionCount: number;
   suggestions: string[];
   routes: ProjectRoleRoute[];
+  stageRoutes: ProjectStageRoute[];
 }
 
 function resolveProjectRoleRoutingArtifactPath(repoRootInput: string): string {
@@ -125,7 +138,11 @@ function resolveRoleLabel(roleId: ProjectBlueprintRoleId): string {
 }
 
 function resolveFallbackChain(): string[] {
-  const raw = process.env.OPENCLAWCODE_MODEL_FALLBACKS?.trim();
+  return parseFallbackChain(process.env.OPENCLAWCODE_MODEL_FALLBACKS);
+}
+
+function parseFallbackChain(value: string | undefined): string[] {
+  const raw = value?.trim();
   if (!raw) {
     return [];
   }
@@ -133,6 +150,103 @@ function resolveFallbackChain(): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function resolveRoleFallbackEnvVar(roleId: ProjectBlueprintRoleId): string {
+  switch (roleId) {
+    case "planner":
+      return "OPENCLAWCODE_ROLE_PLANNER_FALLBACKS";
+    case "coder":
+      return "OPENCLAWCODE_ROLE_CODER_FALLBACKS";
+    case "reviewer":
+      return "OPENCLAWCODE_ROLE_REVIEWER_FALLBACKS";
+    case "verifier":
+      return "OPENCLAWCODE_ROLE_VERIFIER_FALLBACKS";
+    case "docWriter":
+      return "OPENCLAWCODE_ROLE_DOC_WRITER_FALLBACKS";
+  }
+}
+
+function mergeFallbackChains(primary: string[], secondary: string[]): string[] {
+  const merged: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of [...primary, ...secondary]) {
+    if (!entry || seen.has(entry)) {
+      continue;
+    }
+    seen.add(entry);
+    merged.push(entry);
+  }
+  return merged;
+}
+
+function resolveRoleFallbackChain(roleId: ProjectBlueprintRoleId, globalFallbackChain: string[]): string[] {
+  return mergeFallbackChains(
+    parseFallbackChain(process.env[resolveRoleFallbackEnvVar(roleId)]),
+    globalFallbackChain,
+  );
+}
+
+function resolveRoleStages(roleId: ProjectBlueprintRoleId): WorkflowStage[] {
+  switch (roleId) {
+    case "planner":
+      return ["planning"];
+    case "coder":
+      return ["building"];
+    case "reviewer":
+      return ["draft-pr-opened", "changes-requested", "ready-for-human-review"];
+    case "verifier":
+      return ["verifying"];
+    case "docWriter":
+      return ["completed-without-changes", "merged"];
+  }
+}
+
+function buildStageRoutes(routes: ProjectRoleRoute[]): ProjectStageRoute[] {
+  return routes
+    .flatMap((route) =>
+      route.stages.map((stageId) => ({
+        stageId,
+        roleId: route.roleId,
+        adapterId: route.adapterId,
+        resolvedAgentId: route.resolvedAgentId,
+        source: route.source,
+        fallbackChain: route.fallbackChain,
+      })),
+    )
+    .sort((left, right) =>
+      left.stageId.localeCompare(right.stageId) || left.roleId.localeCompare(right.roleId),
+    );
+}
+
+function resolveFallbackConfigured(params: {
+  globalFallbackChain: string[];
+  routes: ProjectRoleRoute[];
+}): boolean {
+  if (params.globalFallbackChain.length > 0) {
+    return true;
+  }
+  return params.routes.some((route) => route.fallbackChain.length > 0);
+}
+
+function resolveStageMixedMode(stageRoutes: ProjectStageRoute[]): boolean {
+  return (
+    new Set(
+      stageRoutes
+        .map((route) => route.adapterId)
+        .filter((adapterId) => adapterId !== "openclaw-default"),
+    ).size > 1
+  );
+}
+
+function resolveFallbackSummarySuggestion(routes: ProjectRoleRoute[]): string {
+  const rolesWithRoleSpecificFallbacks = routes
+    .filter((route) => parseFallbackChain(process.env[resolveRoleFallbackEnvVar(route.roleId)]).length > 0)
+    .map((route) => resolveRoleLabel(route.roleId));
+  if (rolesWithRoleSpecificFallbacks.length > 0) {
+    return `Role-specific fallback chains are configured for ${rolesWithRoleSpecificFallbacks.join(", ")}. Recheck those providers in a live proof.`;
+  }
+  return "Consider setting role-specific fallback chains when coder and verifier should fail over differently.";
 }
 
 function resolveRouteAssignment(params: {
@@ -183,11 +297,13 @@ function emptyProjectRoleRoutingPlan(params: {
     fallbackConfigured: params.fallbackChain.length > 0,
     mixedMode: false,
     routeCount: 0,
+    stageRouteCount: 0,
     unresolvedRoleCount: 0,
     blockers: [],
     suggestionCount: 0,
     suggestions: [],
     routes: [],
+    stageRoutes: [],
   };
 }
 
@@ -216,6 +332,7 @@ export async function deriveProjectRoleRoutingPlan(
       blueprintAssignments: blueprint.providerRoleAssignments,
     });
     const adapterId = normalizeRoleAdapter(assignment.rawAssignment);
+    const roleFallbackChain = resolveRoleFallbackChain(roleId, fallbackChain);
     const roleAgentEnvVar = resolveRoleAgentEnvVar(roleId);
     const adapterAgentEnvVar = resolveAdapterAgentEnvVar(adapterId);
     const resolvedAgentId =
@@ -228,14 +345,16 @@ export async function deriveProjectRoleRoutingPlan(
       adapterId,
       source: assignment.source,
       configured: assignment.rawAssignment != null && assignment.rawAssignment.length > 0,
-      fallbackChain,
+      fallbackChain: roleFallbackChain,
       runtimeCapable: roleId === "coder" || roleId === "verifier",
       rerouteCapable: roleId === "coder" || roleId === "verifier",
       resolvedBackend: assignment.rawAssignment?.trim() || adapterId,
       resolvedAgentId,
       appliedSource: assignment.source,
+      stages: resolveRoleStages(roleId),
     };
   });
+  const stageRoutes = buildStageRoutes(routes);
 
   const unresolvedRoles = routes.filter((route) => !route.configured);
   const adapterSet = new Set(
@@ -253,10 +372,13 @@ export async function deriveProjectRoleRoutingPlan(
         ]
       : [];
   const suggestions = [
-    fallbackChain.length > 0
-      ? "A fallback chain is configured; keep it consistent with the primary role assignments."
+    resolveFallbackConfigured({
+      globalFallbackChain: fallbackChain,
+      routes,
+    })
+      ? resolveFallbackSummarySuggestion(routes)
       : "Consider setting `OPENCLAWCODE_MODEL_FALLBACKS` once a second model is available for proofs.",
-    adapterSet.size > 1
+    resolveStageMixedMode(stageRoutes)
       ? "Mixed-mode routing is active; verify each role/provider pairing in a real proof."
       : "If you want planner/coder separation, assign at least one role to Codex and another to Claude Code.",
   ];
@@ -271,14 +393,19 @@ export async function deriveProjectRoleRoutingPlan(
     blueprintPath: blueprint.blueprintPath,
     blueprintRevisionId: blueprint.revisionId,
     fallbackChain,
-    fallbackConfigured: fallbackChain.length > 0,
+    fallbackConfigured: resolveFallbackConfigured({
+      globalFallbackChain: fallbackChain,
+      routes,
+    }),
     mixedMode: adapterSet.size > 1,
     routeCount: routes.length,
+    stageRouteCount: stageRoutes.length,
     unresolvedRoleCount: unresolvedRoles.length,
     blockers,
     suggestionCount: suggestions.length,
     suggestions,
     routes,
+    stageRoutes,
   };
 }
 

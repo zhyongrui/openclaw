@@ -179,6 +179,16 @@ export interface WorkflowRoleRouteSnapshot {
   resolvedBackend: string;
   resolvedAgentId: string | null;
   appliedSource: string;
+  stages: string[];
+}
+
+export interface WorkflowStageRouteSnapshot {
+  stageId: string;
+  roleId: string;
+  adapterId: string;
+  resolvedAgentId: string | null;
+  source: string;
+  fallbackChain: string[];
 }
 
 export interface WorkflowRoleRoutingSnapshot {
@@ -188,6 +198,7 @@ export interface WorkflowRoleRoutingSnapshot {
   fallbackConfigured: boolean;
   unresolvedRoleCount: number;
   routes: WorkflowRoleRouteSnapshot[];
+  stageRoutes: WorkflowStageRouteSnapshot[];
 }
 
 export interface WorkflowRuntimeRoleSelection {

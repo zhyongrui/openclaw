@@ -6221,6 +6221,8 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain("planner=claude-code");
       expect(result?.text).toContain("coder=codex");
       expect(result?.text).toContain("reviewer=claude-code");
+      expect(result?.text).toContain("planning=claude-code/planner");
+      expect(result?.text).toContain("building=codex/coder");
       expect(result?.text).toContain("Unresolved roles: 2");
     } finally {
       await fs.rm(fixture.repoRoot, { recursive: true, force: true });
@@ -6305,6 +6307,7 @@ describe("openclawcode extension", () => {
       expect(result?.text).toContain("Provider: Claude Code");
       expect(result?.text).toContain("Execution routing gate:");
       expect(result?.text).toContain("reviewer=claude-code");
+      expect(result?.text).toContain("planning=claude-code/planner");
 
       const content = await fs.readFile(
         path.join(fixture.repoRoot, "PROJECT-BLUEPRINT.md"),

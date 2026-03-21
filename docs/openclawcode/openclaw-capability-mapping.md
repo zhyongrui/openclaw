@@ -533,8 +533,8 @@ Tasks:
 - `[x]` define a provider-neutral adapter contract for each role
 - `[x]` implement Codex role adapters
 - `[x]` implement Claude Code role adapters
-- `[ ]` support mixed-mode routing by stage
-- `[ ]` support fallback by role
+- `[x]` support mixed-mode routing by stage
+- `[x]` support fallback by role
 - `[x]` persist selected role/provider decisions into run artifacts
 
 Acceptance:

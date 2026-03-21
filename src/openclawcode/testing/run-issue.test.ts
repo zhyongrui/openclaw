@@ -1746,8 +1746,30 @@ describe("runIssueWorkflow", () => {
       });
       expect(run.roleRouting?.routes).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ roleId: "planner", adapterId: "claude-code" }),
-          expect.objectContaining({ roleId: "coder", adapterId: "codex" }),
+          expect.objectContaining({
+            roleId: "planner",
+            adapterId: "claude-code",
+            stages: ["planning"],
+          }),
+          expect.objectContaining({
+            roleId: "coder",
+            adapterId: "codex",
+            stages: ["building"],
+          }),
+        ]),
+      );
+      expect(run.roleRouting?.stageRoutes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            stageId: "planning",
+            roleId: "planner",
+            adapterId: "claude-code",
+          }),
+          expect.objectContaining({
+            stageId: "building",
+            roleId: "coder",
+            adapterId: "codex",
+          }),
         ]),
       );
       expect(run.stageGates).toMatchObject({
@@ -1767,6 +1789,7 @@ describe("runIssueWorkflow", () => {
       const savedRun = await store.get(run.id);
       expect(savedRun?.blueprintContext?.revisionId).toBe(run.blueprintContext?.revisionId);
       expect(savedRun?.roleRouting?.mixedMode).toBe(true);
+      expect(savedRun?.roleRouting?.stageRoutes).toEqual(run.roleRouting?.stageRoutes);
       expect(savedRun?.stageGates?.blockedGateCount).toBe(1);
     } finally {
       if (previousFallbacks == null) {

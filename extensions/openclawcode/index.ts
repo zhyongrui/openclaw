@@ -3351,15 +3351,29 @@ function buildRoleRoutingSummaryMessage(params: {
       return `${role}=${route.adapterId}${route.resolvedAgentId ? `@${route.resolvedAgentId}` : ""}`;
     })
     .join(", ");
+  const stageLine = params.plan.stageRoutes
+    .map((route) => `${route.stageId}=${route.adapterId}/${route.roleId === "docWriter" ? "doc-writer" : route.roleId}`)
+    .join(", ");
+  const fallbackLine = params.plan.routes
+    .filter((route) => route.fallbackChain.length > 0)
+    .map(
+      (route) =>
+        `${route.roleId === "docWriter" ? "doc-writer" : route.roleId}=${route.fallbackChain.join(" -> ")}`,
+    )
+    .join(", ");
   return [
     `openclawcode role routing for ${formatRepoKey(params.repo)}`,
     `Role routing: ${routeLine}`,
+    stageLine ? `Stage routing: ${stageLine}` : undefined,
     `Mixed mode: ${params.plan.mixedMode ? "yes" : "no"}`,
     `Fallback configured: ${params.plan.fallbackConfigured ? "yes" : "no"}`,
+    fallbackLine ? `Role fallbacks: ${fallbackLine}` : undefined,
     `Unresolved roles: ${params.plan.unresolvedRoleCount}`,
     ...params.plan.blockers.slice(0, 3).map((blocker) => `- blocker: ${blocker}`),
     ...params.plan.suggestions.slice(0, 2).map((suggestion) => `- suggestion: ${suggestion}`),
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function parseRoleRoutingSetArgs(params: {

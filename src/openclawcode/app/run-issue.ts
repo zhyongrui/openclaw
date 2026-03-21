@@ -258,6 +258,15 @@ function mapWorkflowRoleRoutingSnapshot(params: {
       resolvedBackend: route.resolvedBackend,
       resolvedAgentId: route.resolvedAgentId,
       appliedSource: route.appliedSource,
+      stages: route.stages,
+    })),
+    stageRoutes: params.plan.stageRoutes.map((route) => ({
+      stageId: route.stageId,
+      roleId: route.roleId,
+      adapterId: route.adapterId,
+      resolvedAgentId: route.resolvedAgentId,
+      source: route.source,
+      fallbackChain: route.fallbackChain,
     })),
   };
 }

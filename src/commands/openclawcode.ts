@@ -2036,6 +2036,13 @@ function logProjectRoleRoutingPlan(params: {
   runtime.log(`Fallback configured: ${plan.fallbackConfigured ? "yes" : "no"}`);
   runtime.log(`Mixed mode: ${plan.mixedMode ? "yes" : "no"}`);
   runtime.log(`Unresolved roles: ${plan.unresolvedRoleCount}`);
+  if (plan.stageRoutes.length > 0) {
+    runtime.log(
+      `Stage routing: ${plan.stageRoutes
+        .map((route) => `${route.stageId}=${route.adapterId}/${route.roleId}`)
+        .join(", ")}`,
+    );
+  }
   if (plan.blockers.length > 0) {
     runtime.log("Blockers:");
     for (const blocker of plan.blockers) {
@@ -2044,7 +2051,7 @@ function logProjectRoleRoutingPlan(params: {
   }
   for (const route of plan.routes) {
     runtime.log(
-      `- ${route.roleId}: ${route.rawAssignment ?? "openclaw-default"} (${route.adapterId}, ${route.source}, runtime=${route.runtimeCapable ? "yes" : "no"}, reroute=${route.rerouteCapable ? "yes" : "no"}, agent=${route.resolvedAgentId ?? "runner-default"})`,
+      `- ${route.roleId}: ${route.rawAssignment ?? "openclaw-default"} (${route.adapterId}, ${route.source}, runtime=${route.runtimeCapable ? "yes" : "no"}, reroute=${route.rerouteCapable ? "yes" : "no"}, agent=${route.resolvedAgentId ?? "runner-default"}, stages=${route.stages.join("/")}, fallbacks=${route.fallbackChain.length > 0 ? route.fallbackChain.join(" -> ") : "none"})`,
     );
   }
 }

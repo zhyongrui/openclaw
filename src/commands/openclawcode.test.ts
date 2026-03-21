@@ -5063,8 +5063,10 @@ EOF
     const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-role-routing-"));
     const previousDefault = process.env.OPENCLAWCODE_ROLE_DEFAULT;
     const previousFallbacks = process.env.OPENCLAWCODE_MODEL_FALLBACKS;
+    const previousVerifierFallbacks = process.env.OPENCLAWCODE_ROLE_VERIFIER_FALLBACKS;
     process.env.OPENCLAWCODE_ROLE_DEFAULT = "Codex";
     process.env.OPENCLAWCODE_MODEL_FALLBACKS = "openai/gpt-5,anthropic/claude-sonnet";
+    process.env.OPENCLAWCODE_ROLE_VERIFIER_FALLBACKS = "anthropic/claude-opus";
 
     try {
       await writeFile(
@@ -5139,6 +5141,7 @@ EOF
         fallbackConfigured: true,
         mixedMode: true,
         routeCount: 5,
+        stageRouteCount: 8,
         unresolvedRoleCount: 0,
       });
       expect(payload.routes).toEqual(
@@ -5148,18 +5151,44 @@ EOF
             rawAssignment: "Claude Code",
             adapterId: "claude-code",
             source: "blueprint",
+            stages: ["planning"],
           }),
           expect.objectContaining({
             roleId: "coder",
             rawAssignment: "Codex",
             adapterId: "codex",
             source: "blueprint",
+            stages: ["building"],
           }),
           expect.objectContaining({
             roleId: "reviewer",
             rawAssignment: "Codex",
             adapterId: "codex",
             source: "env-role-default",
+          }),
+          expect.objectContaining({
+            roleId: "verifier",
+            fallbackChain: ["anthropic/claude-opus", "openai/gpt-5", "anthropic/claude-sonnet"],
+            stages: ["verifying"],
+          }),
+        ]),
+      );
+      expect(payload.stageRoutes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            stageId: "planning",
+            roleId: "planner",
+            adapterId: "claude-code",
+          }),
+          expect.objectContaining({
+            stageId: "building",
+            roleId: "coder",
+            adapterId: "codex",
+          }),
+          expect.objectContaining({
+            stageId: "verifying",
+            roleId: "verifier",
+            fallbackChain: ["anthropic/claude-opus", "openai/gpt-5", "anthropic/claude-sonnet"],
           }),
         ]),
       );
@@ -5186,6 +5215,11 @@ EOF
         delete process.env.OPENCLAWCODE_MODEL_FALLBACKS;
       } else {
         process.env.OPENCLAWCODE_MODEL_FALLBACKS = previousFallbacks;
+      }
+      if (previousVerifierFallbacks == null) {
+        delete process.env.OPENCLAWCODE_ROLE_VERIFIER_FALLBACKS;
+      } else {
+        process.env.OPENCLAWCODE_ROLE_VERIFIER_FALLBACKS = previousVerifierFallbacks;
       }
     }
   });
