@@ -3,6 +3,7 @@ import path from "node:path";
 import type {
   WorkflowFailureDiagnostics,
   SuitabilityDecision,
+  WorkflowHandoffEntry,
   WorkflowRun,
   WorkflowStage,
 } from "../../openclawcode/contracts/index.js";
@@ -203,6 +204,7 @@ export interface OpenClawCodeIssueStatusSnapshot {
   suitabilityOverrideApplied?: boolean;
   suitabilityOverrideActor?: string;
   suitabilityOverrideReason?: string;
+  handoffEntries?: WorkflowHandoffEntry[];
   autoMergePolicyEligible?: boolean;
   autoMergePolicyReason?: string;
   autoMergeDisposition?: "merged" | "skipped" | "failed";
@@ -903,6 +905,12 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
       typeof candidate.suitabilityOverrideReason === "string"
         ? candidate.suitabilityOverrideReason
         : undefined,
+    handoffEntries: Array.isArray(candidate.handoffEntries)
+      ? candidate.handoffEntries.flatMap((value) => {
+          const normalized = normalizeWorkflowHandoffEntry(value);
+          return normalized ? [normalized] : [];
+        })
+      : undefined,
     autoMergePolicyEligible:
       typeof candidate.autoMergePolicyEligible === "boolean"
         ? candidate.autoMergePolicyEligible
@@ -1106,6 +1114,56 @@ function normalizePendingApproval(raw: unknown): OpenClawCodePendingApproval | u
   };
 }
 
+function normalizeWorkflowHandoffEntry(raw: unknown): WorkflowHandoffEntry | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const candidate = raw as Partial<WorkflowHandoffEntry>;
+  if (
+    typeof candidate.kind !== "string" ||
+    typeof candidate.recordedAt !== "string" ||
+    typeof candidate.summary !== "string"
+  ) {
+    return undefined;
+  }
+  if (
+    candidate.kind !== "stage-gate-decision" &&
+    candidate.kind !== "rerun-request" &&
+    candidate.kind !== "runtime-reroute" &&
+    candidate.kind !== "manual-takeover" &&
+    candidate.kind !== "manual-resume" &&
+    candidate.kind !== "suitability-override"
+  ) {
+    return undefined;
+  }
+  return {
+    kind: candidate.kind,
+    recordedAt: candidate.recordedAt,
+    summary: candidate.summary,
+    actor: typeof candidate.actor === "string" ? candidate.actor : undefined,
+    gateId: typeof candidate.gateId === "string" ? candidate.gateId : undefined,
+    decision: typeof candidate.decision === "string" ? candidate.decision : undefined,
+    note: typeof candidate.note === "string" ? candidate.note : undefined,
+    priorRunId: typeof candidate.priorRunId === "string" ? candidate.priorRunId : undefined,
+    priorStage: typeof candidate.priorStage === "string" ? candidate.priorStage : undefined,
+    reviewDecision:
+      candidate.reviewDecision === "approved" || candidate.reviewDecision === "changes-requested"
+        ? candidate.reviewDecision
+        : undefined,
+    reviewSubmittedAt:
+      typeof candidate.reviewSubmittedAt === "string" ? candidate.reviewSubmittedAt : undefined,
+    requestedCoderAgentId:
+      typeof candidate.requestedCoderAgentId === "string"
+        ? candidate.requestedCoderAgentId
+        : undefined,
+    requestedVerifierAgentId:
+      typeof candidate.requestedVerifierAgentId === "string"
+        ? candidate.requestedVerifierAgentId
+        : undefined,
+    worktreePath: typeof candidate.worktreePath === "string" ? candidate.worktreePath : undefined,
+  };
+}
+
 function buildStatusSnapshot(params: {
   run: WorkflowRun;
   status: string;
@@ -1151,6 +1209,10 @@ function buildStatusSnapshot(params: {
     suitabilityOverrideApplied: params.run.suitability?.overrideApplied,
     suitabilityOverrideActor: params.run.suitability?.overrideActor,
     suitabilityOverrideReason: params.run.suitability?.overrideReason,
+    handoffEntries:
+      params.run.handoffs?.entries.length && params.run.handoffs.entries.length > 0
+        ? params.run.handoffs.entries
+        : undefined,
     autoMergePolicyEligible: autoMergePolicy.autoMergePolicyEligible,
     autoMergePolicyReason: autoMergePolicy.autoMergePolicyReason,
     autoMergeDisposition: autoMergeDisposition.autoMergeDisposition ?? undefined,

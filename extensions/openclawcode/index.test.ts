@@ -409,6 +409,7 @@ function createWorkflowRun(params: {
   failureDiagnostics?: WorkflowRun["failureDiagnostics"];
   suitability?: WorkflowRun["suitability"];
   rerunContext?: WorkflowRun["rerunContext"];
+  handoffs?: WorkflowRun["handoffs"];
 }): WorkflowRun {
   const updatedAt = params.updatedAt ?? "2026-03-12T12:00:00.000Z";
   return {
@@ -455,6 +456,7 @@ function createWorkflowRun(params: {
       followUps: [],
     },
     rerunContext: params.rerunContext,
+    handoffs: params.handoffs,
     suitability: params.suitability,
     failureDiagnostics: params.failureDiagnostics,
   };
@@ -4698,6 +4700,57 @@ describe("openclawcode extension", () => {
           "Operator baseline: main",
         ].join("\n"),
       });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("shows handoff summary through /occode-status", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fixture.store.setStatusSnapshot({
+        issueKey: "zhyongrui/openclawcode#6628",
+        status: "Verification approved the run for human review.",
+        stage: "ready-for-human-review",
+        runId: "run-6628",
+        updatedAt: "2026-03-21T01:00:00.000Z",
+        owner: "zhyongrui",
+        repo: "openclawcode",
+        issueNumber: 6628,
+        handoffEntries: [
+          {
+            kind: "stage-gate-decision",
+            recordedAt: "2026-03-21T00:55:00.000Z",
+            summary: "execution-start approved | Accepted for this run",
+            gateId: "execution-start",
+            decision: "approved",
+          },
+          {
+            kind: "runtime-reroute",
+            recordedAt: "2026-03-21T00:56:00.000Z",
+            summary: "coder=codex-alt",
+            requestedCoderAgentId: "codex-alt",
+          },
+          {
+            kind: "suitability-override",
+            recordedAt: "2026-03-21T00:57:00.000Z",
+            summary: "Approved for this one run.",
+            actor: "user:operator",
+          },
+        ],
+      });
+
+      const result = await fixture.commands.get("occode-status")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-status #6628",
+        args: "#6628",
+        config: {},
+      });
+
+      expect(result?.text).toContain(
+        "Handoffs: runtime-reroute=1, stage-gate-decision=1, suitability-override=1",
+      );
     } finally {
       await cleanupPluginFixture(fixture);
     }

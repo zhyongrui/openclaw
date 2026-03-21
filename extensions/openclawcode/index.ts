@@ -1948,6 +1948,24 @@ function buildTopLevelSuitabilityPolicyLines(snapshot: OpenClawCodeIssueStatusSn
   ];
 }
 
+function buildTopLevelHandoffSummaryLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
+  if (!snapshot.handoffEntries || snapshot.handoffEntries.length === 0) {
+    return [];
+  }
+
+  const counts = new Map<string, number>();
+  for (const entry of snapshot.handoffEntries) {
+    counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
+  }
+
+  const summary = [...counts.entries()]
+    .toSorted((left, right) => left[0].localeCompare(right[0]))
+    .map(([kind, count]) => `${kind}=${count}`)
+    .join(", ");
+
+  return [`Handoffs: ${summary}`];
+}
+
 function buildTopLevelAutoMergePolicyLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
   if (
     snapshot.autoMergePolicyEligible !== false ||
@@ -7198,6 +7216,7 @@ export default {
             record: deferredRuntimeReroute,
             topLevel: true,
           }),
+          ...(currentSnapshot ? buildTopLevelHandoffSummaryLines(currentSnapshot) : []),
           ...(currentSnapshot ? buildTopLevelSuitabilityPolicyLines(currentSnapshot) : []),
           ...(currentSnapshot ? buildTopLevelAutoMergePolicyLines(currentSnapshot) : []),
           ...buildOperatorContextLines(repoConfig),

@@ -44,6 +44,7 @@ function createWorkflowRun(params: {
   prNumber?: number;
   prUrl?: string;
   rerunContext?: WorkflowRun["rerunContext"];
+  handoffs?: WorkflowRun["handoffs"];
 }): WorkflowRun {
   const updatedAt = params.updatedAt ?? "2026-03-10T08:30:00.000Z";
   return {
@@ -101,6 +102,7 @@ function createWorkflowRun(params: {
       followUps: [],
     },
     rerunContext: params.rerunContext,
+    handoffs: params.handoffs,
   };
 }
 
@@ -792,6 +794,40 @@ describe("OpenClawCodeChatopsStore", () => {
           manualTakeoverWorktreePath: "/repo/.openclawcode/worktrees/issue-109",
           manualResumeNote: "Human updated the worktree before rerun.",
         },
+        handoffs: {
+          entries: [
+            {
+              kind: "rerun-request",
+              recordedAt: "2026-03-10T08:25:00.000Z",
+              summary: "Address GitHub review feedback",
+              priorRunId: "run-108",
+              priorStage: "changes-requested",
+              reviewDecision: "changes-requested",
+              reviewSubmittedAt: "2026-03-10T08:20:00.000Z",
+            },
+            {
+              kind: "runtime-reroute",
+              recordedAt: "2026-03-10T08:25:00.000Z",
+              summary: "coder=codex-reroute, verifier=claude-reroute",
+              requestedCoderAgentId: "codex-reroute",
+              requestedVerifierAgentId: "claude-reroute",
+            },
+            {
+              kind: "manual-takeover",
+              recordedAt: "2026-03-10T08:24:00.000Z",
+              actor: "user:operator",
+              summary: "/repo/.openclawcode/worktrees/issue-109",
+              worktreePath: "/repo/.openclawcode/worktrees/issue-109",
+            },
+            {
+              kind: "manual-resume",
+              recordedAt: "2026-03-10T08:25:00.000Z",
+              actor: "user:operator",
+              summary: "Human updated the worktree before rerun.",
+              worktreePath: "/repo/.openclawcode/worktrees/issue-109",
+            },
+          ],
+        },
       });
 
       await fixture.store.recordWorkflowRunStatus(
@@ -830,6 +866,24 @@ describe("OpenClawCodeChatopsStore", () => {
         autoMergePolicyEligible: false,
         autoMergePolicyReason:
           "Not eligible for auto-merge: suitability did not accept autonomous execution.",
+        handoffEntries: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "rerun-request",
+            summary: "Address GitHub review feedback",
+          }),
+          expect.objectContaining({
+            kind: "runtime-reroute",
+            summary: "coder=codex-reroute, verifier=claude-reroute",
+          }),
+          expect.objectContaining({
+            kind: "manual-takeover",
+            actor: "user:operator",
+          }),
+          expect.objectContaining({
+            kind: "manual-resume",
+            summary: "Human updated the worktree before rerun.",
+          }),
+        ]),
         lastNotificationChannel: "telegram",
         lastNotificationTarget: "chat:primary",
         lastNotificationStatus: "sent",

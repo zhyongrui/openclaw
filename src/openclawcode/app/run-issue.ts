@@ -3,6 +3,8 @@ import { readProjectBlueprintDocument } from "../blueprint.js";
 import type {
   WorkflowBlueprintContext,
   WorkflowFailureDiagnostics,
+  WorkflowHandoffEntry,
+  WorkflowHandoffSnapshot,
   WorkflowRoleRoutingSnapshot,
   WorkflowRuntimeRoleSelection,
   WorkflowRerunContext,
@@ -201,7 +203,7 @@ function attachRerunContext(
   }
 
   return {
-    ...run,
+    ...appendWorkflowHandoffEntries(run, buildRerunContextHandoffs(normalizedContext)),
     updatedAt: now(),
     rerunContext: normalizedContext,
     history: [...run.history, ...notes],
@@ -292,9 +294,105 @@ function mapWorkflowStageGateSnapshot(params: {
   };
 }
 
+function appendWorkflowHandoffEntries(
+  run: WorkflowRun,
+  entries: WorkflowHandoffEntry[],
+): WorkflowRun {
+  if (entries.length === 0) {
+    return run;
+  }
+
+  const merged = [...(run.handoffs?.entries ?? []), ...entries].toSorted((left, right) =>
+    left.recordedAt.localeCompare(right.recordedAt) ||
+    left.kind.localeCompare(right.kind) ||
+    left.summary.localeCompare(right.summary),
+  );
+
+  return {
+    ...run,
+    handoffs: {
+      entries: merged,
+    } satisfies WorkflowHandoffSnapshot,
+  };
+}
+
+function mapStageGateDecisionHandoffs(
+  artifact: Awaited<ReturnType<typeof deriveProjectStageGateArtifact>>,
+): WorkflowHandoffEntry[] {
+  return artifact.decisions.map((decision) => ({
+    kind: "stage-gate-decision",
+    recordedAt: decision.recordedAt,
+    actor: decision.actor ?? undefined,
+    gateId: decision.gateId,
+    decision: decision.decision,
+    note: decision.note ?? undefined,
+    summary: [
+      `${decision.gateId} ${decision.decision}`,
+      decision.note?.trim() || undefined,
+    ]
+      .filter(Boolean)
+      .join(" | "),
+  }));
+}
+
+function buildRerunContextHandoffs(rerunContext: WorkflowRerunContext): WorkflowHandoffEntry[] {
+  const entries: WorkflowHandoffEntry[] = [
+    {
+      kind: "rerun-request",
+      recordedAt: rerunContext.requestedAt,
+      summary: rerunContext.reason.trim() || "Manual rerun requested.",
+      priorRunId: rerunContext.priorRunId,
+      priorStage: rerunContext.priorStage,
+      reviewDecision: rerunContext.reviewDecision,
+      reviewSubmittedAt: rerunContext.reviewSubmittedAt,
+    },
+  ];
+
+  if (rerunContext.requestedCoderAgentId || rerunContext.requestedVerifierAgentId) {
+    entries.push({
+      kind: "runtime-reroute",
+      recordedAt: rerunContext.requestedAt,
+      summary: [
+        rerunContext.requestedCoderAgentId
+          ? `coder=${rerunContext.requestedCoderAgentId}`
+          : undefined,
+        rerunContext.requestedVerifierAgentId
+          ? `verifier=${rerunContext.requestedVerifierAgentId}`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(", "),
+      requestedCoderAgentId: rerunContext.requestedCoderAgentId,
+      requestedVerifierAgentId: rerunContext.requestedVerifierAgentId,
+    });
+  }
+
+  if (rerunContext.manualTakeoverRequestedAt || rerunContext.manualTakeoverWorktreePath) {
+    entries.push({
+      kind: "manual-takeover",
+      recordedAt: rerunContext.manualTakeoverRequestedAt ?? rerunContext.requestedAt,
+      actor: rerunContext.manualTakeoverActor,
+      summary: rerunContext.manualTakeoverWorktreePath?.trim() || "Manual takeover recorded.",
+      worktreePath: rerunContext.manualTakeoverWorktreePath,
+    });
+  }
+
+  if (rerunContext.manualResumeNote?.trim()) {
+    entries.push({
+      kind: "manual-resume",
+      recordedAt: rerunContext.requestedAt,
+      actor: rerunContext.manualTakeoverActor,
+      summary: rerunContext.manualResumeNote.trim(),
+      worktreePath: rerunContext.manualTakeoverWorktreePath,
+    });
+  }
+
+  return entries;
+}
+
 async function captureWorkflowPlanningContext(
   repoRootInput: string,
-): Promise<Pick<WorkflowRun, "blueprintContext" | "roleRouting" | "stageGates">> {
+): Promise<Pick<WorkflowRun, "blueprintContext" | "roleRouting" | "stageGates" | "handoffs">> {
   const repoRoot = path.resolve(repoRootInput);
   const blueprint = await readProjectBlueprintDocument(repoRoot);
 
@@ -321,6 +419,12 @@ async function captureWorkflowPlanningContext(
       artifactExists: storedStageGates.exists,
       artifact: stageGateArtifact,
     }),
+    handoffs:
+      stageGateArtifact.decisions.length > 0
+        ? {
+            entries: mapStageGateDecisionHandoffs(stageGateArtifact),
+          }
+        : undefined,
   };
 }
 
@@ -541,6 +645,17 @@ export async function runIssueWorkflow(
     `Suitability assessed: ${suitability.summary}`,
     now,
   );
+  if (suitability.overrideApplied) {
+    run = appendWorkflowHandoffEntries(run, [
+      {
+        kind: "suitability-override",
+        recordedAt: run.updatedAt,
+        actor: suitability.overrideActor,
+        note: suitability.overrideReason,
+        summary: suitability.overrideReason?.trim() || suitability.summary,
+      },
+    ]);
+  }
   await deps.store.save(run);
 
   if (suitability.decision === "escalate") {

@@ -711,6 +711,15 @@ describe("runIssueWorkflow", () => {
         overrideApplied: true,
         overrideActor: "chat:operator",
       });
+      expect(run.handoffs?.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "suitability-override",
+            actor: "chat:operator",
+            summary: "Operator approved this narrow exception.",
+          }),
+        ]),
+      );
       expect(run.history).toContain(
         "Auto-merge skipped: Not eligible for auto-merge: manual suitability overrides still require a human merge decision.",
       );
@@ -1261,6 +1270,17 @@ describe("runIssueWorkflow", () => {
         reviewSummary,
         reviewUrl,
       });
+      expect(run.handoffs?.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "rerun-request",
+            recordedAt: "2026-03-11T03:00:00.000Z",
+            summary: rerunReason,
+            priorRunId: "run-64",
+            priorStage: "changes-requested",
+          }),
+        ]),
+      );
       expect(run.history).toContain(`Rerun requested: ${rerunReason}`);
       expect(run.history).toContain(
         "Rerun context: prior run run-64 from stage changes-requested.",
@@ -1285,6 +1305,14 @@ describe("runIssueWorkflow", () => {
         reviewSummary,
         reviewUrl,
       });
+      expect(savedRun.handoffs?.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "rerun-request",
+            summary: rerunReason,
+          }),
+        ]),
+      );
       expect(savedRun.history).toContain(`Rerun requested: ${rerunReason}`);
       expect(savedRun.history).toContain(
         "Latest review summary: Please add a regression test for the rerun path.",

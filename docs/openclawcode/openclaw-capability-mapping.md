@@ -563,7 +563,7 @@ Tasks:
 - `[ ]` allow provider switching after a failed or paused stage
 - `[x]` allow structured resume after manual edits
 - `[x]` allow explicit override of suitability and merge-policy decisions
-- `[ ]` persist all handoff and override decisions in workflow run artifacts
+- `[x]` persist all handoff and override decisions in workflow run artifacts
 
 Acceptance:
 
@@ -571,6 +571,13 @@ Acceptance:
 - current foothold:
   - a failed or review-blocked run can now be re-queued with an explicit
     coder/verifier override and keep that override in the rerun artifact
+  - workflow runs and operator snapshots now also persist a unified handoff
+    ledger for:
+    - stage-gate decisions
+    - suitability overrides
+    - rerun requests
+    - runtime reroutes
+    - manual takeover / manual resume context
 
 ### Phase M8: Chatops Integration
 

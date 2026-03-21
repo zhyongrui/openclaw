@@ -203,6 +203,35 @@ export interface WorkflowRuntimeRoutingSnapshot {
   selections: WorkflowRuntimeRoleSelection[];
 }
 
+export type WorkflowHandoffKind =
+  | "stage-gate-decision"
+  | "rerun-request"
+  | "runtime-reroute"
+  | "manual-takeover"
+  | "manual-resume"
+  | "suitability-override";
+
+export interface WorkflowHandoffEntry {
+  kind: WorkflowHandoffKind;
+  recordedAt: string;
+  summary: string;
+  actor?: string;
+  gateId?: string;
+  decision?: string;
+  note?: string;
+  priorRunId?: string;
+  priorStage?: WorkflowStage;
+  reviewDecision?: "approved" | "changes-requested";
+  reviewSubmittedAt?: string;
+  requestedCoderAgentId?: string;
+  requestedVerifierAgentId?: string;
+  worktreePath?: string;
+}
+
+export interface WorkflowHandoffSnapshot {
+  entries: WorkflowHandoffEntry[];
+}
+
 export interface WorkflowStageGateDecisionSnapshot {
   decision: string;
   note: string | null;
@@ -247,6 +276,7 @@ export interface WorkflowRun {
   roleRouting?: WorkflowRoleRoutingSnapshot;
   runtimeRouting?: WorkflowRuntimeRoutingSnapshot;
   stageGates?: WorkflowStageGateSnapshot;
+  handoffs?: WorkflowHandoffSnapshot;
   rerunContext?: WorkflowRerunContext;
   history: string[];
 }
