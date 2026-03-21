@@ -6330,6 +6330,98 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("shows repo-local runtime steering through /occode-runtime-steering", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      await fs.mkdir(path.join(fixture.repoRoot, ".openclawcode"), { recursive: true });
+      await fs.writeFile(
+        path.join(fixture.repoRoot, ".openclawcode", "runtime-steering.json"),
+        JSON.stringify(
+          {
+            repoRoot: fixture.repoRoot,
+            artifactPath: path.join(fixture.repoRoot, ".openclawcode", "runtime-steering.json"),
+            exists: true,
+            schemaVersion: 1,
+            generatedAt: "2026-03-21T17:10:00.000Z",
+            overrideCount: 1,
+            overrides: [
+              {
+                stageId: "building",
+                roleId: "coder",
+                adapterId: "codex",
+                agentId: "codex-alt",
+                actor: "user:operator",
+                note: "prefer alternate build runtime",
+                updatedAt: "2026-03-21T17:10:00.000Z",
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const result = await fixture.commands.get("occode-runtime-steering")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody: "/occode-runtime-steering",
+        args: "",
+        config: {},
+      });
+
+      expect(result?.text).toContain("openclawcode runtime steering for zhyongrui/openclawcode");
+      expect(result?.text).toContain("Overrides: 1");
+      expect(result?.text).toContain(
+        "- building: role=coder | agent=codex-alt | adapter=codex | updated=2026-03-21T17:10:00.000Z",
+      );
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("updates repo-local runtime steering through /occode-runtime-steering-set", async () => {
+    const fixture = await registerPluginFixture();
+    try {
+      const result = await fixture.commands.get("occode-runtime-steering-set")?.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        commandBody:
+          "/occode-runtime-steering-set building codex-alt adapter=claude-code hold verifier on alternate path",
+        args: "building codex-alt adapter=claude-code hold verifier on alternate path",
+        to: "user:operator",
+        config: {},
+      });
+
+      expect(result?.text).toContain("Updated runtime steering for zhyongrui/openclawcode.");
+      expect(result?.text).toContain("Stage: building");
+      expect(result?.text).toContain("Agent: codex-alt");
+      expect(result?.text).toContain("Adapter: claude-code");
+      expect(result?.text).toContain("Note: hold verifier on alternate path");
+
+      const persisted = JSON.parse(
+        await fs.readFile(
+          path.join(fixture.repoRoot, ".openclawcode", "runtime-steering.json"),
+          "utf8",
+        ),
+      );
+      expect(persisted.overrides).toEqual([
+        expect.objectContaining({
+          stageId: "building",
+          roleId: "coder",
+          adapterId: "claude-code",
+          agentId: "codex-alt",
+          actor: "user:operator",
+          note: "hold verifier on alternate path",
+        }),
+      ]);
+    } finally {
+      await fs.rm(fixture.repoRoot, { recursive: true, force: true });
+      await fs.rm(fixture.stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("records a manual takeover and exposes it through /occode-status", async () => {
     const fixture = await registerPluginFixture();
     try {

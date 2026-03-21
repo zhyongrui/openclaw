@@ -607,7 +607,7 @@ Status:
 - `[x]` issue-driven chatops exists
 - `[x]` first blueprint-first status slice has landed
 - `[x]` first chat-side handoff action has landed
-- `[ ]` blueprint-first chatops complete
+- `[x]` blueprint-first chatops complete
 
 Tasks:
 
@@ -622,6 +622,8 @@ Tasks:
 - `[x]` expose first handoff and automatic execution-start resume actions in chat
 - `[x]` expose first provider-role reroute controls in chat and CLI
 - `[x]` carry coder/verifier runtime routing selections into workflow artifacts
+- `[x]` expose repo-local runtime steering in chat
+- `[x]` let chat operators set or clear per-stage runtime steering without leaving chat
 
 Acceptance:
 

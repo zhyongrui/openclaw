@@ -91,6 +91,11 @@ import {
   writeProjectRoleRoutingPlan,
 } from "../../src/openclawcode/role-routing.js";
 import {
+  projectRuntimeSteeringStageIds,
+  readProjectRuntimeSteeringArtifact,
+  recordProjectRuntimeSteeringOverride,
+} from "../../src/openclawcode/runtime-steering.js";
+import {
   readProjectStageGateArtifact,
   recordProjectStageGateDecision,
   writeProjectStageGateArtifact,
@@ -3387,6 +3392,26 @@ function buildRoleRoutingSummaryMessage(params: {
     .join("\n");
 }
 
+function buildRuntimeSteeringSummaryMessage(params: {
+  repo: { owner: string; repo: string };
+  artifact: Awaited<ReturnType<typeof readProjectRuntimeSteeringArtifact>>;
+}): string {
+  const overrideLines =
+    params.artifact.overrides.length > 0
+      ? params.artifact.overrides.map(
+          (override) =>
+            `- ${override.stageId}: role=${override.roleId} | agent=${override.agentId ?? "runner-default"} | adapter=${override.adapterId ?? "unchanged"} | updated=${override.updatedAt}`,
+        )
+      : [
+          `- none; set one with /occode-runtime-steering-set ${formatRepoKey(params.repo)} building <agent-id>`,
+        ];
+  return [
+    `openclawcode runtime steering for ${formatRepoKey(params.repo)}`,
+    `Overrides: ${params.artifact.overrideCount}`,
+    ...overrideLines,
+  ].join("\n");
+}
+
 function parseRoleRoutingSetArgs(params: {
   args: string;
   defaults: { owner?: string; repo?: string };
@@ -3423,6 +3448,60 @@ function parseRoleRoutingSetArgs(params: {
       loweredProvider === "clear" || loweredProvider === "none" || loweredProvider === "null"
         ? null
         : providerToken,
+  };
+}
+
+function parseRuntimeSteeringSetArgs(params: {
+  args: string;
+  defaults: { owner?: string; repo?: string };
+}):
+  | {
+      repo: { owner: string; repo: string };
+      stageId: "building" | "verifying";
+      agentId?: string;
+      adapterId?: string;
+      note?: string;
+      clear: boolean;
+    }
+  | undefined {
+  const tokens = params.args
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (tokens.length < 2) {
+    return undefined;
+  }
+  const firstRepo = parseChatopsRepoReference(tokens[0] ?? "", params.defaults);
+  const offset = firstRepo ? 1 : 0;
+  const repo = firstRepo ?? parseChatopsRepoReference("", params.defaults);
+  const stageId = tokens[offset]?.trim().toLowerCase();
+  const target = tokens[offset + 1]?.trim();
+  if (!repo || !stageId || !target) {
+    return undefined;
+  }
+  if (stageId !== "building" && stageId !== "verifying") {
+    throw new Error(`Stage must be one of: ${projectRuntimeSteeringStageIds().join(", ")}`);
+  }
+
+  const remaining = tokens.slice(offset + 2);
+  const adapterTokenIndex = remaining.findIndex((token) => token.toLowerCase().startsWith("adapter="));
+  const adapterId =
+    adapterTokenIndex >= 0 ? remaining[adapterTokenIndex]?.slice("adapter=".length) : undefined;
+  const noteTokens =
+    adapterTokenIndex >= 0
+      ? remaining.filter((_, index) => index !== adapterTokenIndex)
+      : remaining;
+  const loweredTarget = target.toLowerCase();
+  return {
+    repo,
+    stageId,
+    agentId:
+      loweredTarget === "clear" || loweredTarget === "none" || loweredTarget === "null"
+        ? undefined
+        : target,
+    adapterId: adapterId?.trim() || undefined,
+    note: noteTokens.join(" ").trim() || undefined,
+    clear: loweredTarget === "clear" || loweredTarget === "none" || loweredTarget === "null",
   };
 }
 
@@ -8099,6 +8178,119 @@ export default {
             text: (error as Error).message,
           };
         }
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-runtime-steering",
+      description: "Show the current per-stage runtime steering overrides for an openclawcode repo.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        const repo = parseChatopsRepoReference(ctx.args ?? "", {
+          owner: defaultRepo?.owner,
+          repo: defaultRepo?.repo,
+        });
+        if (!repo) {
+          return {
+            text:
+              "Usage: /occode-runtime-steering owner/repo\n" +
+              "Or, when exactly one repo is configured: /occode-runtime-steering",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${repo.owner}/${repo.repo}.`,
+          };
+        }
+
+        const artifact = await readProjectRuntimeSteeringArtifact(repoConfig.repoRoot);
+        return {
+          text: buildRuntimeSteeringSummaryMessage({
+            repo: {
+              owner: repoConfig.owner,
+              repo: repoConfig.repo,
+            },
+            artifact,
+          }),
+        };
+      },
+    });
+
+    api.registerCommand({
+      name: "occode-runtime-steering-set",
+      description: "Update one per-stage runtime steering override for an openclawcode repo.",
+      acceptsArgs: true,
+      handler: async (ctx) => {
+        const pluginConfig = resolveOpenClawCodePluginConfig(api.pluginConfig);
+        const defaultRepo = resolveDefaultRepoConfig(pluginConfig.repos);
+        let parsed:
+          | ReturnType<typeof parseRuntimeSteeringSetArgs>
+          | undefined;
+        try {
+          parsed = parseRuntimeSteeringSetArgs({
+            args: ctx.args ?? "",
+            defaults: {
+              owner: defaultRepo?.owner,
+              repo: defaultRepo?.repo,
+            },
+          });
+        } catch (error) {
+          return {
+            text: (error as Error).message,
+          };
+        }
+        if (!parsed) {
+          return {
+            text:
+              "Usage: /occode-runtime-steering-set owner/repo <building|verifying> <agent-id|clear> [adapter=<id>] [note]\n" +
+              "Or, when exactly one repo is configured: /occode-runtime-steering-set <building|verifying> <agent-id|clear> [adapter=<id>] [note]",
+          };
+        }
+
+        const repoConfig = resolveRepoConfig(pluginConfig.repos, parsed.repo);
+        if (!repoConfig) {
+          return {
+            text: `No openclawcode repo config found for ${parsed.repo.owner}/${parsed.repo.repo}.`,
+          };
+        }
+
+        const artifact = await recordProjectRuntimeSteeringOverride({
+          repoRoot: repoConfig.repoRoot,
+          stageId: parsed.stageId,
+          agentId: parsed.agentId,
+          adapterId: parsed.adapterId,
+          actor: resolveCommandNotifyTarget({
+            to: ctx.to,
+            from: ctx.from,
+            senderId: ctx.senderId,
+          }),
+          note: parsed.note,
+          clear: parsed.clear,
+        });
+
+        return {
+          text: [
+            `${parsed.clear ? "Cleared" : "Updated"} runtime steering for ${formatRepoKey(parsed.repo)}.`,
+            `Stage: ${parsed.stageId}`,
+            ...(!parsed.clear
+              ? [
+                  `Agent: ${parsed.agentId ?? "runner-default"}`,
+                  parsed.adapterId ? `Adapter: ${parsed.adapterId}` : undefined,
+                ]
+              : []),
+            parsed.note ? `Note: ${parsed.note}` : undefined,
+            buildRuntimeSteeringSummaryMessage({
+              repo: parsed.repo,
+              artifact,
+            }),
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        };
       },
     });
 
