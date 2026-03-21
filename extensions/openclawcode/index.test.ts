@@ -4010,6 +4010,128 @@ describe("openclawcode extension", () => {
     }
   });
 
+  it("proactively starts GitHub auth on service start for configured chat targets", async () => {
+    const fixture = await registerPluginFixture();
+    mocked.startOnboardingGitHubCliDeviceLogin.mockResolvedValue({
+      pid: 654,
+      logPath: "/tmp/proactive-gh-auth.log",
+      userCode: "WXYZ-1234",
+      verificationUri: "https://github.com/login/device",
+      startedAt: "2026-03-21T09:00:00.000Z",
+    });
+
+    try {
+      await fixture.service?.start({
+        config: {},
+        stateDir: fixture.stateDir,
+        logger: { info() {}, warn() {}, error() {} },
+      });
+
+      expect(mocked.startOnboardingGitHubCliDeviceLogin).toHaveBeenCalledWith({
+        stateDir: fixture.stateDir,
+      });
+      expect(mocked.runOnboardingOpenClawCodeBootstrap).not.toHaveBeenCalled();
+      expect(mocked.runMessageAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "send",
+          params: expect.objectContaining({
+            channel: "telegram",
+            to: "chat:primary",
+            message: expect.stringContaining(
+              "OpenClaw Code setup is waiting for GitHub approval.",
+            ),
+          }),
+        }),
+      );
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "telegram",
+          notifyTarget: "chat:primary",
+        }),
+      ).toMatchObject({
+        projectMode: "existing-repo",
+        repoKey: "zhyongrui/openclawcode",
+        stage: "awaiting-github-device-auth",
+        githubDeviceAuth: {
+          pid: 654,
+          userCode: "WXYZ-1234",
+          verificationUri: "https://github.com/login/device",
+        },
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("does not proactively restart GitHub auth when the target chat already has a setup session", async () => {
+    const fixture = await registerPluginFixture();
+    await fixture.store.upsertSetupSession({
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+      projectMode: "new-project",
+      stage: "drafting-blueprint",
+      blueprintDraft: {
+        status: "draft",
+        sections: {
+          Goal: "Bootstrap setup from the default chat target.",
+        },
+      },
+      createdAt: "2026-03-21T09:05:00.000Z",
+      updatedAt: "2026-03-21T09:05:00.000Z",
+    });
+
+    try {
+      await fixture.service?.start({
+        config: {},
+        stateDir: fixture.stateDir,
+        logger: { info() {}, warn() {}, error() {} },
+      });
+
+      expect(mocked.startOnboardingGitHubCliDeviceLogin).not.toHaveBeenCalled();
+      expect(mocked.runMessageAction).not.toHaveBeenCalled();
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "telegram",
+          notifyTarget: "chat:primary",
+        }),
+      ).toMatchObject({
+        stage: "drafting-blueprint",
+        blueprintDraft: {
+          status: "draft",
+        },
+      });
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
+  it("does not proactively start GitHub auth when host auth is already ready", async () => {
+    const fixture = await registerPluginFixture();
+    mocked.resolveOnboardingGitHubToken.mockReturnValue({
+      token: "gho_test",
+      source: "gh-auth-token",
+    });
+
+    try {
+      await fixture.service?.start({
+        config: {},
+        stateDir: fixture.stateDir,
+        logger: { info() {}, warn() {}, error() {} },
+      });
+
+      expect(mocked.startOnboardingGitHubCliDeviceLogin).not.toHaveBeenCalled();
+      expect(mocked.runMessageAction).not.toHaveBeenCalled();
+      expect(
+        await fixture.store.getSetupSession({
+          notifyChannel: "telegram",
+          notifyTarget: "chat:primary",
+        }),
+      ).toBeUndefined();
+    } finally {
+      await cleanupPluginFixture(fixture);
+    }
+  });
+
   it("pushes the next setup message automatically after GitHub auth completes", async () => {
     const fixture = await registerPluginFixture({ pollIntervalMs: 10 });
     mocked.resolveOnboardingGitHubToken.mockReturnValue(null);

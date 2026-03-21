@@ -205,6 +205,39 @@ Status:
   `.openclawcode/autonomous-loop.json`,
   and `/occode-autopilot`
 
+### Milestone 7: Proactive Chat Setup Kickoff
+
+Problem:
+
+- installing `openclawcode` already signals intent to use it, but the operator
+  still had to know to send `/occode-setup` before GitHub auth could even
+  begin
+
+Outcome:
+
+- the plugin starts the GitHub device flow proactively when it already knows a
+  concrete notification target
+
+Tasks:
+
+- inspect configured repo notification targets on plugin service start
+- skip targets that already have a saved setup session
+- skip proactive kickoff when host GitHub auth is already ready
+- launch one host-side `gh auth login --web` flow and push the verification URL
+  plus device code into the configured chat target
+- when exactly one repo maps to that target, pre-pin the repo so setup can
+  continue through repo validation and bootstrap after auth completes
+
+Exit signal:
+
+- a newly installed operator sees the GitHub login URL and code in chat
+  without needing to guess that `/occode-setup` must be sent first
+
+Status:
+
+- landed on 2026-03-21 in the plugin service startup path and the chat setup
+  onboarding flow
+
 ## Validation Strategy
 
 Each milestone should include:

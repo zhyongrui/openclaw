@@ -8,13 +8,19 @@ surface such as Feishu.
 
 The first user-visible milestone is:
 
-1. the operator sends `/occode-setup`
+1. OpenClaw identifies a concrete setup chat target
 2. OpenClaw checks whether GitHub auth is already ready on the host
 3. if auth is missing, OpenClaw starts the host-side GitHub device flow
 4. OpenClaw sends the verification URL and one-time code back into chat
 5. the operator completes approval in the browser
 6. OpenClaw resumes setup from chat without asking the operator to paste a
    token into chat
+
+That target can come from either:
+
+- the operator sending `/occode-setup`
+- the plugin service starting with a configured repo notification target and no
+  saved setup session yet
 
 ## Why This Matters
 
@@ -32,6 +38,7 @@ configuration should start there too.
 ### What chat should own
 
 - starting the setup session
+- proactively starting the auth step when the target chat is already known
 - showing the exact next human action
 - remembering which chat is doing setup
 - remembering whether GitHub auth is still pending or already ready
@@ -97,6 +104,9 @@ Behavior:
 
 - treat plain `owner/repo` as the `existing` path for backward compatibility
 - when no project selection is given, only handle the auth step
+- when the plugin already knows one configured repo target for the chat, the
+  same session can now start proactively on service start before the operator
+  sends this command
 
 ### `/occode-setup-status`
 
@@ -268,7 +278,8 @@ Future states can extend this into:
 The setup flow now covers the first end-to-end operator path:
 
 1. start from chat with `/occode-setup`, `/occode-setup existing owner/repo`,
-   or `/occode-setup new-project`
+   `/occode-setup new-project`, or an automatic setup kickoff on service start
+   when the plugin already has one concrete chat target
 2. if needed, complete GitHub device auth without pasting tokens into chat
 3. receive an automatic chat push after browser-side GitHub auth succeeds or
    fails, without relying on `/occode-setup-status` as the only continuation
@@ -334,7 +345,22 @@ control-plane steps.
   recovery controls, but they are no longer the only way the operator can see
   progress
 
-### 5. handoff into autonomous progress
+### 5. proactive GitHub auth kickoff
+
+- this hardening is now landed
+- when the plugin service starts without GitHub auth, it now inspects the
+  configured repo notification targets
+- if a target chat does not already have a saved setup session, the service
+  starts one host-side `gh auth login --web` flow proactively and pushes the
+  verification URL plus device code to that chat
+- when exactly one repo is mapped to that chat target, the saved setup session
+  also pins that repo up front so setup can continue into repo validation and
+  bootstrap automatically after auth completes
+- when multiple repos share the same target, the auth step still starts
+  proactively, but repo selection stays explicit after auth so the system does
+  not guess the wrong repository
+
+### 6. handoff into autonomous progress
 
 - `openclaw code next-work-show` now persists `.openclawcode/next-work.json`
   and explains:

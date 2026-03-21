@@ -1083,6 +1083,174 @@ function resolveSetupSessionNotificationState(params: {
   return null;
 }
 
+type ProactiveChatSetupTarget = {
+  notifyChannel: string;
+  notifyTarget: string;
+  projectMode?: OnboardingProjectMode;
+  repoKey?: string;
+};
+
+function collectProactiveChatSetupTargets(
+  repoConfigs: OpenClawCodeChatopsRepoConfig[],
+): ProactiveChatSetupTarget[] {
+  const grouped = new Map<
+    string,
+    {
+      notifyChannel: string;
+      notifyTarget: string;
+      repoKeys: string[];
+    }
+  >();
+  for (const repoConfig of repoConfigs) {
+    const key = `${repoConfig.notifyChannel}\u0000${repoConfig.notifyTarget}`;
+    const current = grouped.get(key);
+    const repoKey = formatRepoKey(repoConfig);
+    if (current) {
+      current.repoKeys.push(repoKey);
+      continue;
+    }
+    grouped.set(key, {
+      notifyChannel: repoConfig.notifyChannel,
+      notifyTarget: repoConfig.notifyTarget,
+      repoKeys: [repoKey],
+    });
+  }
+  return [...grouped.values()].map((entry) => ({
+    notifyChannel: entry.notifyChannel,
+    notifyTarget: entry.notifyTarget,
+    projectMode: entry.repoKeys.length === 1 ? "existing-repo" : undefined,
+    repoKey: entry.repoKeys.length === 1 ? entry.repoKeys[0] : undefined,
+  }));
+}
+
+function cloneGitHubDeviceAuthSession(
+  githubDeviceAuth: NonNullable<ChatSetupSession["githubDeviceAuth"]>,
+): NonNullable<ChatSetupSession["githubDeviceAuth"]> {
+  return {
+    pid: githubDeviceAuth.pid,
+    logPath: githubDeviceAuth.logPath,
+    userCode: githubDeviceAuth.userCode,
+    verificationUri: githubDeviceAuth.verificationUri,
+    startedAt: githubDeviceAuth.startedAt,
+  };
+}
+
+async function proactivelyStartChatSetupSessions(
+  api: OpenClawPluginApi,
+  store: OpenClawCodeChatopsStore,
+  repoConfigs: OpenClawCodeChatopsRepoConfig[],
+): Promise<void> {
+  if (repoConfigs.length === 0 || resolveOnboardingGitHubToken()) {
+    return;
+  }
+
+  const existingSessions = await store.listSetupSessions();
+  const targets = collectProactiveChatSetupTargets(repoConfigs).filter(
+    (target) =>
+      !existingSessions.some(
+        (session) =>
+          session.notifyChannel === target.notifyChannel &&
+          session.notifyTarget === target.notifyTarget,
+      ),
+  );
+  if (targets.length === 0) {
+    return;
+  }
+
+  const reusableChallenge = existingSessions.find(
+    (session) =>
+      session.stage === "awaiting-github-device-auth" &&
+      session.githubDeviceAuth &&
+      !session.githubDeviceAuth.notificationState,
+  )?.githubDeviceAuth;
+
+  let githubDeviceAuth = reusableChallenge
+    ? cloneGitHubDeviceAuthSession(reusableChallenge)
+    : undefined;
+
+  if (!githubDeviceAuth) {
+    try {
+      const started = await startOnboardingGitHubCliDeviceLogin({
+        stateDir: api.runtime.state.resolveStateDir(),
+      });
+      githubDeviceAuth = {
+        pid: started.pid,
+        logPath: started.logPath,
+        userCode: started.userCode,
+        verificationUri: started.verificationUri,
+        startedAt: started.startedAt,
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      for (const target of targets) {
+        const now = new Date().toISOString();
+        await store.upsertSetupSession({
+          notifyChannel: target.notifyChannel,
+          notifyTarget: target.notifyTarget,
+          projectMode: target.projectMode,
+          repoKey: target.repoKey,
+          stage: "awaiting-github-device-auth",
+          lastFailure: {
+            step: "github-auth",
+            reason,
+            occurredAt: now,
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+        try {
+          await sendText({
+            api,
+            channel: target.notifyChannel,
+            target: target.notifyTarget,
+            text: buildChatSetupFailedMessage({
+              reason,
+              repoKey: target.repoKey,
+              step: "github-auth",
+            }),
+          });
+        } catch (sendError) {
+          api.logger.warn(
+            `openclawcode proactive setup notification failed for ${target.notifyChannel}:${target.notifyTarget}: ${String(sendError)}`,
+          );
+        }
+      }
+      return;
+    }
+  }
+
+  for (const target of targets) {
+    const now = new Date().toISOString();
+    await store.upsertSetupSession({
+      notifyChannel: target.notifyChannel,
+      notifyTarget: target.notifyTarget,
+      projectMode: target.projectMode,
+      repoKey: target.repoKey,
+      stage: "awaiting-github-device-auth",
+      githubDeviceAuth: cloneGitHubDeviceAuthSession(githubDeviceAuth),
+      createdAt: now,
+      updatedAt: now,
+    });
+    try {
+      await sendText({
+        api,
+        channel: target.notifyChannel,
+        target: target.notifyTarget,
+        text: buildChatSetupAwaitingGitHubAuthMessage({
+          verificationUri:
+            githubDeviceAuth.verificationUri ?? "https://github.com/login/device",
+          userCode: githubDeviceAuth.userCode ?? "unknown",
+          selectionLabel: target.repoKey,
+        }),
+      });
+    } catch (error) {
+      api.logger.warn(
+        `openclawcode proactive setup notification failed for ${target.notifyChannel}:${target.notifyTarget}: ${String(error)}`,
+      );
+    }
+  }
+}
+
 async function processPendingSetupSessions(
   api: OpenClawPluginApi,
   store: OpenClawCodeChatopsStore,
@@ -8375,6 +8543,7 @@ export default {
         }, intervalMs);
         pollTimer.unref?.();
         await processPendingSetupSessions(api, store);
+        await proactivelyStartChatSetupSessions(api, store, pluginConfig.repos);
         kickQueueDrain(api, store);
       },
       stop: async () => {
