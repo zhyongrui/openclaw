@@ -217,6 +217,7 @@ export interface WorkflowRuntimeRoutingSnapshot {
 
 export type WorkflowHandoffKind =
   | "stage-gate-decision"
+  | "plan-edit"
   | "rerun-request"
   | "runtime-reroute"
   | "manual-takeover"
@@ -283,6 +284,14 @@ export interface WorkflowPlanReviewSnapshot {
   approvalNote: string | null;
 }
 
+export interface WorkflowPlanEditRecord {
+  appliedAt: string;
+  source: string | null;
+  actor: string | null;
+  note: string | null;
+  editedFields: string[];
+}
+
 export interface WorkflowRun {
   id: string;
   stage: WorkflowStage;
@@ -303,6 +312,7 @@ export interface WorkflowRun {
   runtimeRouting?: WorkflowRuntimeRoutingSnapshot;
   stageGates?: WorkflowStageGateSnapshot;
   planReview?: WorkflowPlanReviewSnapshot;
+  planEdits?: WorkflowPlanEditRecord[];
   handoffs?: WorkflowHandoffSnapshot;
   rerunContext?: WorkflowRerunContext;
   history: string[];

@@ -7,6 +7,7 @@ import type {
   WorkflowFailureDiagnostics,
   WorkflowHandoffEntry,
   WorkflowHandoffSnapshot,
+  WorkflowPlanEditRecord,
   WorkflowPlanReviewSnapshot,
   WorkflowRoleRoutingSnapshot,
   WorkflowRuntimeRoleSelection,
@@ -58,6 +59,10 @@ export interface IssueWorkflowRequest extends RepoRef {
   planApprovalActor?: string;
   planApprovalNote?: string;
   planApprovalSource?: string;
+  planEdit?: Partial<ExecutionSpec>;
+  planEditActor?: string;
+  planEditNote?: string;
+  planEditSource?: string;
   rerunContext?: WorkflowRerunContext;
 }
 
@@ -269,6 +274,85 @@ function createPlanReviewSnapshot(params: {
     approvalSource: params.approvalSource ?? null,
     approvalNote: params.approvalNote ?? null,
   };
+}
+
+const PLAN_EDITABLE_FIELDS = [
+  "summary",
+  "scope",
+  "outOfScope",
+  "acceptanceCriteria",
+  "testPlan",
+  "risks",
+  "assumptions",
+  "openQuestions",
+  "riskLevel",
+] as const satisfies ReadonlyArray<keyof ExecutionSpec>;
+
+function resolvePlanEditedFields(planEdit: Partial<ExecutionSpec> | undefined): string[] {
+  if (!planEdit) {
+    return [];
+  }
+  return PLAN_EDITABLE_FIELDS.filter((field) => planEdit[field] !== undefined);
+}
+
+function applyPlanEdit(
+  run: WorkflowRun,
+  params: {
+    planEdit: Partial<ExecutionSpec>;
+    actor?: string;
+    note?: string;
+    source?: string;
+  },
+  now: TimestampFactory,
+): WorkflowRun {
+  if (!run.executionSpec) {
+    return run;
+  }
+
+  const editedFields = resolvePlanEditedFields(params.planEdit);
+  if (editedFields.length === 0) {
+    return run;
+  }
+
+  const appliedAt = now();
+  const record: WorkflowPlanEditRecord = {
+    appliedAt,
+    source: trimText(params.source) ?? null,
+    actor: trimText(params.actor) ?? null,
+    note: trimText(params.note) ?? null,
+    editedFields,
+  };
+  const updatedSpec: ExecutionSpec = {
+    ...run.executionSpec,
+    ...params.planEdit,
+  };
+
+  return appendWorkflowHandoffEntries(
+    {
+      ...run,
+      executionSpec: updatedSpec,
+      updatedAt: appliedAt,
+      planEdits: [...(run.planEdits ?? []), record],
+      history: [
+        ...run.history,
+        `Plan edited before code execution: ${editedFields.join(", ")}.`,
+      ],
+    },
+    [
+      {
+        kind: "plan-edit",
+        recordedAt: appliedAt,
+        actor: record.actor ?? undefined,
+        note: record.note ?? undefined,
+        summary: [
+          `Edited fields: ${editedFields.join(", ")}`,
+          record.source ?? undefined,
+        ]
+          .filter(Boolean)
+          .join(" | "),
+      },
+    ],
+  );
 }
 
 function mapWorkflowBlueprintContext(
@@ -699,6 +783,20 @@ export async function runIssueWorkflow(
     throw error;
   }
   await deps.store.save(run);
+
+  if (request.planEdit) {
+    run = applyPlanEdit(
+      run,
+      {
+        planEdit: request.planEdit,
+        actor: request.planEditActor,
+        note: request.planEditNote,
+        source: request.planEditSource,
+      },
+      now,
+    );
+    await deps.store.save(run);
+  }
 
   const requirePlanApproval = request.requirePlanApproval || request.approvePlanDigest != null;
   if (requirePlanApproval && run.executionSpec) {

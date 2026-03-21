@@ -178,6 +178,14 @@ those nested objects.
 - `planApprovedBy`
 - `planApprovalSource`
 - `planApprovalNote`
+- `planEditCount`
+- `planEdited`
+- `planLastEditedAt`
+- `planLastEditedBy`
+- `planLastEditSource`
+- `planLastEditNote`
+- `planLastEditedFields`
+- `planLastEditedFieldCount`
 
 ### Suitability Signals
 

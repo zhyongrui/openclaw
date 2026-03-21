@@ -144,6 +144,7 @@ class FakeWorkspaceManager implements WorkflowWorkspaceManager {
 
 class FakeBuilder implements Builder {
   buildCalls = 0;
+  lastRun?: WorkflowRun;
 
   constructor(
     private readonly scope: "command-layer" | "workflow-core" | "mixed" = "command-layer",
@@ -153,6 +154,7 @@ class FakeBuilder implements Builder {
 
   async build(run: WorkflowRun): Promise<BuildResult> {
     this.buildCalls += 1;
+    this.lastRun = run;
     return {
       branchName: run.workspace?.branchName ?? "openclawcode/issue-1",
       summary: "Builder updated the CLI implementation.",
@@ -565,6 +567,176 @@ describe("runIssueWorkflow", () => {
       ) as typeof run;
       expect(savedRun.stage).toBe("awaiting-plan-approval");
       expect(savedRun.planReview?.status).toBe("awaiting-approval");
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("applies a plan edit patch before code execution", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-176",
+        worktreePath: "/repo/.openclawcode/worktrees/run-176",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const workspaceManager = new FakeWorkspaceManager(workspace, [
+        "src/commands/openclawcode.ts",
+      ]);
+      const builder = new FakeBuilder();
+
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 176,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          planEdit: {
+            summary: "Implement the issue with an operator-edited execution plan.",
+            scope: ["Only touch the CLI run command."],
+            testPlan: ["Run the targeted run-command Vitest cases."],
+            riskLevel: "low",
+          },
+          planEditActor: "chat:operator",
+          planEditNote: "Narrow this down to the CLI surface first.",
+          planEditSource: "/repo/.openclawcode/plan-edit.json",
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder,
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: workspaceManager,
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.stage).toBe("ready-for-human-review");
+      expect(run.executionSpec).toMatchObject({
+        summary: "Implement the issue with an operator-edited execution plan.",
+        scope: ["Only touch the CLI run command."],
+        testPlan: ["Run the targeted run-command Vitest cases."],
+        riskLevel: "low",
+      });
+      expect(run.planEdits).toEqual([
+        expect.objectContaining({
+          actor: "chat:operator",
+          note: "Narrow this down to the CLI surface first.",
+          source: "/repo/.openclawcode/plan-edit.json",
+          editedFields: ["summary", "scope", "testPlan", "riskLevel"],
+        }),
+      ]);
+      expect(run.handoffs?.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "plan-edit",
+            actor: "chat:operator",
+          }),
+        ]),
+      );
+      expect(builder.lastRun?.executionSpec).toMatchObject({
+        summary: "Implement the issue with an operator-edited execution plan.",
+        riskLevel: "low",
+      });
+      expect(run.history).toContain(
+        "Plan edited before code execution: summary, scope, testPlan, riskLevel.",
+      );
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("recomputes the plan digest after a plan edit when approval is required", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-182",
+        worktreePath: "/repo/.openclawcode/worktrees/run-182",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const baseRun = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 182,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          requirePlanApproval: true,
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder(),
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow(),
+        },
+      );
+
+      const editedRun = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 182,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          requirePlanApproval: true,
+          planEdit: {
+            openQuestions: ["Confirm whether this should stay JSON-only in this slice."],
+          },
+          planEditActor: "chat:operator",
+          planEditSource: "/repo/.openclawcode/plan-edit.json",
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: new FakeBuilder(),
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow(Date.UTC(2026, 2, 9, 14, 30, 0)),
+        },
+      );
+
+      expect(baseRun.planReview?.planDigest).toMatch(/^sha256:/);
+      expect(editedRun.planReview?.planDigest).toMatch(/^sha256:/);
+      expect(editedRun.planReview?.planDigest).not.toBe(baseRun.planReview?.planDigest);
+      expect(editedRun.planEdits?.at(-1)).toMatchObject({
+        editedFields: ["openQuestions"],
+      });
     } finally {
       await fs.rm(stateDir, { recursive: true, force: true });
     }

@@ -550,6 +550,7 @@ Status:
 - `[x]` first repo-local stage-gate artifact landed
 - `[x]` first workflow-run stage-gate snapshot landed
 - `[x]` explicit plan approval before code execution landed
+- `[x]` explicit plan editing before code execution landed
 - `[ ]` runtime-aware handoff still open
 
 Tasks:
@@ -559,7 +560,7 @@ Tasks:
 - `[x]` persist current stage-gate snapshots into workflow run artifacts
 - `[x]` allow structured rerun-time coder/verifier overrides from chat and CLI
 - `[x]` allow plan approval before code execution
-- `[ ]` allow plan editing before code execution
+- `[x]` allow plan editing before code execution
 - `[x]` allow manual worktree takeover
 - `[ ]` allow provider switching after a failed or paused stage
 - `[x]` allow structured resume after manual edits
@@ -575,6 +576,9 @@ Acceptance:
   - `openclaw code run --require-plan-approval` can now stop after planning,
     emit a stable plan digest, and only continue when the matching digest is
     explicitly approved
+  - `openclaw code run --plan-edit-file <path>` can now apply a repo-local
+    execution-spec patch before code execution, persist edit audit metadata,
+    and regenerate the approval digest from the edited plan
   - workflow runs and operator snapshots now also persist a unified handoff
     ledger for:
     - stage-gate decisions

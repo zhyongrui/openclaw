@@ -166,6 +166,10 @@ ${formatHelpExamples([
     "Stop after planning and emit the current plan digest for explicit approval before code execution.",
   ],
   [
+    "openclaw code run --issue 123 --plan-edit-file .openclawcode/plan-edit.json --require-plan-approval --json",
+    "Apply a repo-local plan edit patch before code execution, then emit the new digest for approval.",
+  ],
+  [
     "openclaw code run --issue 123",
     "Plan and run the workflow for issue #123 in the current repo.",
   ],
@@ -895,6 +899,12 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .option("--open-pr", "Push the issue branch and open a draft PR", false)
     .option("--merge-on-approve", "Merge automatically after verifier approval", false)
     .option(
+      "--plan-edit-file <path>",
+      "JSON file containing top-level ExecutionSpec overrides to apply before code execution",
+    )
+    .option("--plan-edit-actor <actor>", "Actor recording the plan edit")
+    .option("--plan-edit-note <text>", "Optional note recorded with the plan edit")
+    .option(
       "--require-plan-approval",
       "Pause after planning until the current plan digest is explicitly approved",
       false,
@@ -943,6 +953,9 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             test: Array.isArray(opts.test) ? (opts.test as string[]) : [],
             openPr: Boolean(opts.openPr),
             mergeOnApprove: Boolean(opts.mergeOnApprove),
+            planEditFile: opts.planEditFile as string | undefined,
+            planEditActor: opts.planEditActor as string | undefined,
+            planEditNote: opts.planEditNote as string | undefined,
             requirePlanApproval: Boolean(opts.requirePlanApproval),
             approvePlanDigest: opts.approvePlanDigest as string | undefined,
             planApprovalActor: opts.planApprovalActor as string | undefined,

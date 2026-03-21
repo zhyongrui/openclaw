@@ -27,7 +27,7 @@ import {
   updateProjectBlueprintStatus,
   type ProjectBlueprintStatus,
 } from "../openclawcode/blueprint.js";
-import type { WorkflowRerunContext, WorkflowRun } from "../openclawcode/index.js";
+import type { ExecutionSpec, WorkflowRerunContext, WorkflowRun } from "../openclawcode/index.js";
 import {
   assessValidationIssueImplementation,
   classifyValidationIssue,
@@ -103,6 +103,9 @@ export interface OpenClawCodeRunOpts {
   approvePlanDigest?: string;
   planApprovalActor?: string;
   planApprovalNote?: string;
+  planEditFile?: string;
+  planEditActor?: string;
+  planEditNote?: string;
   rerunPriorRunId?: string;
   rerunPriorStage?: WorkflowRun["stage"];
   rerunReason?: string;
@@ -2963,6 +2966,103 @@ function resolveRunSummary(run: WorkflowRun): string {
   return `Run is at the ${run.stage} stage.`;
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isAcceptanceCriteriaPatch(
+  value: unknown,
+): value is ExecutionSpec["acceptanceCriteria"] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        entry != null &&
+        typeof entry === "object" &&
+        typeof entry.id === "string" &&
+        typeof entry.text === "string" &&
+        typeof entry.required === "boolean",
+    )
+  );
+}
+
+async function resolvePlanEditPatch(params: {
+  repoRoot: string;
+  planEditFile: string | undefined;
+}): Promise<{ patch: Partial<ExecutionSpec>; source: string } | undefined> {
+  if (!params.planEditFile) {
+    return undefined;
+  }
+
+  const resolvedPath = path.resolve(params.repoRoot, params.planEditFile);
+  const raw = JSON.parse(await readFile(resolvedPath, "utf8")) as Record<string, unknown>;
+  if (raw == null || Array.isArray(raw) || typeof raw !== "object") {
+    throw new Error("Plan edit file must contain a JSON object.");
+  }
+
+  const patch: Partial<ExecutionSpec> = {};
+  const allowedKeys = new Set([
+    "summary",
+    "scope",
+    "outOfScope",
+    "acceptanceCriteria",
+    "testPlan",
+    "risks",
+    "assumptions",
+    "openQuestions",
+    "riskLevel",
+  ] satisfies Array<keyof ExecutionSpec>);
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (!allowedKeys.has(key as keyof ExecutionSpec)) {
+      throw new Error(`Unsupported plan edit field: ${key}`);
+    }
+
+    switch (key) {
+      case "summary":
+        if (typeof value !== "string") {
+          throw new Error("Plan edit field 'summary' must be a string.");
+        }
+        patch.summary = value;
+        break;
+      case "scope":
+      case "outOfScope":
+      case "testPlan":
+      case "risks":
+      case "assumptions":
+      case "openQuestions":
+        if (!isStringArray(value)) {
+          throw new Error(`Plan edit field '${key}' must be an array of strings.`);
+        }
+        patch[key] = value;
+        break;
+      case "acceptanceCriteria":
+        if (!isAcceptanceCriteriaPatch(value)) {
+          throw new Error(
+            "Plan edit field 'acceptanceCriteria' must be an array of { id, text, required } objects.",
+          );
+        }
+        patch.acceptanceCriteria = value;
+        break;
+      case "riskLevel":
+        if (value !== "low" && value !== "medium" && value !== "high") {
+          throw new Error("Plan edit field 'riskLevel' must be one of: low, medium, high.");
+        }
+        patch.riskLevel = value;
+        break;
+    }
+  }
+
+  if (Object.keys(patch).length === 0) {
+    throw new Error("Plan edit file did not contain any supported plan fields.");
+  }
+
+  return {
+    patch,
+    source: resolvedPath,
+  };
+}
+
 function resolveVerificationApprovedForHumanReview(run: WorkflowRun): boolean | null {
   const decision = run.verificationReport?.decision;
   if (!decision) {
@@ -3028,6 +3128,7 @@ function toWorkflowRunJson(run: WorkflowRun) {
     run.updatedAt === true ||
     (Array.isArray(run.updatedAt) && run.updatedAt.length > 0) ||
     (typeof run.updatedAt === "string" && run.updatedAt.length > 0);
+  const latestPlanEdit = run.planEdits?.at(-1) ?? null;
   return {
     ...run,
     contractVersion: OPENCLAWCODE_RUN_JSON_CONTRACT_VERSION,
@@ -3165,6 +3266,14 @@ function toWorkflowRunJson(run: WorkflowRun) {
     planApprovedBy: run.planReview?.approvedBy ?? null,
     planApprovalSource: run.planReview?.approvalSource ?? null,
     planApprovalNote: run.planReview?.approvalNote ?? null,
+    planEditCount: run.planEdits?.length ?? 0,
+    planEdited: (run.planEdits?.length ?? 0) > 0,
+    planLastEditedAt: latestPlanEdit?.appliedAt ?? null,
+    planLastEditedBy: latestPlanEdit?.actor ?? null,
+    planLastEditSource: latestPlanEdit?.source ?? null,
+    planLastEditNote: latestPlanEdit?.note ?? null,
+    planLastEditedFields: latestPlanEdit?.editedFields ?? [],
+    planLastEditedFieldCount: latestPlanEdit?.editedFields.length ?? 0,
     suitabilityDecision: run.suitability?.decision ?? null,
     suitabilityDecisionIsAutoRun: run.suitability?.decision === "auto-run",
     suitabilityDecisionIsNeedsHumanReview: run.suitability?.decision === "needs-human-review",
@@ -3351,6 +3460,10 @@ export async function openclawCodeRunCommand(
     timeoutSeconds: verifierTimeoutSeconds,
   });
   const store = new FileSystemWorkflowRunStore(path.join(stateDir, "runs"));
+  const planEditPatch = await resolvePlanEditPatch({
+    repoRoot,
+    planEditFile: opts.planEditFile,
+  });
 
   const run = await runIssueWorkflow(
     {
@@ -3368,6 +3481,10 @@ export async function openclawCodeRunCommand(
       planApprovalActor: opts.planApprovalActor,
       planApprovalNote: opts.planApprovalNote,
       planApprovalSource: opts.approvePlanDigest ? "cli" : undefined,
+      planEdit: planEditPatch?.patch,
+      planEditActor: opts.planEditActor,
+      planEditNote: opts.planEditNote,
+      planEditSource: planEditPatch?.source,
       suitabilityOverride:
         opts.suitabilityOverrideActor || opts.suitabilityOverrideReason
           ? {
@@ -3397,6 +3514,10 @@ export async function openclawCodeRunCommand(
 
   runtime.log(`Run: ${run.id}`);
   runtime.log(`Stage: ${run.stage}`);
+  if (run.planEdits?.length) {
+    const latestEdit = run.planEdits.at(-1);
+    runtime.log(`Plan Edited: ${latestEdit?.editedFields.join(", ")}`);
+  }
   if (run.planReview?.planDigest) {
     runtime.log(`Plan Digest: ${run.planReview.planDigest}`);
   }

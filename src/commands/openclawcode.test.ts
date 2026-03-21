@@ -576,6 +576,46 @@ describe("openclawCodeRunCommand", () => {
     );
   });
 
+  it("forwards a parsed plan edit patch into workflow runs", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "openclawcode-plan-edit-"));
+    const patchPath = path.join(tempDir, "plan-edit.json");
+    await writeFile(
+      patchPath,
+      JSON.stringify({
+        summary: "Use an edited plan summary.",
+        scope: ["Only update the CLI JSON contract."],
+        riskLevel: "low",
+      }),
+      "utf8",
+    );
+
+    await openclawCodeRunCommand(
+      {
+        issue: "2",
+        repoRoot: "/repo",
+        json: true,
+        planEditFile: patchPath,
+        planEditActor: "chat:operator",
+        planEditNote: "Narrow the work before coding.",
+      },
+      runtime,
+    );
+
+    expect(mocks.runIssueWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        planEdit: {
+          summary: "Use an edited plan summary.",
+          scope: ["Only update the CLI JSON contract."],
+          riskLevel: "low",
+        },
+        planEditActor: "chat:operator",
+        planEditNote: "Narrow the work before coding.",
+        planEditSource: patchPath,
+      }),
+      expect.anything(),
+    );
+  });
+
   it("prints empty top-level scope fields and blocks auto-merge when workflow data is missing", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
@@ -784,6 +824,34 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.planApprovedBy).toBeNull();
     expect(payload.planApprovalSource).toBe("cli");
     expect(payload.planApprovalNote).toBe("Previous digest is stale after replanning.");
+  });
+
+  it("prints plan-edit fields when a run carries edited planning metadata", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        planEdits: [
+          {
+            appliedAt: "2026-01-01T00:00:30.000Z",
+            source: "/repo/.openclawcode/plan-edit.json",
+            actor: "chat:operator",
+            note: "Keep this slice CLI-only.",
+            editedFields: ["summary", "scope"],
+          },
+        ],
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.planEditCount).toBe(1);
+    expect(payload.planEdited).toBe(true);
+    expect(payload.planLastEditedAt).toBe("2026-01-01T00:00:30.000Z");
+    expect(payload.planLastEditedBy).toBe("chat:operator");
+    expect(payload.planLastEditSource).toBe("/repo/.openclawcode/plan-edit.json");
+    expect(payload.planLastEditNote).toBe("Keep this slice CLI-only.");
+    expect(payload.planLastEditedFields).toEqual(["summary", "scope"]);
+    expect(payload.planLastEditedFieldCount).toBe(2);
   });
 
   it("prints null suitabilityReasonCount when suitability metadata is unavailable", async () => {
@@ -7453,6 +7521,7 @@ function createRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
       ],
     },
     planReview: undefined,
+    planEdits: undefined,
     verificationReport: {
       decision: "approve-for-human-review",
       summary: "Verification completed and the run is ready for human review.",
