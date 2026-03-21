@@ -29,6 +29,7 @@ import {
   openclawCodeRoleRoutingShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
   openclawCodeRepoPlanCommand,
+  openclawCodeRerouteRunCommand,
   openclawCodeRollbackReceiptRecordCommand,
   openclawCodeRollbackReceiptShowCommand,
   openclawCodeRollbackSuggestionRefreshCommand,
@@ -111,6 +112,10 @@ ${formatHelpExamples([
   [
     "openclaw code next-work-show --json",
     "Explain the next blueprint-backed work item to execute or why the system is blocked.",
+  ],
+  [
+    "openclaw code reroute-run --issue 123 --coder-agent codex-alt --json",
+    "Reroute a queued, failed, or paused operator-managed run onto a different coder/verifier agent.",
   ],
   [
     "openclaw code issue-materialize --json",
@@ -1032,6 +1037,41 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             summary: opts.summary as string | undefined,
             balanced: Boolean(opts.balanced),
             dryRun: Boolean(opts.dryRun),
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("reroute-run")
+    .description(
+      "Change the coder/verifier runtime for a queued run or queue a reroute rerun from a failed or paused snapshot",
+    )
+    .requiredOption("--issue <number>", "GitHub issue number")
+    .option("--owner <owner>", "GitHub owner")
+    .option("--repo <repo>", "GitHub repository name")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--state-dir <dir>", "Override OPENCLAW_STATE_DIR for operator-managed state")
+    .option("--coder-agent <id>", "Replacement coder agent id")
+    .option("--verifier-agent <id>", "Replacement verifier agent id")
+    .option("--actor <actor>", "Actor recording the reroute request")
+    .option("--note <text>", "Optional note recorded in the reroute request")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeRerouteRunCommand(
+          {
+            issue: opts.issue as string,
+            owner: opts.owner as string | undefined,
+            repo: opts.repo as string | undefined,
+            repoRoot: opts.repoRoot as string | undefined,
+            stateDir: opts.stateDir as string | undefined,
+            coderAgent: opts.coderAgent as string | undefined,
+            verifierAgent: opts.verifierAgent as string | undefined,
+            actor: opts.actor as string | undefined,
+            note: opts.note as string | undefined,
             json: Boolean(opts.json),
           },
           defaultRuntime,

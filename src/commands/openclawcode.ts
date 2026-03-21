@@ -8,8 +8,11 @@ import { fileURLToPath } from "node:url";
 import {
   OpenClawCodeChatopsStore,
   buildRunRequestFromCommand,
+  formatIssueKey,
+  formatRepoKey,
   resolveOpenClawCodePluginConfig,
   type OpenClawCodeChatopsRepoConfig,
+  type OpenClawCodeIssueStatusSnapshot,
   type OpenClawCodeRepoNotificationBinding,
 } from "../integrations/openclaw-plugin/index.js";
 import {
@@ -118,6 +121,19 @@ export interface OpenClawCodeRunOpts {
   rerunRequestedVerifierAgentId?: string;
   suitabilityOverrideActor?: string;
   suitabilityOverrideReason?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeRerouteRunOpts {
+  issue: string;
+  owner?: string;
+  repo?: string;
+  repoRoot?: string;
+  stateDir?: string;
+  coderAgent?: string;
+  verifierAgent?: string;
+  actor?: string;
+  note?: string;
   json?: boolean;
 }
 
@@ -368,6 +384,7 @@ export interface OpenClawCodePolicyShowOpts {
 }
 
 export const OPENCLAWCODE_RUN_JSON_CONTRACT_VERSION = 1;
+export const OPENCLAWCODE_REROUTE_RUN_JSON_CONTRACT_VERSION = 1;
 export const OPENCLAWCODE_VALIDATION_POOL_CONTRACT_VERSION = 1;
 export const DEFAULT_OPENCLAWCODE_BUILDER_TIMEOUT_SECONDS = 300;
 export const DEFAULT_OPENCLAWCODE_VERIFIER_TIMEOUT_SECONDS = 180;
@@ -3099,6 +3116,115 @@ function resolveRerunContext(opts: OpenClawCodeRunOpts): WorkflowRerunContext | 
   };
 }
 
+const CLI_REROUTEABLE_STAGES = new Set<WorkflowRun["stage"]>([
+  "awaiting-plan-approval",
+  "changes-requested",
+  "ready-for-human-review",
+  "escalated",
+  "failed",
+]);
+
+function formatStageLabel(stage: string): string {
+  return stage
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function extractStatusSummary(status: string): string | undefined {
+  const summaryLine = status
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("Summary: "));
+  if (!summaryLine) {
+    return undefined;
+  }
+  const summary = summaryLine.slice("Summary: ".length).trim();
+  return summary.length > 0 ? summary : undefined;
+}
+
+function resolveSnapshotRerunReason(snapshot: OpenClawCodeIssueStatusSnapshot): string {
+  const preferLatestReviewSummary =
+    snapshot.stage === "changes-requested" ||
+    (snapshot.stage === "ready-for-human-review" && snapshot.latestReviewDecision === "approved");
+  return (
+    (preferLatestReviewSummary ? snapshot.latestReviewSummary : undefined) ??
+    extractStatusSummary(snapshot.status) ??
+    snapshot.latestReviewSummary ??
+    `Manual rerun requested from ${formatStageLabel(snapshot.stage)} state.`
+  );
+}
+
+function resolveQueuedNotificationDestination(params: {
+  repoConfig: OpenClawCodeChatopsRepoConfig;
+  binding?: OpenClawCodeRepoNotificationBinding;
+  snapshot?: OpenClawCodeIssueStatusSnapshot;
+}): {
+  channel: string;
+  target: string;
+} {
+  return {
+    channel:
+      params.snapshot?.notifyChannel ??
+      params.binding?.notifyChannel ??
+      params.repoConfig.notifyChannel,
+    target:
+      params.snapshot?.notifyTarget ??
+      params.binding?.notifyTarget ??
+      params.repoConfig.notifyTarget,
+  };
+}
+
+function formatRuntimeOverrideSummary(params: {
+  coderAgentId?: string;
+  verifierAgentId?: string;
+}): string {
+  const parts = [
+    params.coderAgentId?.trim() ? `coder -> ${params.coderAgentId.trim()}` : undefined,
+    params.verifierAgentId?.trim() ? `verifier -> ${params.verifierAgentId.trim()}` : undefined,
+  ].filter((entry): entry is string => Boolean(entry));
+  if (parts.length === 0) {
+    throw new Error("Pass --coder-agent and/or --verifier-agent.");
+  }
+  return parts.join(", ");
+}
+
+function appendRerouteAuditDetail(base: string, params: { actor?: string; note?: string }): string {
+  const detail = [
+    params.actor?.trim() ? `requested by ${params.actor.trim()}` : undefined,
+    params.note?.trim() ? `note: ${params.note.trim()}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  return detail ? `${base} (${detail})` : base;
+}
+
+function buildRerouteResultSummary(params: {
+  issueKey: string;
+  outcome: "deferred" | "queued-update" | "queued-rerun" | "blocked";
+  outcomeDetail: string;
+  runtimeOverrideSummary: string;
+  stage?: WorkflowRun["stage"];
+  runId?: string;
+  notifyChannel?: string;
+  notifyTarget?: string;
+  status?: string | null;
+}): Record<string, unknown> {
+  return {
+    contractVersion: OPENCLAWCODE_REROUTE_RUN_JSON_CONTRACT_VERSION,
+    issueKey: params.issueKey,
+    outcome: params.outcome,
+    detail: params.outcomeDetail,
+    runtimeOverrideSummary: params.runtimeOverrideSummary,
+    stage: params.stage ?? null,
+    runId: params.runId ?? null,
+    notifyChannel: params.notifyChannel ?? null,
+    notifyTarget: params.notifyTarget ?? null,
+    status: params.status ?? null,
+  };
+}
+
 function resolveRoleRouteAdapter(run: WorkflowRun, roleId: string): string | null {
   return run.roleRouting?.routes.find((route) => route.roleId === roleId)?.adapterId ?? null;
 }
@@ -3533,6 +3659,259 @@ export async function openclawCodeRunCommand(
   }
   if (run.draftPullRequest?.url) {
     runtime.log(`Draft PR: ${run.draftPullRequest.url}`);
+  }
+}
+
+export async function openclawCodeRerouteRunCommand(
+  opts: OpenClawCodeRerouteRunOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const issueNumber = parseIssueNumber(opts.issue);
+  const repoRef = await resolveRepoRef({
+    owner: opts.owner,
+    repo: opts.repo,
+    repoRoot,
+  });
+  const operatorStateDir = resolveOperatorStateDir(opts.stateDir);
+  const operatorRepoConfig = await resolveOperatorRepoConfig({
+    operatorStateDir,
+    repoRoot,
+    repoRef,
+  });
+  if (!operatorRepoConfig) {
+    throw new Error(
+      `No openclawcode operator repo config found for ${repoRef.owner}/${repoRef.repo} at ${repoRoot}.`,
+    );
+  }
+
+  const requestedCoderAgentId = opts.coderAgent?.trim() || undefined;
+  const requestedVerifierAgentId = opts.verifierAgent?.trim() || undefined;
+  const runtimeOverrideSummary = formatRuntimeOverrideSummary({
+    coderAgentId: requestedCoderAgentId,
+    verifierAgentId: requestedVerifierAgentId,
+  });
+  const actor = opts.actor?.trim() || undefined;
+  const note = opts.note?.trim() || undefined;
+  const requestedAt = new Date().toISOString();
+
+  const store = OpenClawCodeChatopsStore.fromStateDir(operatorStateDir);
+  const issueKey = formatIssueKey({
+    owner: repoRef.owner,
+    repo: repoRef.repo,
+    number: issueNumber,
+  });
+  const currentStatus = await store.getStatus(issueKey);
+  const queueState = await store.snapshot();
+  const currentRun = queueState.currentRun?.issueKey === issueKey ? queueState.currentRun : undefined;
+  const queuedRun = queueState.queue.find((entry) => entry.issueKey === issueKey);
+
+  if (currentRun) {
+    const currentSnapshot = await store.getStatusSnapshot(issueKey);
+    const existingDeferred = await store.getDeferredRuntimeReroute(issueKey);
+    const deferredAction = await store.upsertDeferredRuntimeReroute({
+      issueKey,
+      notifyChannel: currentRun.notifyChannel,
+      notifyTarget: currentRun.notifyTarget,
+      requestedAt,
+      actor,
+      note,
+      sourceRunId: currentSnapshot?.runId,
+      sourceStage: currentSnapshot?.stage,
+      requestedCoderAgentId:
+        requestedCoderAgentId ??
+        existingDeferred?.requestedCoderAgentId ??
+        currentSnapshot?.rerunRequestedCoderAgentId,
+      requestedVerifierAgentId:
+        requestedVerifierAgentId ??
+        existingDeferred?.requestedVerifierAgentId ??
+        currentSnapshot?.rerunRequestedVerifierAgentId,
+    });
+    const detail = `${deferredAction === "added" ? "Recorded" : "Updated"} a deferred runtime reroute while the current run is still active.`;
+    const payload = buildRerouteResultSummary({
+      issueKey,
+      outcome: "deferred",
+      outcomeDetail: detail,
+      runtimeOverrideSummary,
+      stage: currentSnapshot?.stage,
+      runId: currentSnapshot?.runId,
+      notifyChannel: currentRun.notifyChannel,
+      notifyTarget: currentRun.notifyTarget,
+      status: currentStatus,
+    });
+    if (opts.json) {
+      runtime.log(JSON.stringify(payload, null, 2));
+      return;
+    }
+    runtime.log(detail);
+    runtime.log(`Issue: ${issueKey}`);
+    runtime.log(`Runtime override: ${runtimeOverrideSummary}`);
+    if (currentSnapshot?.stage) {
+      runtime.log(`Current stage: ${formatStageLabel(currentSnapshot.stage)}`);
+    }
+    runtime.log(
+      `If the current run finishes Failed, openclawcode will queue a rerun with this override automatically.`,
+    );
+    return;
+  }
+
+  if (queuedRun) {
+    const rerouteReason = appendRerouteAuditDetail(
+      `Runtime reroute requested before execution started: ${runtimeOverrideSummary}.`,
+      { actor, note },
+    );
+    const updated = await store.updateQueuedRuntimeReroute({
+      issueKey,
+      requestedCoderAgentId,
+      requestedVerifierAgentId,
+      requestedAt,
+      reason: rerouteReason,
+    });
+    const detail = `Updated the queued runtime override before execution started.`;
+    const payload = buildRerouteResultSummary({
+      issueKey,
+      outcome: "queued-update",
+      outcomeDetail: detail,
+      runtimeOverrideSummary,
+      notifyChannel: updated?.notifyChannel ?? queuedRun.notifyChannel,
+      notifyTarget: updated?.notifyTarget ?? queuedRun.notifyTarget,
+      status: currentStatus,
+    });
+    if (opts.json) {
+      runtime.log(JSON.stringify(payload, null, 2));
+      return;
+    }
+    runtime.log(detail);
+    runtime.log(`Issue: ${issueKey}`);
+    runtime.log(`Runtime override: ${runtimeOverrideSummary}`);
+    return;
+  }
+
+  if (await store.isPendingApproval(issueKey)) {
+    const detail = `${issueKey} is still waiting for its first approved run, so there is no prior execution to reroute yet.`;
+    const payload = buildRerouteResultSummary({
+      issueKey,
+      outcome: "blocked",
+      outcomeDetail: detail,
+      runtimeOverrideSummary,
+      status: currentStatus,
+    });
+    if (opts.json) {
+      runtime.log(JSON.stringify(payload, null, 2));
+      return;
+    }
+    runtime.log(detail);
+    return;
+  }
+
+  const snapshot = await store.getStatusSnapshot(issueKey);
+  if (!snapshot) {
+    const detail = `No tracked openclawcode run found for ${issueKey}. Start the first operator-managed run before requesting a reroute.`;
+    const payload = buildRerouteResultSummary({
+      issueKey,
+      outcome: "blocked",
+      outcomeDetail: detail,
+      runtimeOverrideSummary,
+      status: currentStatus,
+    });
+    if (opts.json) {
+      runtime.log(JSON.stringify(payload, null, 2));
+      return;
+    }
+    runtime.log(detail);
+    return;
+  }
+
+  if (!CLI_REROUTEABLE_STAGES.has(snapshot.stage)) {
+    const detail = `${issueKey} is currently tracked at ${formatStageLabel(snapshot.stage)}. CLI runtime reroute only resumes from failed or paused stages.`;
+    const payload = buildRerouteResultSummary({
+      issueKey,
+      outcome: "blocked",
+      outcomeDetail: detail,
+      runtimeOverrideSummary,
+      stage: snapshot.stage,
+      runId: snapshot.runId,
+      notifyChannel: snapshot.notifyChannel,
+      notifyTarget: snapshot.notifyTarget,
+      status: currentStatus,
+    });
+    if (opts.json) {
+      runtime.log(JSON.stringify(payload, null, 2));
+      return;
+    }
+    runtime.log(detail);
+    return;
+  }
+
+  const binding = await store.getRepoBinding(formatRepoKey(repoRef));
+  const destination = resolveQueuedNotificationDestination({
+    repoConfig: operatorRepoConfig,
+    binding,
+    snapshot,
+  });
+  const rerunContext = {
+    reason: appendRerouteAuditDetail(
+      `${resolveSnapshotRerunReason(snapshot)} Runtime reroute requested with ${runtimeOverrideSummary}.`,
+      { actor, note },
+    ),
+    requestedAt,
+    priorRunId: snapshot.runId,
+    priorStage: snapshot.stage,
+    reviewDecision: snapshot.latestReviewDecision,
+    reviewSubmittedAt: snapshot.latestReviewSubmittedAt,
+    reviewSummary: snapshot.latestReviewSummary,
+    reviewUrl: snapshot.latestReviewUrl,
+    requestedCoderAgentId: requestedCoderAgentId ?? snapshot.rerunRequestedCoderAgentId,
+    requestedVerifierAgentId:
+      requestedVerifierAgentId ?? snapshot.rerunRequestedVerifierAgentId,
+  } satisfies WorkflowRerunContext;
+  const queued = await store.enqueue(
+    {
+      issueKey,
+      notifyChannel: destination.channel,
+      notifyTarget: destination.target,
+      request: buildRunRequestFromCommand({
+        command: {
+          action: "rerun",
+          issue: {
+            owner: repoRef.owner,
+            repo: repoRef.repo,
+            number: issueNumber,
+          },
+        },
+        config: operatorRepoConfig,
+        rerunContext,
+        runtimeAgentOverrides: {
+          coderAgentId: requestedCoderAgentId,
+          verifierAgentId: requestedVerifierAgentId,
+        },
+      }),
+    },
+    `Queued rerun from ${formatStageLabel(snapshot.stage)} with ${runtimeOverrideSummary}.`,
+  );
+  const detail = queued
+    ? `Queued a reroute rerun from the tracked ${formatStageLabel(snapshot.stage)} snapshot.`
+    : `${issueKey} became queued or running before the reroute could be enqueued.`;
+  const payload = buildRerouteResultSummary({
+    issueKey,
+    outcome: queued ? "queued-rerun" : "blocked",
+    outcomeDetail: detail,
+    runtimeOverrideSummary,
+    stage: snapshot.stage,
+    runId: snapshot.runId,
+    notifyChannel: destination.channel,
+    notifyTarget: destination.target,
+    status: currentStatus,
+  });
+  if (opts.json) {
+    runtime.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+  runtime.log(detail);
+  runtime.log(`Issue: ${issueKey}`);
+  runtime.log(`Runtime override: ${runtimeOverrideSummary}`);
+  if (queued) {
+    runtime.log(`Queued from stage: ${formatStageLabel(snapshot.stage)}`);
   }
 }
 

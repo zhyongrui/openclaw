@@ -38,6 +38,7 @@ import {
   openclawCodePromotionReceiptShowCommand,
   openclawCodeProjectProgressShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
+  openclawCodeRerouteRunCommand,
   openclawCodeRollbackReceiptRecordCommand,
   openclawCodeRollbackReceiptShowCommand,
   openclawCodeRollbackSuggestionRefreshCommand,
@@ -207,6 +208,49 @@ describe("openclawCodeRunCommand", () => {
     mocks.verifierCtorArgs.length = 0;
     vi.unstubAllEnvs();
   });
+
+  async function writeOperatorRepoConfig(params: {
+    operatorStateDir: string;
+    repoRoot: string;
+    owner?: string;
+    repo?: string;
+    notifyChannel?: string;
+    notifyTarget?: string;
+    builderAgent?: string;
+    verifierAgent?: string;
+  }): Promise<void> {
+    await writeFile(
+      path.join(params.operatorStateDir, "openclaw.json"),
+      JSON.stringify(
+        {
+          plugins: {
+            entries: {
+              openclawcode: {
+                config: {
+                  repos: [
+                    {
+                      owner: params.owner ?? "openclaw",
+                      repo: params.repo ?? "openclawcode",
+                      repoRoot: params.repoRoot,
+                      baseBranch: "main",
+                      builderAgent: params.builderAgent ?? "codex-main",
+                      verifierAgent: params.verifierAgent ?? "claude-main",
+                      testCommands: ["pnpm test"],
+                      notifyChannel: params.notifyChannel ?? "telegram",
+                      notifyTarget: params.notifyTarget ?? "chat:primary",
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+  }
 
   it("prints stable top-level JSON fields for workflow scope, pr metadata, review, and merge policy", async () => {
     await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
@@ -6315,6 +6359,328 @@ EOF
         reusedExisting: false,
       }),
     ]);
+  });
+
+  it("queues a reroute rerun from a failed tracked snapshot", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-reroute-failed-repo-"));
+    const operatorStateDir = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-reroute-failed-state-"),
+    );
+    const store = OpenClawCodeChatopsStore.fromStateDir(operatorStateDir);
+
+    await writeOperatorRepoConfig({
+      operatorStateDir,
+      repoRoot,
+    });
+    await store.setStatusSnapshot({
+      issueKey: "openclaw/openclawcode#321",
+      status: [
+        "openclawcode status for openclaw/openclawcode#321",
+        "Stage: Failed",
+        "Summary: Primary coder provider failed during build.",
+      ].join("\n"),
+      stage: "failed",
+      runId: "run-321",
+      updatedAt: "2026-03-21T16:00:00.000Z",
+      owner: "openclaw",
+      repo: "openclawcode",
+      issueNumber: 321,
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+    });
+
+    await openclawCodeRerouteRunCommand(
+      {
+        issue: "321",
+        owner: "openclaw",
+        repo: "openclawcode",
+        repoRoot,
+        stateDir: operatorStateDir,
+        coderAgent: "codex-alt",
+        actor: "tester",
+        note: "retry on secondary coder",
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      contractVersion: 1,
+      issueKey: "openclaw/openclawcode#321",
+      outcome: "queued-rerun",
+      stage: "failed",
+      runId: "run-321",
+      runtimeOverrideSummary: "coder -> codex-alt",
+    });
+
+    const state = await store.snapshot();
+    expect(state.queue).toHaveLength(1);
+    expect(state.queue[0]?.request).toMatchObject({
+      builderAgent: "codex-alt",
+      verifierAgent: "claude-main",
+      rerunContext: expect.objectContaining({
+        priorRunId: "run-321",
+        priorStage: "failed",
+        requestedCoderAgentId: "codex-alt",
+      }),
+    });
+    expect(state.queue[0]?.request.rerunContext?.reason).toContain(
+      "Primary coder provider failed during build.",
+    );
+    expect(state.queue[0]?.request.rerunContext?.reason).toContain("requested by tester");
+    expect(state.queue[0]?.request.rerunContext?.reason).toContain(
+      "note: retry on secondary coder",
+    );
+  });
+
+  it("queues a reroute rerun from an awaiting-plan-approval snapshot", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-reroute-plan-repo-"));
+    const operatorStateDir = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-reroute-plan-state-"),
+    );
+    const store = OpenClawCodeChatopsStore.fromStateDir(operatorStateDir);
+
+    await writeOperatorRepoConfig({
+      operatorStateDir,
+      repoRoot,
+    });
+    await store.setStatusSnapshot({
+      issueKey: "openclaw/openclawcode#322",
+      status: [
+        "openclawcode status for openclaw/openclawcode#322",
+        "Stage: Awaiting Plan Approval",
+        "Summary: Waiting for plan approval before workspace preparation.",
+      ].join("\n"),
+      stage: "awaiting-plan-approval",
+      runId: "run-322",
+      updatedAt: "2026-03-21T16:05:00.000Z",
+      owner: "openclaw",
+      repo: "openclawcode",
+      issueNumber: 322,
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+    });
+
+    await openclawCodeRerouteRunCommand(
+      {
+        issue: "322",
+        owner: "openclaw",
+        repo: "openclawcode",
+        repoRoot,
+        stateDir: operatorStateDir,
+        verifierAgent: "claude-alt",
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      issueKey: "openclaw/openclawcode#322",
+      outcome: "queued-rerun",
+      stage: "awaiting-plan-approval",
+      runtimeOverrideSummary: "verifier -> claude-alt",
+    });
+
+    const state = await store.snapshot();
+    expect(state.queue).toHaveLength(1);
+    expect(state.queue[0]?.request).toMatchObject({
+      builderAgent: "codex-main",
+      verifierAgent: "claude-alt",
+      rerunContext: expect.objectContaining({
+        priorStage: "awaiting-plan-approval",
+        requestedVerifierAgentId: "claude-alt",
+      }),
+    });
+  });
+
+  it("updates the queued runtime override before execution starts", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-reroute-queued-repo-"));
+    const operatorStateDir = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-reroute-queued-state-"),
+    );
+    const store = OpenClawCodeChatopsStore.fromStateDir(operatorStateDir);
+
+    await writeOperatorRepoConfig({
+      operatorStateDir,
+      repoRoot,
+    });
+    await store.enqueue(
+      {
+        issueKey: "openclaw/openclawcode#323",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+        request: {
+          owner: "openclaw",
+          repo: "openclawcode",
+          issueNumber: 323,
+          repoRoot,
+          baseBranch: "main",
+          branchName: "openclawcode/issue-323",
+          builderAgent: "codex-main",
+          verifierAgent: "claude-main",
+          testCommands: ["pnpm test"],
+          openPullRequest: true,
+          mergeOnApprove: false,
+        },
+      },
+      "Queued.",
+    );
+
+    await openclawCodeRerouteRunCommand(
+      {
+        issue: "323",
+        owner: "openclaw",
+        repo: "openclawcode",
+        repoRoot,
+        stateDir: operatorStateDir,
+        coderAgent: "codex-alt",
+        verifierAgent: "claude-alt",
+        actor: "tester",
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      issueKey: "openclaw/openclawcode#323",
+      outcome: "queued-update",
+      runtimeOverrideSummary: "coder -> codex-alt, verifier -> claude-alt",
+    });
+
+    const state = await store.snapshot();
+    expect(state.queue).toHaveLength(1);
+    expect(state.queue[0]?.request.builderAgent).toBe("codex-alt");
+    expect(state.queue[0]?.request.verifierAgent).toBe("claude-alt");
+  });
+
+  it("records a deferred reroute when the current run is still active", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-reroute-active-repo-"));
+    const operatorStateDir = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-reroute-active-state-"),
+    );
+    const store = OpenClawCodeChatopsStore.fromStateDir(operatorStateDir);
+
+    await writeOperatorRepoConfig({
+      operatorStateDir,
+      repoRoot,
+    });
+    await store.enqueue(
+      {
+        issueKey: "openclaw/openclawcode#324",
+        notifyChannel: "telegram",
+        notifyTarget: "chat:primary",
+        request: {
+          owner: "openclaw",
+          repo: "openclawcode",
+          issueNumber: 324,
+          repoRoot,
+          baseBranch: "main",
+          branchName: "openclawcode/issue-324",
+          builderAgent: "codex-main",
+          verifierAgent: "claude-main",
+          testCommands: ["pnpm test"],
+          openPullRequest: true,
+          mergeOnApprove: false,
+        },
+      },
+      "Queued.",
+    );
+    await store.startNext("Running.");
+    await store.setStatusSnapshot({
+      issueKey: "openclaw/openclawcode#324",
+      status: "openclawcode status for openclaw/openclawcode#324\nStage: Building",
+      stage: "building",
+      runId: "run-324",
+      updatedAt: "2026-03-21T16:10:00.000Z",
+      owner: "openclaw",
+      repo: "openclawcode",
+      issueNumber: 324,
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+    });
+
+    await openclawCodeRerouteRunCommand(
+      {
+        issue: "324",
+        owner: "openclaw",
+        repo: "openclawcode",
+        repoRoot,
+        stateDir: operatorStateDir,
+        verifierAgent: "claude-alt",
+        note: "switch verifier if this fails",
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      issueKey: "openclaw/openclawcode#324",
+      outcome: "deferred",
+      stage: "building",
+      runId: "run-324",
+      runtimeOverrideSummary: "verifier -> claude-alt",
+    });
+
+    expect(await store.getDeferredRuntimeReroute("openclaw/openclawcode#324")).toMatchObject({
+      issueKey: "openclaw/openclawcode#324",
+      sourceRunId: "run-324",
+      sourceStage: "building",
+      requestedVerifierAgentId: "claude-alt",
+      note: "switch verifier if this fails",
+    });
+  });
+
+  it("blocks reroute requests from non-paused tracked stages", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-reroute-blocked-repo-"));
+    const operatorStateDir = await mkdtemp(
+      path.join(os.tmpdir(), "openclawcode-reroute-blocked-state-"),
+    );
+    const store = OpenClawCodeChatopsStore.fromStateDir(operatorStateDir);
+
+    await writeOperatorRepoConfig({
+      operatorStateDir,
+      repoRoot,
+    });
+    await store.setStatusSnapshot({
+      issueKey: "openclaw/openclawcode#325",
+      status: "openclawcode status for openclaw/openclawcode#325\nStage: Completed Without Changes",
+      stage: "completed-without-changes",
+      runId: "run-325",
+      updatedAt: "2026-03-21T16:12:00.000Z",
+      owner: "openclaw",
+      repo: "openclawcode",
+      issueNumber: 325,
+      notifyChannel: "telegram",
+      notifyTarget: "chat:primary",
+    });
+
+    await openclawCodeRerouteRunCommand(
+      {
+        issue: "325",
+        owner: "openclaw",
+        repo: "openclawcode",
+        repoRoot,
+        stateDir: operatorStateDir,
+        coderAgent: "codex-alt",
+        json: true,
+      },
+      runtime,
+    );
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      issueKey: "openclaw/openclawcode#325",
+      outcome: "blocked",
+      stage: "completed-without-changes",
+    });
+    expect(payload.detail).toContain("failed or paused stages");
+
+    const state = await store.snapshot();
+    expect(state.queue).toHaveLength(0);
   });
 });
 

@@ -562,7 +562,7 @@ Tasks:
 - `[x]` allow plan approval before code execution
 - `[x]` allow plan editing before code execution
 - `[x]` allow manual worktree takeover
-- `[ ]` allow provider switching after a failed or paused stage
+- `[x]` allow provider switching after a failed or paused stage
 - `[x]` allow structured resume after manual edits
 - `[x]` allow explicit override of suitability and merge-policy decisions
 - `[x]` persist all handoff and override decisions in workflow run artifacts
@@ -573,6 +573,10 @@ Acceptance:
 - current foothold:
   - a failed or review-blocked run can now be re-queued with an explicit
     coder/verifier override and keep that override in the rerun artifact
+  - `openclaw code reroute-run` now mirrors the chat reroute surface for:
+    - queued runs before execution starts
+    - active runs through deferred reroute records
+    - failed or paused tracked snapshots, including `awaiting-plan-approval`
   - `openclaw code run --require-plan-approval` can now stop after planning,
     emit a stable plan digest, and only continue when the matching digest is
     explicitly approved
