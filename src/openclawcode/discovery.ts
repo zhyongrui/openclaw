@@ -24,7 +24,9 @@ export type ProjectDiscoverySource =
   | "work-item-artifact-stale"
   | "setup-check-regression"
   | "provider-pause-active"
-  | "upstream-sync-drift";
+  | "upstream-sync-drift"
+  | "tracked-run-failed"
+  | "tracked-run-changes-requested";
 
 export interface ProjectDiscoveryEvidence {
   id: string;
@@ -163,6 +165,8 @@ function resolveDiscoveryExecutionMode(
       return "research";
     case "setup-check-regression":
     case "provider-pause-active":
+    case "tracked-run-failed":
+    case "tracked-run-changes-requested":
       return "bugfix";
     default:
       return "feature";
@@ -180,7 +184,10 @@ function resolveDiscoveryWorkItemClass(
     case "setup-check-regression":
       return "validation";
     case "provider-pause-active":
+    case "tracked-run-failed":
       return "incident";
+    case "tracked-run-changes-requested":
+      return "bugfix";
     default:
       return "feature";
   }
@@ -196,6 +203,18 @@ function runGitCommand(repoRoot: string, args: string[]): string | null {
   }
   const stdout = result.stdout.trim();
   return stdout.length > 0 ? stdout : null;
+}
+
+function extractStatusSummary(status: string): string | null {
+  const summaryLine = status
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("Summary: "));
+  if (!summaryLine) {
+    return null;
+  }
+  const summary = summaryLine.slice("Summary: ".length).trim();
+  return summary.length > 0 ? summary : null;
 }
 
 function resolveUpstreamBranchRef(repoRoot: string): { ref: string; label: string } | null {
@@ -318,6 +337,82 @@ async function collectRuntimeDiscoveryEvidence(params: {
           dedupeKey,
         }),
       });
+    }
+  }
+
+  if (operator?.exists && repoKey) {
+    const trackedSnapshots = operator.issueSnapshots.filter(
+      (snapshot) => `${snapshot.owner}/${snapshot.repo}` === repoKey,
+    );
+    for (const snapshot of trackedSnapshots) {
+      const summary = extractStatusSummary(snapshot.status);
+      if (snapshot.stage === "failed") {
+        const dedupeKey = `tracked-run-failed:${snapshot.issueKey}:${snapshot.runId}:${snapshot.updatedAt}`;
+        const detail = [
+          `The operator state records ${snapshot.issueKey} at Failed (run=${snapshot.runId}, updatedAt=${snapshot.updatedAt}).`,
+          summary ? `Latest summary: ${summary}` : undefined,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        evidence.push({
+          id: `discovery-tracked-run-failed-${snapshot.issueNumber}`,
+          dedupeKey,
+          source: "tracked-run-failed",
+          severity: "high",
+          priority: "high",
+          summary: `Investigate the failed tracked run for ${snapshot.issueKey} before continuing autonomous work.`,
+          detail,
+          discoveredWorkItem: makeDiscoveredWorkItem({
+            id: `discovered-investigate-failed-run-${snapshot.issueNumber}`,
+            title: `Investigate the failed tracked run for ${snapshot.issueKey} before continuing autonomous work.`,
+            summary:
+              summary ??
+              `Review the failed tracked run for ${snapshot.issueKey}, confirm the root cause, and either fix it or consciously defer it.`,
+            source: "tracked-run-failed",
+            blueprintPath: params.blueprintPath,
+            blueprintRevisionId: params.blueprintRevisionId,
+            providerRoleAssignments: params.providerRoleAssignments,
+            detail,
+            severity: "high",
+            priority: "high",
+            dedupeKey,
+          }),
+        });
+      }
+
+      if (snapshot.stage === "changes-requested") {
+        const dedupeKey = `tracked-run-changes-requested:${snapshot.issueKey}:${snapshot.runId}:${snapshot.updatedAt}`;
+        const detail = [
+          `The operator state records ${snapshot.issueKey} at Changes Requested (run=${snapshot.runId}, updatedAt=${snapshot.updatedAt}).`,
+          summary ? `Latest summary: ${summary}` : undefined,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        evidence.push({
+          id: `discovery-tracked-run-changes-requested-${snapshot.issueNumber}`,
+          dedupeKey,
+          source: "tracked-run-changes-requested",
+          severity: "medium",
+          priority: "medium",
+          summary: `Address the requested changes for ${snapshot.issueKey} before selecting new autonomous work.`,
+          detail,
+          discoveredWorkItem: makeDiscoveredWorkItem({
+            id: `discovered-address-requested-changes-${snapshot.issueNumber}`,
+            title: `Address the requested changes for ${snapshot.issueKey} before selecting new autonomous work.`,
+            summary:
+              summary ??
+              `Review the requested changes for ${snapshot.issueKey}, update the implementation plan, and rerun with a clear response to the feedback.`,
+            source: "tracked-run-changes-requested",
+            blueprintPath: params.blueprintPath,
+            blueprintRevisionId: params.blueprintRevisionId,
+            providerRoleAssignments: params.providerRoleAssignments,
+            detail,
+            severity: "medium",
+            priority: "medium",
+            dedupeKey,
+          }),
+        });
+      }
     }
   }
 

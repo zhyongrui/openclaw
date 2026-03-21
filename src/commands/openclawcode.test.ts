@@ -5185,7 +5185,40 @@ EOF
           deferredRuntimeReroutes: [],
           queue: [],
           statusByIssue: {},
-          statusSnapshotsByIssue: {},
+          statusSnapshotsByIssue: {
+            "openclaw/openclaw#41": {
+              issueKey: "openclaw/openclaw#41",
+              status: [
+                "openclawcode status for openclaw/openclaw#41",
+                "Stage: Failed",
+                "Summary: Build failed after the provider returned HTTP 500.",
+              ].join("\n"),
+              stage: "failed",
+              runId: "run-41",
+              updatedAt: "2026-03-20T00:20:00.000Z",
+              owner: "openclaw",
+              repo: "openclaw",
+              issueNumber: 41,
+              notifyChannel: "feishu",
+              notifyTarget: "occode-test",
+            },
+            "openclaw/openclaw#42": {
+              issueKey: "openclaw/openclaw#42",
+              status: [
+                "openclawcode status for openclaw/openclaw#42",
+                "Stage: Changes Requested",
+                "Summary: Address the missing regression proof before rerun.",
+              ].join("\n"),
+              stage: "changes-requested",
+              runId: "run-42",
+              updatedAt: "2026-03-20T00:22:00.000Z",
+              owner: "openclaw",
+              repo: "openclaw",
+              issueNumber: 42,
+              notifyChannel: "feishu",
+              notifyTarget: "occode-test",
+            },
+          },
           repoBindingsByRepo: {
             "openclaw/openclaw": {
               repoKey: "openclaw/openclaw",
@@ -5220,12 +5253,14 @@ EOF
     );
 
     const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
-    expect(payload.evidenceCount).toBe(3);
+    expect(payload.evidenceCount).toBe(5);
     expect(payload.highestPriority).toBe("high");
     expect(payload.evidence.map((entry: { source: string }) => entry.source)).toEqual(
       expect.arrayContaining([
         "setup-check-regression",
         "provider-pause-active",
+        "tracked-run-failed",
+        "tracked-run-changes-requested",
         "upstream-sync-drift",
       ]),
     );
@@ -5250,6 +5285,20 @@ EOF
           discoveredWorkItem: expect.objectContaining({
             class: "sync",
             executionMode: "feature",
+          }),
+        }),
+        expect.objectContaining({
+          source: "tracked-run-failed",
+          discoveredWorkItem: expect.objectContaining({
+            class: "incident",
+            executionMode: "bugfix",
+          }),
+        }),
+        expect.objectContaining({
+          source: "tracked-run-changes-requested",
+          discoveredWorkItem: expect.objectContaining({
+            class: "bugfix",
+            executionMode: "bugfix",
           }),
         }),
       ]),

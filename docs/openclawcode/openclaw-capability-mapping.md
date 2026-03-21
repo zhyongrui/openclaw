@@ -495,7 +495,7 @@ Status:
 
 - `[x]` validation-only discovery exists
 - `[x]` first repo-local discovery source landed
-- `[ ]` broader runtime discovery still open
+- `[x]` broader runtime discovery landed
 
 Tasks:
 
@@ -515,6 +515,8 @@ Tasks:
 Acceptance:
 
 - the system can notice important problems without a human typing a new issue
+- runtime discovery now also includes tracked operator failure/review-blocked
+  snapshots, not only static artifact drift and setup state
 
 ### Phase M6: Provider Role Model
 
