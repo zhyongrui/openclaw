@@ -165,6 +165,19 @@ those nested objects.
 - `executionRoutingStageGateReadiness`
 - `executionStartStageGateReadiness`
 - `mergePromotionStageGateReadiness`
+- `planApprovalRequired`
+- `planApprovalStatus`
+- `planApprovalPending`
+- `planApprovalApproved`
+- `planDigest`
+- `planDigestPresent`
+- `planApprovalRequestedAt`
+- `planApprovalSuppliedDigest`
+- `planApprovalSuppliedDigestMatches`
+- `planApprovedAt`
+- `planApprovedBy`
+- `planApprovalSource`
+- `planApprovalNote`
 
 ### Suitability Signals
 

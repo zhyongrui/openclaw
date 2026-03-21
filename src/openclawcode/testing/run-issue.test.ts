@@ -503,6 +503,240 @@ describe("runIssueWorkflow", () => {
     }
   });
 
+  it("halts after planning when explicit plan approval is required", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-177",
+        worktreePath: "/repo/.openclawcode/worktrees/run-177",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const workspaceManager = new FakeWorkspaceManager(workspace, [
+        "src/commands/openclawcode.ts",
+      ]);
+      const builder = new FakeBuilder();
+
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 177,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          requirePlanApproval: true,
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder,
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: workspaceManager,
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.stage).toBe("awaiting-plan-approval");
+      expect(run.planReview).toMatchObject({
+        required: true,
+        status: "awaiting-approval",
+      });
+      expect(run.planReview?.planDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
+      expect(run.planReview?.requestedAt).toBe(run.updatedAt);
+      expect(workspaceManager.prepareCalls).toBe(0);
+      expect(builder.buildCalls).toBe(0);
+      expect(run.history.at(-1)).toBe(
+        "Plan approval required before workspace preparation and code execution.",
+      );
+
+      const savedRun = JSON.parse(
+        await fs.readFile(path.join(stateDir, "runs", `${run.id}.json`), "utf8"),
+      ) as typeof run;
+      expect(savedRun.stage).toBe("awaiting-plan-approval");
+      expect(savedRun.planReview?.status).toBe("awaiting-approval");
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("continues into build when the current plan digest is explicitly approved", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-178",
+        worktreePath: "/repo/.openclawcode/worktrees/run-178",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const initialWorkspaceManager = new FakeWorkspaceManager(workspace, [
+        "src/commands/openclawcode.ts",
+      ]);
+      const initialBuilder = new FakeBuilder();
+
+      const pausedRun = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 178,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          requirePlanApproval: true,
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: initialBuilder,
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: initialWorkspaceManager,
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow(),
+        },
+      );
+
+      const approvedWorkspaceManager = new FakeWorkspaceManager(workspace, [
+        "src/commands/openclawcode.ts",
+      ]);
+      const approvedBuilder = new FakeBuilder();
+      const continuedRun = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 178,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          requirePlanApproval: true,
+          approvePlanDigest: pausedRun.planReview?.planDigest,
+          planApprovalActor: "chat:operator",
+          planApprovalNote: "Proceed with the current implementation plan.",
+          planApprovalSource: "cli",
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: approvedBuilder,
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: approvedWorkspaceManager,
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow(Date.UTC(2026, 2, 9, 14, 0, 0)),
+        },
+      );
+
+      expect(continuedRun.stage).toBe("ready-for-human-review");
+      expect(continuedRun.planReview).toMatchObject({
+        required: true,
+        status: "approved",
+        planDigest: pausedRun.planReview?.planDigest,
+        suppliedDigest: pausedRun.planReview?.planDigest,
+        approvedBy: "chat:operator",
+        approvalSource: "cli",
+        approvalNote: "Proceed with the current implementation plan.",
+      });
+      expect(continuedRun.planReview?.approvedAt).toBeDefined();
+      expect(approvedWorkspaceManager.prepareCalls).toBe(1);
+      expect(approvedBuilder.buildCalls).toBe(1);
+      expect(continuedRun.history).toContain(
+        `Plan approved for code execution: ${pausedRun.planReview?.planDigest}`,
+      );
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("re-halts when a supplied approval digest no longer matches the current plan", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+
+    try {
+      const workspace: WorkflowWorkspace = {
+        repoRoot: "/repo",
+        baseBranch: "main",
+        branchName: "openclawcode/issue-181",
+        worktreePath: "/repo/.openclawcode/worktrees/run-181",
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const workspaceManager = new FakeWorkspaceManager(workspace, [
+        "src/commands/openclawcode.ts",
+      ]);
+      const builder = new FakeBuilder();
+
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 181,
+          repoRoot: "/repo",
+          stateDir,
+          baseBranch: "main",
+          requirePlanApproval: true,
+          approvePlanDigest: "sha256:stale-plan",
+          planApprovalActor: "chat:operator",
+          planApprovalNote: "Trying to continue from an older plan.",
+          planApprovalSource: "cli",
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder,
+          verifier: new FakeVerifier({
+            decision: "approve-for-human-review",
+            summary: "Looks good.",
+            findings: [],
+            missingCoverage: [],
+            followUps: [],
+          }),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: workspaceManager,
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.stage).toBe("awaiting-plan-approval");
+      expect(run.planReview).toMatchObject({
+        required: true,
+        status: "awaiting-approval",
+        suppliedDigest: "sha256:stale-plan",
+        approvedBy: "chat:operator",
+        approvalSource: "cli",
+        approvalNote: "Trying to continue from an older plan.",
+      });
+      expect(run.planReview?.planDigest).not.toBe("sha256:stale-plan");
+      expect(workspaceManager.prepareCalls).toBe(0);
+      expect(builder.buildCalls).toBe(0);
+      expect(run.history.at(-1)).toContain("Plan approval digest mismatch");
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("escalates high-risk issues before any branch mutation starts", async () => {
     const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
 

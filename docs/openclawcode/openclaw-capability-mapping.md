@@ -549,6 +549,7 @@ Status:
 - `[x]` coarse run controls already exist
 - `[x]` first repo-local stage-gate artifact landed
 - `[x]` first workflow-run stage-gate snapshot landed
+- `[x]` explicit plan approval before code execution landed
 - `[ ]` runtime-aware handoff still open
 
 Tasks:
@@ -557,7 +558,7 @@ Tasks:
 - `[x]` expose stage-gate readiness and blockers through CLI
 - `[x]` persist current stage-gate snapshots into workflow run artifacts
 - `[x]` allow structured rerun-time coder/verifier overrides from chat and CLI
-- `[ ]` allow plan approval before code execution
+- `[x]` allow plan approval before code execution
 - `[ ]` allow plan editing before code execution
 - `[x]` allow manual worktree takeover
 - `[ ]` allow provider switching after a failed or paused stage
@@ -571,6 +572,9 @@ Acceptance:
 - current foothold:
   - a failed or review-blocked run can now be re-queued with an explicit
     coder/verifier override and keep that override in the rerun artifact
+  - `openclaw code run --require-plan-approval` can now stop after planning,
+    emit a stable plan digest, and only continue when the matching digest is
+    explicitly approved
   - workflow runs and operator snapshots now also persist a unified handoff
     ledger for:
     - stage-gate decisions

@@ -162,6 +162,10 @@ ${formatHelpExamples([
     "Record a structured human decision for a stage gate.",
   ],
   [
+    "openclaw code run --issue 123 --require-plan-approval --json",
+    "Stop after planning and emit the current plan digest for explicit approval before code execution.",
+  ],
+  [
     "openclaw code run --issue 123",
     "Plan and run the workflow for issue #123 in the current repo.",
   ],
@@ -890,6 +894,17 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
     .option("--test <command>", "Repeatable test command to run after build", collectOption, [])
     .option("--open-pr", "Push the issue branch and open a draft PR", false)
     .option("--merge-on-approve", "Merge automatically after verifier approval", false)
+    .option(
+      "--require-plan-approval",
+      "Pause after planning until the current plan digest is explicitly approved",
+      false,
+    )
+    .option(
+      "--approve-plan-digest <digest>",
+      "Approve the exact current plan digest and continue into workspace/build if it still matches",
+    )
+    .option("--plan-approval-actor <actor>", "Actor recording an approved plan digest")
+    .option("--plan-approval-note <text>", "Optional note recorded with the approved plan digest")
     .option("--rerun-prior-run-id <id>", "Prior run id when this execution is an explicit rerun")
     .option(
       "--rerun-prior-stage <stage>",
@@ -928,10 +943,15 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
             test: Array.isArray(opts.test) ? (opts.test as string[]) : [],
             openPr: Boolean(opts.openPr),
             mergeOnApprove: Boolean(opts.mergeOnApprove),
+            requirePlanApproval: Boolean(opts.requirePlanApproval),
+            approvePlanDigest: opts.approvePlanDigest as string | undefined,
+            planApprovalActor: opts.planApprovalActor as string | undefined,
+            planApprovalNote: opts.planApprovalNote as string | undefined,
             rerunPriorRunId: opts.rerunPriorRunId as string | undefined,
             rerunPriorStage: opts.rerunPriorStage as
               | "intake"
               | "planning"
+              | "awaiting-plan-approval"
               | "building"
               | "draft-pr-opened"
               | "verifying"

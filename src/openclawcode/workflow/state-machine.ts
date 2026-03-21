@@ -7,7 +7,8 @@ import type {
 
 const ALLOWED_TRANSITIONS: Record<WorkflowStage, WorkflowStage[]> = {
   intake: ["planning", "failed"],
-  planning: ["building", "failed", "escalated"],
+  planning: ["awaiting-plan-approval", "building", "failed", "escalated"],
+  "awaiting-plan-approval": ["building", "failed", "escalated"],
   building: ["draft-pr-opened", "failed", "changes-requested"],
   "draft-pr-opened": ["verifying", "changes-requested", "failed"],
   verifying: ["ready-for-human-review", "changes-requested", "escalated", "failed"],

@@ -1,10 +1,13 @@
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { readProjectBlueprintDocument } from "../blueprint.js";
 import type {
+  ExecutionSpec,
   WorkflowBlueprintContext,
   WorkflowFailureDiagnostics,
   WorkflowHandoffEntry,
   WorkflowHandoffSnapshot,
+  WorkflowPlanReviewSnapshot,
   WorkflowRoleRoutingSnapshot,
   WorkflowRuntimeRoleSelection,
   WorkflowRerunContext,
@@ -50,6 +53,11 @@ export interface IssueWorkflowRequest extends RepoRef {
     actor?: string;
     reason?: string;
   };
+  requirePlanApproval?: boolean;
+  approvePlanDigest?: string;
+  planApprovalActor?: string;
+  planApprovalNote?: string;
+  planApprovalSource?: string;
   rerunContext?: WorkflowRerunContext;
 }
 
@@ -212,6 +220,55 @@ function attachRerunContext(
 
 function defaultBranchName(issueNumber: number): string {
   return `openclawcode/issue-${issueNumber}`;
+}
+
+function computeExecutionSpecDigest(spec: ExecutionSpec): string {
+  const stablePayload = JSON.stringify({
+    summary: spec.summary,
+    scope: spec.scope,
+    outOfScope: spec.outOfScope,
+    acceptanceCriteria: spec.acceptanceCriteria.map((criterion) => ({
+      id: criterion.id,
+      text: criterion.text,
+      required: criterion.required,
+    })),
+    testPlan: spec.testPlan,
+    risks: spec.risks,
+    assumptions: spec.assumptions,
+    openQuestions: spec.openQuestions,
+    riskLevel: spec.riskLevel,
+  });
+
+  return `sha256:${createHash("sha256").update(stablePayload).digest("hex")}`;
+}
+
+function trimText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function createPlanReviewSnapshot(params: {
+  required: boolean;
+  status: WorkflowPlanReviewSnapshot["status"];
+  planDigest: string;
+  requestedAt: string | null;
+  suppliedDigest?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvalSource?: string;
+  approvalNote?: string;
+}): WorkflowPlanReviewSnapshot {
+  return {
+    required: params.required,
+    status: params.status,
+    planDigest: params.planDigest,
+    requestedAt: params.requestedAt,
+    suppliedDigest: params.suppliedDigest ?? null,
+    approvedAt: params.approvedAt ?? null,
+    approvedBy: params.approvedBy ?? null,
+    approvalSource: params.approvalSource ?? null,
+    approvalNote: params.approvalNote ?? null,
+  };
 }
 
 function mapWorkflowBlueprintContext(
@@ -642,6 +699,59 @@ export async function runIssueWorkflow(
     throw error;
   }
   await deps.store.save(run);
+
+  const requirePlanApproval = request.requirePlanApproval || request.approvePlanDigest != null;
+  if (requirePlanApproval && run.executionSpec) {
+    const planDigest = computeExecutionSpecDigest(run.executionSpec);
+    const suppliedDigest = trimText(request.approvePlanDigest);
+    const planReadyAt = run.updatedAt;
+
+    if (suppliedDigest === planDigest) {
+      run = noteRun(
+        {
+          ...run,
+          planReview: createPlanReviewSnapshot({
+            required: true,
+            status: "approved",
+            planDigest,
+            requestedAt: planReadyAt,
+            suppliedDigest,
+            approvedAt: now(),
+            approvedBy: trimText(request.planApprovalActor),
+            approvalSource: trimText(request.planApprovalSource),
+            approvalNote: trimText(request.planApprovalNote),
+          }),
+        },
+        `Plan approved for code execution: ${planDigest}`,
+        now,
+      );
+      await deps.store.save(run);
+    } else {
+      const haltedRun = transitionRun(
+        run,
+        "awaiting-plan-approval",
+        suppliedDigest
+          ? `Plan approval digest mismatch: supplied ${suppliedDigest} but current plan is ${planDigest}.`
+          : "Plan approval required before workspace preparation and code execution.",
+        now,
+      );
+      run = {
+        ...haltedRun,
+        planReview: createPlanReviewSnapshot({
+          required: true,
+          status: "awaiting-approval",
+          planDigest,
+          requestedAt: haltedRun.updatedAt,
+          suppliedDigest,
+          approvedBy: trimText(request.planApprovalActor),
+          approvalSource: trimText(request.planApprovalSource),
+          approvalNote: trimText(request.planApprovalNote),
+        }),
+      };
+      await deps.store.save(run);
+      return run;
+    }
+  }
 
   const suitability = assessIssueSuitability(run, now(), {
     override: request.suitabilityOverride,

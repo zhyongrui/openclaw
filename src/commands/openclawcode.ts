@@ -99,6 +99,10 @@ export interface OpenClawCodeRunOpts {
   test?: string[];
   openPr?: boolean;
   mergeOnApprove?: boolean;
+  requirePlanApproval?: boolean;
+  approvePlanDigest?: string;
+  planApprovalActor?: string;
+  planApprovalNote?: string;
   rerunPriorRunId?: string;
   rerunPriorStage?: WorkflowRun["stage"];
   rerunReason?: string;
@@ -3144,6 +3148,23 @@ function toWorkflowRunJson(run: WorkflowRun) {
     executionRoutingStageGateReadiness: resolveStageGateReadiness(run, "execution-routing"),
     executionStartStageGateReadiness: resolveStageGateReadiness(run, "execution-start"),
     mergePromotionStageGateReadiness: resolveStageGateReadiness(run, "merge-promotion"),
+    planReview: run.planReview ?? null,
+    planApprovalRequired: run.planReview?.required ?? false,
+    planApprovalStatus: run.planReview?.status ?? null,
+    planApprovalPending: run.planReview?.status === "awaiting-approval",
+    planApprovalApproved: run.planReview?.status === "approved",
+    planDigest: run.planReview?.planDigest ?? null,
+    planDigestPresent: hasNonEmptyText(run.planReview?.planDigest),
+    planApprovalRequestedAt: run.planReview?.requestedAt ?? null,
+    planApprovalSuppliedDigest: run.planReview?.suppliedDigest ?? null,
+    planApprovalSuppliedDigestMatches:
+      run.planReview?.suppliedDigest == null
+        ? null
+        : run.planReview.suppliedDigest === run.planReview.planDigest,
+    planApprovedAt: run.planReview?.approvedAt ?? null,
+    planApprovedBy: run.planReview?.approvedBy ?? null,
+    planApprovalSource: run.planReview?.approvalSource ?? null,
+    planApprovalNote: run.planReview?.approvalNote ?? null,
     suitabilityDecision: run.suitability?.decision ?? null,
     suitabilityDecisionIsAutoRun: run.suitability?.decision === "auto-run",
     suitabilityDecisionIsNeedsHumanReview: run.suitability?.decision === "needs-human-review",
@@ -3342,6 +3363,11 @@ export async function openclawCodeRunCommand(
       branchName: opts.branchName,
       openPullRequest: Boolean(opts.openPr),
       mergeOnApprove: Boolean(opts.mergeOnApprove),
+      requirePlanApproval: Boolean(opts.requirePlanApproval || opts.approvePlanDigest),
+      approvePlanDigest: opts.approvePlanDigest,
+      planApprovalActor: opts.planApprovalActor,
+      planApprovalNote: opts.planApprovalNote,
+      planApprovalSource: opts.approvePlanDigest ? "cli" : undefined,
       suitabilityOverride:
         opts.suitabilityOverrideActor || opts.suitabilityOverrideReason
           ? {
@@ -3371,6 +3397,15 @@ export async function openclawCodeRunCommand(
 
   runtime.log(`Run: ${run.id}`);
   runtime.log(`Stage: ${run.stage}`);
+  if (run.planReview?.planDigest) {
+    runtime.log(`Plan Digest: ${run.planReview.planDigest}`);
+  }
+  if (run.stage === "awaiting-plan-approval" && run.planReview?.planDigest) {
+    runtime.log("Plan Approval: required before workspace preparation and code execution.");
+    runtime.log(
+      `Approve: openclaw code run --issue ${issueNumber} --repo-root ${repoRoot} --require-plan-approval --approve-plan-digest ${run.planReview.planDigest}`,
+    );
+  }
   if (run.workspace) {
     runtime.log(`Worktree: ${run.workspace.worktreePath}`);
     runtime.log(`Branch: ${run.workspace.branchName}`);

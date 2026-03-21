@@ -1,6 +1,7 @@
 export type WorkflowStage =
   | "intake"
   | "planning"
+  | "awaiting-plan-approval"
   | "building"
   | "draft-pr-opened"
   | "verifying"
@@ -268,6 +269,20 @@ export interface WorkflowStageGateSnapshot {
   gates: WorkflowStageGateRecordSnapshot[];
 }
 
+export type WorkflowPlanReviewStatus = "not-required" | "awaiting-approval" | "approved";
+
+export interface WorkflowPlanReviewSnapshot {
+  required: boolean;
+  status: WorkflowPlanReviewStatus;
+  planDigest: string | null;
+  requestedAt: string | null;
+  suppliedDigest: string | null;
+  approvedAt: string | null;
+  approvedBy: string | null;
+  approvalSource: string | null;
+  approvalNote: string | null;
+}
+
 export interface WorkflowRun {
   id: string;
   stage: WorkflowStage;
@@ -287,6 +302,7 @@ export interface WorkflowRun {
   roleRouting?: WorkflowRoleRoutingSnapshot;
   runtimeRouting?: WorkflowRuntimeRoutingSnapshot;
   stageGates?: WorkflowStageGateSnapshot;
+  planReview?: WorkflowPlanReviewSnapshot;
   handoffs?: WorkflowHandoffSnapshot;
   rerunContext?: WorkflowRerunContext;
   history: string[];

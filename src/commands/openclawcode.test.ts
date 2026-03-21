@@ -550,6 +550,32 @@ describe("openclawCodeRunCommand", () => {
     );
   });
 
+  it("forwards plan-approval metadata into workflow runs", async () => {
+    await openclawCodeRunCommand(
+      {
+        issue: "2",
+        repoRoot: "/repo",
+        json: true,
+        requirePlanApproval: true,
+        approvePlanDigest: "sha256:plan-123",
+        planApprovalActor: "chat:operator",
+        planApprovalNote: "Approved after reviewing the scope and tests.",
+      },
+      runtime,
+    );
+
+    expect(mocks.runIssueWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requirePlanApproval: true,
+        approvePlanDigest: "sha256:plan-123",
+        planApprovalActor: "chat:operator",
+        planApprovalNote: "Approved after reviewing the scope and tests.",
+        planApprovalSource: "cli",
+      }),
+      expect.anything(),
+    );
+  });
+
   it("prints empty top-level scope fields and blocks auto-merge when workflow data is missing", async () => {
     mocks.runIssueWorkflow.mockResolvedValue(
       createRun({
@@ -713,6 +739,51 @@ describe("openclawCodeRunCommand", () => {
     expect(payload.autoMergePolicyReason).toBe(
       "Not eligible for auto-merge: verification has not approved the run.",
     );
+  });
+
+  it("prints plan-review fields when a run is waiting for plan approval", async () => {
+    mocks.runIssueWorkflow.mockResolvedValue(
+      createRun({
+        stage: "awaiting-plan-approval",
+        workspace: undefined,
+        buildResult: undefined,
+        draftPullRequest: undefined,
+        verificationReport: undefined,
+        planReview: {
+          required: true,
+          status: "awaiting-approval",
+          planDigest:
+            "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          requestedAt: "2026-01-01T00:01:00.000Z",
+          suppliedDigest: "sha256:stale",
+          approvedAt: null,
+          approvedBy: null,
+          approvalSource: "cli",
+          approvalNote: "Previous digest is stale after replanning.",
+        },
+      }),
+    );
+
+    await openclawCodeRunCommand({ issue: "2", repoRoot: "/repo", json: true }, runtime);
+
+    const payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.stage).toBe("awaiting-plan-approval");
+    expect(payload.stageLabel).toBe("Awaiting Plan Approval");
+    expect(payload.planApprovalRequired).toBe(true);
+    expect(payload.planApprovalStatus).toBe("awaiting-approval");
+    expect(payload.planApprovalPending).toBe(true);
+    expect(payload.planApprovalApproved).toBe(false);
+    expect(payload.planDigest).toBe(
+      "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    );
+    expect(payload.planDigestPresent).toBe(true);
+    expect(payload.planApprovalRequestedAt).toBe("2026-01-01T00:01:00.000Z");
+    expect(payload.planApprovalSuppliedDigest).toBe("sha256:stale");
+    expect(payload.planApprovalSuppliedDigestMatches).toBe(false);
+    expect(payload.planApprovedAt).toBeNull();
+    expect(payload.planApprovedBy).toBeNull();
+    expect(payload.planApprovalSource).toBe("cli");
+    expect(payload.planApprovalNote).toBe("Previous digest is stale after replanning.");
   });
 
   it("prints null suitabilityReasonCount when suitability metadata is unavailable", async () => {
@@ -7381,6 +7452,7 @@ function createRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
         },
       ],
     },
+    planReview: undefined,
     verificationReport: {
       decision: "approve-for-human-review",
       summary: "Verification completed and the run is ready for human review.",
