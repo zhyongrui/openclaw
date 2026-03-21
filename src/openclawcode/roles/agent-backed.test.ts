@@ -626,6 +626,72 @@ describe("AgentBackedBuilder scope enforcement", () => {
       await fs.rm(worktreePath, { recursive: true, force: true });
     }
   });
+
+  it("reuses a persisted stage-steering runtime selection for the builder", async () => {
+    const worktreePath = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-agent-backed-"));
+    const agentRunner = new RecordingAgentRunner({
+      text: "Implemented through persisted stage steering.",
+    });
+    const builder = new AgentBackedBuilder({
+      agentRunner,
+      shellRunner: new FakeShellRunner(),
+      testCommands: [],
+      autoCommit: false,
+      collectChangedFiles: async () => [],
+    });
+
+    try {
+      const run = {
+        ...createRun(),
+        roleRouting: {
+          artifactExists: true,
+          blueprintRevisionId: "blueprint_rev_1",
+          mixedMode: true,
+          fallbackConfigured: false,
+          unresolvedRoleCount: 0,
+          routes: [
+            {
+              roleId: "coder",
+              adapterId: "codex",
+              source: "blueprint",
+              configured: true,
+              fallbackChain: [],
+            },
+          ],
+        },
+        runtimeRouting: {
+          selections: [
+            {
+              roleId: "coder",
+              adapterId: "claude-code",
+              assignmentSource: "blueprint",
+              configured: true,
+              appliedAgentId: "builder-steered",
+              agentSource: "stage-steering" as const,
+            },
+          ],
+        },
+        workspace: {
+          ...createRun().workspace!,
+          worktreePath,
+        },
+      };
+
+      expect(builder.previewRuntimeRouting(run)).toMatchObject({
+        roleId: "coder",
+        adapterId: "claude-code",
+        appliedAgentId: "builder-steered",
+        agentSource: "stage-steering",
+      });
+
+      await builder.build(run);
+
+      expect(agentRunner.requests).toHaveLength(1);
+      expect(agentRunner.requests[0]?.agentId).toBe("builder-steered");
+    } finally {
+      await fs.rm(worktreePath, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("AgentBackedVerifier", () => {
@@ -767,6 +833,76 @@ describe("AgentBackedVerifier", () => {
       } else {
         process.env.OPENCLAWCODE_ADAPTER_CODEX_AGENT_ID = previousAdapterAgentId;
       }
+      await fs.rm(worktreePath, { recursive: true, force: true });
+    }
+  });
+
+  it("reuses a persisted stage-steering runtime selection for the verifier", async () => {
+    const worktreePath = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-agent-backed-"));
+    const agentRunner = new RecordingAgentRunner({
+      text: JSON.stringify({
+        decision: "approve-for-human-review",
+        summary: "Looks good through persisted stage steering.",
+        findings: [],
+        missingCoverage: [],
+        followUps: [],
+      }),
+    });
+    const verifier = new AgentBackedVerifier({
+      agentRunner,
+      transientRetryAttempts: 1,
+      transientRetryDelayMs: 0,
+    });
+
+    try {
+      const run = {
+        ...createRun(),
+        roleRouting: {
+          artifactExists: true,
+          blueprintRevisionId: "blueprint_rev_1",
+          mixedMode: true,
+          fallbackConfigured: false,
+          unresolvedRoleCount: 0,
+          routes: [
+            {
+              roleId: "verifier",
+              adapterId: "codex",
+              source: "blueprint",
+              configured: true,
+              fallbackChain: [],
+            },
+          ],
+        },
+        runtimeRouting: {
+          selections: [
+            {
+              roleId: "verifier",
+              adapterId: "claude-code",
+              assignmentSource: "blueprint",
+              configured: true,
+              appliedAgentId: "verifier-steered",
+              agentSource: "stage-steering" as const,
+            },
+          ],
+        },
+        workspace: {
+          ...createRun().workspace!,
+          worktreePath,
+        },
+      };
+
+      expect(verifier.previewRuntimeRouting(run)).toMatchObject({
+        roleId: "verifier",
+        adapterId: "claude-code",
+        appliedAgentId: "verifier-steered",
+        agentSource: "stage-steering",
+      });
+
+      await verifier.verify(run);
+
+      expect(agentRunner.requests).toHaveLength(1);
+      expect(agentRunner.requests[0]?.agentId).toBe("verifier-steered");
+    } finally {
       await fs.rm(worktreePath, { recursive: true, force: true });
     }
   });

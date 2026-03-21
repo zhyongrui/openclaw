@@ -74,12 +74,23 @@ function findRoleRoute(run: WorkflowRun, roleId: AgentBackedRoleId) {
   return run.roleRouting?.routes.find((route) => route.roleId === roleId);
 }
 
+function findPersistedRuntimeSelection(run: WorkflowRun, roleId: AgentBackedRoleId) {
+  return run.runtimeRouting?.selections.find(
+    (selection) => selection.roleId === roleId && selection.agentSource === "stage-steering",
+  );
+}
+
 function deriveRuntimeRoleSelection(params: {
   run: WorkflowRun;
   roleId: AgentBackedRoleId;
   explicitAgentId?: string;
   env?: NodeJS.ProcessEnv;
 }): WorkflowRuntimeRoleSelection {
+  const persistedSelection = findPersistedRuntimeSelection(params.run, params.roleId);
+  if (persistedSelection) {
+    return persistedSelection;
+  }
+
   const route = findRoleRoute(params.run, params.roleId);
   const requestedRerouteAgentId = trimAgentId(
     params.roleId === "coder"

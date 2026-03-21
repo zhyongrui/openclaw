@@ -37,6 +37,8 @@ import {
   openclawCodePromotionReceiptRecordCommand,
   openclawCodePromotionReceiptShowCommand,
   openclawCodeProjectProgressShowCommand,
+  openclawCodeRuntimeSteeringSetCommand,
+  openclawCodeRuntimeSteeringShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
   openclawCodeRerouteRunCommand,
   openclawCodeRollbackReceiptRecordCommand,
@@ -5468,6 +5470,71 @@ EOF
         process.env.OPENCLAWCODE_ROLE_VERIFIER_FALLBACKS = previousVerifierFallbacks;
       }
     }
+  });
+
+  it("persists repo-local per-stage runtime steering overrides", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "openclawcode-runtime-steering-"));
+
+    await openclawCodeRuntimeSteeringSetCommand(
+      {
+        repoRoot,
+        stage: "building",
+        adapter: "claude-code",
+        agent: "builder-steered",
+        actor: "tester",
+        note: "route build stage to alternate runtime",
+        json: true,
+      },
+      runtime,
+    );
+
+    let payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      exists: true,
+      overrideCount: 1,
+      overrides: [
+        expect.objectContaining({
+          stageId: "building",
+          roleId: "coder",
+          adapterId: "claude-code",
+          agentId: "builder-steered",
+          actor: "tester",
+          note: "route build stage to alternate runtime",
+        }),
+      ],
+    });
+
+    runtime.log.mockClear();
+    await openclawCodeRuntimeSteeringShowCommand(
+      {
+        repoRoot,
+        json: true,
+      },
+      runtime,
+    );
+
+    payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload).toMatchObject({
+      repoRoot,
+      exists: true,
+      overrideCount: 1,
+    });
+
+    runtime.log.mockClear();
+    await openclawCodeRuntimeSteeringSetCommand(
+      {
+        repoRoot,
+        stage: "building",
+        clear: true,
+        json: true,
+      },
+      runtime,
+    );
+
+    payload = JSON.parse(runtime.log.mock.calls[0]?.[0] ?? "null");
+    expect(payload.overrideCount).toBe(0);
+    expect(payload.overrides).toEqual([]);
   });
 
   it("persists stage-gate readiness and records structured decisions", async () => {

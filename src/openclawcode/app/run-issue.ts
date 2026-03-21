@@ -33,6 +33,10 @@ import {
   type Verifier,
 } from "../roles/index.js";
 import {
+  applyRuntimeSteeringOverride,
+  readProjectRuntimeSteeringArtifact,
+} from "../runtime-steering.js";
+import {
   AgentRunFailureError,
   formatAgentRunFailureDiagnostics,
   type ShellRunner,
@@ -910,7 +914,17 @@ export async function runIssueWorkflow(
   );
   await deps.store.save(run);
 
-  const buildRuntimeRouting = deps.builder.previewRuntimeRouting?.(run);
+  const runtimeSteering = await readProjectRuntimeSteeringArtifact(request.repoRoot);
+
+  const buildRuntimeRoutingPreview = deps.builder.previewRuntimeRouting?.(run);
+  const buildRuntimeRouting =
+    buildRuntimeRoutingPreview == null
+      ? undefined
+      : applyRuntimeSteeringOverride({
+          selection: buildRuntimeRoutingPreview,
+          stageId: "building",
+          steering: runtimeSteering,
+        });
   if (buildRuntimeRouting) {
     run = upsertRuntimeRoutingSelection(run, buildRuntimeRouting, now);
     await deps.store.save(run);
@@ -1026,7 +1040,15 @@ export async function runIssueWorkflow(
     await deps.store.save(run);
   }
 
-  const verificationRuntimeRouting = deps.verifier.previewRuntimeRouting?.(run);
+  const verificationRuntimeRoutingPreview = deps.verifier.previewRuntimeRouting?.(run);
+  const verificationRuntimeRouting =
+    verificationRuntimeRoutingPreview == null
+      ? undefined
+      : applyRuntimeSteeringOverride({
+          selection: verificationRuntimeRoutingPreview,
+          stageId: "verifying",
+          steering: runtimeSteering,
+        });
   if (verificationRuntimeRouting) {
     run = upsertRuntimeRoutingSelection(run, verificationRuntimeRouting, now);
     await deps.store.save(run);

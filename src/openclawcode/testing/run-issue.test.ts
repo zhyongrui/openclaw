@@ -2296,6 +2296,130 @@ describe("runIssueWorkflow", () => {
     }
   });
 
+  it("applies repo-local per-stage runtime steering before build and verification", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
+    const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-repo-"));
+
+    try {
+      await fs.mkdir(path.join(repoRoot, ".openclawcode"), { recursive: true });
+      await fs.writeFile(
+        path.join(repoRoot, ".openclawcode", "runtime-steering.json"),
+        JSON.stringify(
+          {
+            repoRoot,
+            artifactPath: path.join(repoRoot, ".openclawcode", "runtime-steering.json"),
+            exists: true,
+            schemaVersion: 1,
+            generatedAt: "2026-03-21T16:36:00.000Z",
+            overrideCount: 2,
+            overrides: [
+              {
+                stageId: "building",
+                roleId: "coder",
+                adapterId: "claude-code",
+                agentId: "builder-steered",
+                actor: "tester",
+                note: "force alternate build runtime",
+                updatedAt: "2026-03-21T16:36:00.000Z",
+              },
+              {
+                stageId: "verifying",
+                roleId: "verifier",
+                adapterId: "codex",
+                agentId: "verifier-steered",
+                actor: "tester",
+                note: "force alternate verify runtime",
+                updatedAt: "2026-03-21T16:37:00.000Z",
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const workspace: WorkflowWorkspace = {
+        repoRoot,
+        baseBranch: "main",
+        branchName: "openclawcode/issue-163",
+        worktreePath: path.join(repoRoot, ".openclawcode", "worktrees", "run-163"),
+        preparedAt: "2026-03-09T13:00:00.000Z",
+      };
+      const run = await runIssueWorkflow(
+        {
+          owner: "zhyongrui",
+          repo: "openclawcode",
+          issueNumber: 163,
+          repoRoot,
+          stateDir,
+          baseBranch: "main",
+        },
+        {
+          github: new FakeGitHubClient(),
+          planner: new HeuristicPlanner(),
+          builder: new RuntimeAwareFakeBuilder({
+            roleId: "coder",
+            adapterId: "codex",
+            assignmentSource: "blueprint",
+            configured: true,
+            appliedAgentId: "codex-coder",
+            agentSource: "adapter-env",
+          }),
+          verifier: new RuntimeAwareFakeVerifier(
+            {
+              decision: "approve-for-human-review",
+              summary: "Looks good.",
+              findings: [],
+              missingCoverage: [],
+              followUps: [],
+            },
+            {
+              roleId: "verifier",
+              adapterId: "claude-code",
+              assignmentSource: "blueprint",
+              configured: true,
+              appliedAgentId: "claude-reviewer",
+              agentSource: "role-env",
+            },
+          ),
+          store: new FileSystemWorkflowRunStore(path.join(stateDir, "runs")),
+          worktreeManager: new FakeWorkspaceManager(workspace, ["src/commands/openclawcode.ts"]),
+          shellRunner: new NoopShellRunner(),
+          now: createSequenceNow(),
+        },
+      );
+
+      expect(run.runtimeRouting?.selections).toEqual([
+        {
+          roleId: "coder",
+          adapterId: "claude-code",
+          assignmentSource: "blueprint",
+          configured: true,
+          appliedAgentId: "builder-steered",
+          agentSource: "stage-steering",
+        },
+        {
+          roleId: "verifier",
+          adapterId: "codex",
+          assignmentSource: "blueprint",
+          configured: true,
+          appliedAgentId: "verifier-steered",
+          agentSource: "stage-steering",
+        },
+      ]);
+      expect(run.history).toEqual(
+        expect.arrayContaining([
+          "Runtime routing for coder: requested claude-code resolved via stage-steering using builder-steered.",
+          "Runtime routing for verifier: requested codex resolved via stage-steering using verifier-steered.",
+        ]),
+      );
+    } finally {
+      await fs.rm(repoRoot, { recursive: true, force: true });
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("stops at changes-requested when verification fails", async () => {
     const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclawcode-state-"));
 

@@ -30,7 +30,12 @@ import {
   updateProjectBlueprintStatus,
   type ProjectBlueprintStatus,
 } from "../openclawcode/blueprint.js";
-import type { ExecutionSpec, WorkflowRerunContext, WorkflowRun } from "../openclawcode/index.js";
+import type {
+  ExecutionSpec,
+  ProjectRuntimeSteeringStageId,
+  WorkflowRerunContext,
+  WorkflowRun,
+} from "../openclawcode/index.js";
 import {
   assessValidationIssueImplementation,
   classifyValidationIssue,
@@ -50,6 +55,7 @@ import {
   AgentBackedVerifier,
   readProjectDiscoveryInventory,
   readProjectIssueMaterializationArtifact,
+  readProjectRuntimeSteeringArtifact,
   readProjectRoleRoutingPlan,
   readProjectPromotionGateArtifact,
   readProjectPromotionReceiptArtifact,
@@ -86,6 +92,8 @@ import {
   resolveAutoMergeDisposition,
   resolveAutoMergePolicy,
   type OpenClawCodeOperatorStatusSnapshot,
+  recordProjectRuntimeSteeringOverride,
+  projectRuntimeSteeringStageIds,
   resolveValidationPoolDeficits,
 } from "../openclawcode/index.js";
 import type { RuntimeEnv } from "../runtime.js";
@@ -270,6 +278,22 @@ export interface OpenClawCodeRoleRoutingShowOpts {
 
 export interface OpenClawCodeStageGatesRefreshOpts {
   repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeRuntimeSteeringShowOpts {
+  repoRoot?: string;
+  json?: boolean;
+}
+
+export interface OpenClawCodeRuntimeSteeringSetOpts {
+  repoRoot?: string;
+  stage: string;
+  adapter?: string;
+  agent?: string;
+  actor?: string;
+  note?: string;
+  clear?: boolean;
   json?: boolean;
 }
 
@@ -2100,6 +2124,29 @@ function logProjectStageGateArtifact(params: {
   runtime.log(`Needs human decision: ${artifact.needsHumanDecisionCount}`);
   for (const gate of artifact.gates) {
     runtime.log(`- ${gate.gateId}: ${gate.readiness} | ${gate.title}`);
+  }
+}
+
+function logProjectRuntimeSteeringArtifact(params: {
+  artifact: Awaited<ReturnType<typeof readProjectRuntimeSteeringArtifact>>;
+  runtime: RuntimeEnv;
+  json?: boolean;
+}): void {
+  const { artifact, runtime } = params;
+  if (params.json) {
+    runtime.log(JSON.stringify(artifact, null, 2));
+    return;
+  }
+
+  runtime.log(`Repo root: ${artifact.repoRoot}`);
+  runtime.log(`Runtime-steering path: ${artifact.artifactPath}`);
+  runtime.log(`Exists: ${artifact.exists ? "yes" : "no"}`);
+  runtime.log(`Generated at: ${artifact.generatedAt ?? "not yet generated"}`);
+  runtime.log(`Overrides: ${artifact.overrideCount}`);
+  for (const override of artifact.overrides) {
+    runtime.log(
+      `- ${override.stageId}: role=${override.roleId} adapter=${override.adapterId ?? "unchanged"} agent=${override.agentId ?? "runner-default"} actor=${override.actor ?? "unknown"} updated=${override.updatedAt}${override.note ? ` | note=${override.note}` : ""}`,
+    );
   }
 }
 
@@ -4575,6 +4622,49 @@ export function openclawCodeStageGateIds(): string[] {
 
 export function openclawCodeStageGateDecisionIds(): string[] {
   return projectStageGateDecisionIds();
+}
+
+export function openclawCodeRuntimeSteeringStageIds(): string[] {
+  return projectRuntimeSteeringStageIds();
+}
+
+export async function openclawCodeRuntimeSteeringShowCommand(
+  opts: OpenClawCodeRuntimeSteeringShowOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const artifact = await readProjectRuntimeSteeringArtifact(repoRoot);
+  logProjectRuntimeSteeringArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
+}
+
+export async function openclawCodeRuntimeSteeringSetCommand(
+  opts: OpenClawCodeRuntimeSteeringSetOpts,
+  runtime: RuntimeEnv,
+): Promise<void> {
+  const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
+  const adapter = opts.adapter?.trim();
+  const agent = opts.agent?.trim();
+  if (!opts.clear && !adapter && !agent) {
+    throw new Error("Pass --adapter, --agent, or --clear.");
+  }
+  const artifact = await recordProjectRuntimeSteeringOverride({
+    repoRoot,
+    stageId: opts.stage as ProjectRuntimeSteeringStageId,
+    adapterId: adapter,
+    agentId: agent,
+    actor: opts.actor,
+    note: opts.note,
+    clear: Boolean(opts.clear),
+  });
+  logProjectRuntimeSteeringArtifact({
+    artifact,
+    runtime,
+    json: Boolean(opts.json),
+  });
 }
 
 export async function openclawCodeStageGatesRefreshCommand(

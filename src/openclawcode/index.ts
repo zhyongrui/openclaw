@@ -14,6 +14,7 @@ export * from "./promotion-artifacts.js";
 export * from "./role-routing.js";
 export * from "./roles/index.js";
 export * from "./runtime/index.js";
+export * from "./runtime-steering.js";
 export * from "./stage-gates.js";
 export * from "./validation-issues.js";
 export * from "./work-items.js";

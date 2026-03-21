@@ -208,7 +208,13 @@ export interface WorkflowRuntimeRoleSelection {
   assignmentSource: string | null;
   configured: boolean;
   appliedAgentId: string | null;
-  agentSource: "rerun-request" | "cli-override" | "role-env" | "adapter-env" | "runner-default";
+  agentSource:
+    | "rerun-request"
+    | "cli-override"
+    | "role-env"
+    | "adapter-env"
+    | "runner-default"
+    | "stage-steering";
 }
 
 export interface WorkflowRuntimeRoutingSnapshot {

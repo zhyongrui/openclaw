@@ -525,7 +525,7 @@ Status:
 - `[x]` model access exists
 - `[x]` first repo-local role-routing plan landed
 - `[x]` first runtime artifact integration landed
-- `[ ]` per-stage runtime steering still open
+- `[x]` per-stage runtime steering landed
 
 Tasks:
 

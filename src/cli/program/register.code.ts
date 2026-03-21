@@ -25,6 +25,9 @@ import {
   openclawCodePromotionReceiptRecordCommand,
   openclawCodePromotionReceiptShowCommand,
   openclawCodeProjectProgressShowCommand,
+  openclawCodeRuntimeSteeringSetCommand,
+  openclawCodeRuntimeSteeringShowCommand,
+  openclawCodeRuntimeSteeringStageIds,
   openclawCodeRoleRoutingRefreshCommand,
   openclawCodeRoleRoutingShowCommand,
   openclawCodeReconcileValidationIssuesCommand,
@@ -128,6 +131,14 @@ ${formatHelpExamples([
   [
     "openclaw code autonomous-loop-run --once --json",
     "Run one autonomous progress iteration and persist its result.",
+  ],
+  [
+    "openclaw code runtime-steering-show --json",
+    "Inspect the repo-local per-stage runtime steering overrides.",
+  ],
+  [
+    "openclaw code runtime-steering-set --stage building --agent codex-alt --json",
+    "Steer one workflow stage onto an explicit runtime agent before the next run.",
   ],
   [
     "openclaw code role-routing-refresh --json",
@@ -598,6 +609,55 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/code", "docs.openclaw.ai/cli/code
         await openclawCodeAutonomousLoopShowCommand(
           {
             repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("runtime-steering-show")
+    .description("Show the current repo-local per-stage runtime steering artifact")
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeRuntimeSteeringShowCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            json: Boolean(opts.json),
+          },
+          defaultRuntime,
+        );
+      });
+    });
+
+  code
+    .command("runtime-steering-set")
+    .description("Persist a repo-local per-stage runtime steering override")
+    .requiredOption(
+      "--stage <stage>",
+      `Workflow stage (${openclawCodeRuntimeSteeringStageIds().join(", ")})`,
+    )
+    .option("--repo-root <dir>", "Local repository root")
+    .option("--adapter <id>", "Preferred adapter id for the stage")
+    .option("--agent <id>", "Explicit agent id for the stage")
+    .option("--actor <text>", "Actor recording the override")
+    .option("--note <text>", "Override note")
+    .option("--clear", "Clear the override for the stage", false)
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runCommandWithRuntime(defaultRuntime, async () => {
+        await openclawCodeRuntimeSteeringSetCommand(
+          {
+            repoRoot: opts.repoRoot as string | undefined,
+            stage: opts.stage as string,
+            adapter: opts.adapter as string | undefined,
+            agent: opts.agent as string | undefined,
+            actor: opts.actor as string | undefined,
+            note: opts.note as string | undefined,
+            clear: Boolean(opts.clear),
             json: Boolean(opts.json),
           },
           defaultRuntime,
