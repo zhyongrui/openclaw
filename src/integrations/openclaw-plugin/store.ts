@@ -197,6 +197,7 @@ export interface OpenClawCodeIssueStatusSnapshot {
   rerunManualTakeoverActor?: string;
   rerunManualTakeoverWorktreePath?: string;
   rerunManualResumeNote?: string;
+  runtimeRoutingSummary?: string;
   suitabilityDecision?: SuitabilityDecision;
   suitabilitySummary?: string;
   suitabilityAllowlisted?: boolean;
@@ -877,6 +878,10 @@ function normalizeStatusSnapshot(raw: unknown): OpenClawCodeIssueStatusSnapshot 
       typeof candidate.rerunManualResumeNote === "string"
         ? candidate.rerunManualResumeNote
         : undefined,
+    runtimeRoutingSummary:
+      typeof candidate.runtimeRoutingSummary === "string"
+        ? candidate.runtimeRoutingSummary
+        : undefined,
     suitabilityDecision:
       candidate.suitabilityDecision === "auto-run" ||
       candidate.suitabilityDecision === "needs-human-review" ||
@@ -1129,6 +1134,7 @@ function normalizeWorkflowHandoffEntry(raw: unknown): WorkflowHandoffEntry | und
   if (
     candidate.kind !== "stage-gate-decision" &&
     candidate.kind !== "rerun-request" &&
+    candidate.kind !== "runtime-steering" &&
     candidate.kind !== "runtime-reroute" &&
     candidate.kind !== "manual-takeover" &&
     candidate.kind !== "manual-resume" &&
@@ -1162,6 +1168,25 @@ function normalizeWorkflowHandoffEntry(raw: unknown): WorkflowHandoffEntry | und
         : undefined,
     worktreePath: typeof candidate.worktreePath === "string" ? candidate.worktreePath : undefined,
   };
+}
+
+function buildRuntimeRoutingSummary(run: WorkflowRun): string | undefined {
+  const selections = run.runtimeRouting?.selections;
+  if (!selections || selections.length === 0) {
+    return undefined;
+  }
+
+  return selections
+    .map((selection) =>
+      [
+        `${selection.roleId}=${selection.appliedAgentId ?? "runner-default"}`,
+        selection.adapterId ? `adapter=${selection.adapterId}` : undefined,
+        `source=${selection.agentSource}`,
+      ]
+        .filter(Boolean)
+        .join(" | "),
+    )
+    .join(" || ");
 }
 
 function buildStatusSnapshot(params: {
@@ -1202,6 +1227,7 @@ function buildStatusSnapshot(params: {
     rerunManualTakeoverActor: params.run.rerunContext?.manualTakeoverActor,
     rerunManualTakeoverWorktreePath: params.run.rerunContext?.manualTakeoverWorktreePath,
     rerunManualResumeNote: params.run.rerunContext?.manualResumeNote,
+    runtimeRoutingSummary: buildRuntimeRoutingSummary(params.run),
     suitabilityDecision: params.run.suitability?.decision,
     suitabilitySummary: params.run.suitability?.summary,
     suitabilityAllowlisted: params.run.suitability?.allowlisted,

@@ -2116,8 +2116,19 @@ function buildTopLevelSuitabilityPolicyLines(snapshot: OpenClawCodeIssueStatusSn
   ];
 }
 
+function buildTopLevelRuntimeRoutingLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
+  if (!snapshot.runtimeRoutingSummary || snapshot.status.includes("\nRuntime routing:")) {
+    return [];
+  }
+  return [`Runtime routing: ${snapshot.runtimeRoutingSummary}`];
+}
+
 function buildTopLevelHandoffSummaryLines(snapshot: OpenClawCodeIssueStatusSnapshot): string[] {
-  if (!snapshot.handoffEntries || snapshot.handoffEntries.length === 0) {
+  if (
+    !snapshot.handoffEntries ||
+    snapshot.handoffEntries.length === 0 ||
+    snapshot.status.includes("\nHandoffs:")
+  ) {
     return [];
   }
 
@@ -7398,6 +7409,7 @@ export default {
             record: deferredRuntimeReroute,
             topLevel: true,
           }),
+          ...(currentSnapshot ? buildTopLevelRuntimeRoutingLines(currentSnapshot) : []),
           ...(currentSnapshot ? buildTopLevelHandoffSummaryLines(currentSnapshot) : []),
           ...(currentSnapshot ? buildTopLevelSuitabilityPolicyLines(currentSnapshot) : []),
           ...(currentSnapshot ? buildTopLevelAutoMergePolicyLines(currentSnapshot) : []),

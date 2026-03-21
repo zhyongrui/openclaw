@@ -4839,6 +4839,8 @@ describe("openclawcode extension", () => {
         owner: "zhyongrui",
         repo: "openclawcode",
         issueNumber: 6628,
+        runtimeRoutingSummary:
+          "coder=codex-alt | adapter=codex | source=stage-steering || verifier=claude-main | adapter=claude-code | source=role-env",
         handoffEntries: [
           {
             kind: "stage-gate-decision",
@@ -4852,6 +4854,11 @@ describe("openclawcode extension", () => {
             recordedAt: "2026-03-21T00:56:00.000Z",
             summary: "coder=codex-alt",
             requestedCoderAgentId: "codex-alt",
+          },
+          {
+            kind: "runtime-steering",
+            recordedAt: "2026-03-21T00:56:30.000Z",
+            summary: "stage=building | role=coder | adapter=codex | agent=codex-alt",
           },
           {
             kind: "suitability-override",
@@ -4871,7 +4878,10 @@ describe("openclawcode extension", () => {
       });
 
       expect(result?.text).toContain(
-        "Handoffs: runtime-reroute=1, stage-gate-decision=1, suitability-override=1",
+        "Runtime routing: coder=codex-alt | adapter=codex | source=stage-steering || verifier=claude-main | adapter=claude-code | source=role-env",
+      );
+      expect(result?.text).toContain(
+        "Handoffs: runtime-reroute=1, runtime-steering=1, stage-gate-decision=1, suitability-override=1",
       );
     } finally {
       await cleanupPluginFixture(fixture);

@@ -1002,6 +1002,42 @@ function formatStageGateStatus(run: WorkflowRun): string | undefined {
   return parts.length > 0 ? parts.join(", ") : undefined;
 }
 
+function formatRuntimeRoutingStatus(run: WorkflowRun): string | undefined {
+  const selections = run.runtimeRouting?.selections;
+  if (!selections || selections.length === 0) {
+    return undefined;
+  }
+
+  return selections
+    .map((selection) =>
+      [
+        `${selection.roleId}=${selection.appliedAgentId ?? "runner-default"}`,
+        selection.adapterId ? `adapter=${selection.adapterId}` : undefined,
+        `source=${selection.agentSource}`,
+      ]
+        .filter(Boolean)
+        .join(" | "),
+    )
+    .join(" || ");
+}
+
+function formatHandoffStatus(run: WorkflowRun): string | undefined {
+  const entries = run.handoffs?.entries;
+  if (!entries || entries.length === 0) {
+    return undefined;
+  }
+
+  const counts = new Map<string, number>();
+  for (const entry of entries) {
+    counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .toSorted((left, right) => left[0].localeCompare(right[0]))
+    .map(([kind, count]) => `${kind}=${count}`)
+    .join(", ");
+}
+
 export function buildRunStatusMessage(run: WorkflowRun): string {
   const lines = [
     `openclawcode status for ${formatIssueKey(run.issue)}`,
@@ -1030,6 +1066,16 @@ export function buildRunStatusMessage(run: WorkflowRun): string {
   const stageGateStatus = formatStageGateStatus(run);
   if (stageGateStatus) {
     lines.push(`Stage gates: ${stageGateStatus}`);
+  }
+
+  const runtimeRoutingStatus = formatRuntimeRoutingStatus(run);
+  if (runtimeRoutingStatus) {
+    lines.push(`Runtime routing: ${runtimeRoutingStatus}`);
+  }
+
+  const handoffStatus = formatHandoffStatus(run);
+  if (handoffStatus) {
+    lines.push(`Handoffs: ${handoffStatus}`);
   }
 
   lines.push(...buildWorkflowFailureDiagnosticLines({ diagnostics: run.failureDiagnostics }));

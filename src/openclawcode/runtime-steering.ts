@@ -213,6 +213,6 @@ export function applyRuntimeSteeringOverride(params: {
     ...params.selection,
     adapterId: override.adapterId ?? params.selection.adapterId,
     appliedAgentId: override.agentId ?? params.selection.appliedAgentId,
-    agentSource: override.agentId ? "stage-steering" : params.selection.agentSource,
+    agentSource: "stage-steering",
   };
 }

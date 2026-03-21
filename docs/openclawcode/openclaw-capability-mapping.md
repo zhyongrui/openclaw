@@ -556,7 +556,7 @@ Status:
 - `[x]` first workflow-run stage-gate snapshot landed
 - `[x]` explicit plan approval before code execution landed
 - `[x]` explicit plan editing before code execution landed
-- `[ ]` runtime-aware handoff still open
+- `[x]` runtime-aware handoff landed
 
 Tasks:
 
@@ -594,7 +594,11 @@ Acceptance:
     - suitability overrides
     - rerun requests
     - runtime reroutes
+    - stage-level runtime steering
     - manual takeover / manual resume context
+  - run status and `/occode-status` now surface structured runtime-routing
+    summaries alongside the handoff ledger, so operator handoffs stay legible
+    after the run leaves the CLI
 
 ### Phase M8: Chatops Integration
 

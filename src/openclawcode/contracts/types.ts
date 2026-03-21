@@ -225,6 +225,7 @@ export type WorkflowHandoffKind =
   | "stage-gate-decision"
   | "plan-edit"
   | "rerun-request"
+  | "runtime-steering"
   | "runtime-reroute"
   | "manual-takeover"
   | "manual-resume"

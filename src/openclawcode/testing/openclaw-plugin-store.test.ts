@@ -45,6 +45,7 @@ function createWorkflowRun(params: {
   prUrl?: string;
   rerunContext?: WorkflowRun["rerunContext"];
   handoffs?: WorkflowRun["handoffs"];
+  runtimeRouting?: WorkflowRun["runtimeRouting"];
 }): WorkflowRun {
   const updatedAt = params.updatedAt ?? "2026-03-10T08:30:00.000Z";
   return {
@@ -101,6 +102,7 @@ function createWorkflowRun(params: {
       missingCoverage: [],
       followUps: [],
     },
+    runtimeRouting: params.runtimeRouting,
     rerunContext: params.rerunContext,
     handoffs: params.handoffs,
   };
@@ -797,6 +799,12 @@ describe("OpenClawCodeChatopsStore", () => {
         handoffs: {
           entries: [
             {
+              kind: "runtime-steering",
+              recordedAt: "2026-03-10T08:23:00.000Z",
+              summary:
+                "stage=verifying | role=verifier | adapter=claude-code | agent=claude-reroute",
+            },
+            {
               kind: "rerun-request",
               recordedAt: "2026-03-10T08:25:00.000Z",
               summary: "Address GitHub review feedback",
@@ -825,6 +833,26 @@ describe("OpenClawCodeChatopsStore", () => {
               actor: "user:operator",
               summary: "Human updated the worktree before rerun.",
               worktreePath: "/repo/.openclawcode/worktrees/issue-109",
+            },
+          ],
+        },
+        runtimeRouting: {
+          selections: [
+            {
+              roleId: "coder",
+              adapterId: "codex",
+              assignmentSource: "blueprint",
+              configured: true,
+              appliedAgentId: "codex-reroute",
+              agentSource: "rerun-request",
+            },
+            {
+              roleId: "verifier",
+              adapterId: "claude-code",
+              assignmentSource: "blueprint",
+              configured: true,
+              appliedAgentId: "claude-reroute",
+              agentSource: "stage-steering",
             },
           ],
         },
@@ -859,6 +887,8 @@ describe("OpenClawCodeChatopsStore", () => {
         rerunManualTakeoverActor: "user:operator",
         rerunManualTakeoverWorktreePath: "/repo/.openclawcode/worktrees/issue-109",
         rerunManualResumeNote: "Human updated the worktree before rerun.",
+        runtimeRoutingSummary:
+          "coder=codex-reroute | adapter=codex | source=rerun-request || verifier=claude-reroute | adapter=claude-code | source=stage-steering",
         latestReviewDecision: "changes-requested",
         latestReviewSubmittedAt: "2026-03-10T08:20:00.000Z",
         latestReviewSummary: "Please add a regression test for the rerun path.",
@@ -867,6 +897,11 @@ describe("OpenClawCodeChatopsStore", () => {
         autoMergePolicyReason:
           "Not eligible for auto-merge: suitability did not accept autonomous execution.",
         handoffEntries: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "runtime-steering",
+            summary:
+              "stage=verifying | role=verifier | adapter=claude-code | agent=claude-reroute",
+          }),
           expect.objectContaining({
             kind: "rerun-request",
             summary: "Address GitHub review feedback",

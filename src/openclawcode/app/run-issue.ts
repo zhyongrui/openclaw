@@ -544,6 +544,40 @@ function buildRerunContextHandoffs(rerunContext: WorkflowRerunContext): Workflow
   return entries;
 }
 
+function buildRuntimeSteeringHandoffEntry(params: {
+  stageId: "building" | "verifying";
+  selection: WorkflowRuntimeRoleSelection;
+  steering: Awaited<ReturnType<typeof readProjectRuntimeSteeringArtifact>>;
+}): WorkflowHandoffEntry[] {
+  const override = params.steering.overrides.find(
+    (entry) => entry.stageId === params.stageId && entry.roleId === params.selection.roleId,
+  );
+  if (!override) {
+    return [];
+  }
+
+  return [
+    {
+      kind: "runtime-steering",
+      recordedAt: override.updatedAt,
+      actor: override.actor ?? undefined,
+      note: override.note ?? undefined,
+      summary: [
+        `stage=${params.stageId}`,
+        `role=${params.selection.roleId}`,
+        `adapter=${params.selection.adapterId ?? "unchanged"}`,
+        `agent=${params.selection.appliedAgentId ?? "runner-default"}`,
+      ].join(" | "),
+      requestedCoderAgentId:
+        params.selection.roleId === "coder" ? params.selection.appliedAgentId ?? undefined : undefined,
+      requestedVerifierAgentId:
+        params.selection.roleId === "verifier"
+          ? params.selection.appliedAgentId ?? undefined
+          : undefined,
+    },
+  ];
+}
+
 async function captureWorkflowPlanningContext(
   repoRootInput: string,
 ): Promise<Pick<WorkflowRun, "blueprintContext" | "roleRouting" | "stageGates" | "handoffs">> {
@@ -926,6 +960,14 @@ export async function runIssueWorkflow(
           steering: runtimeSteering,
         });
   if (buildRuntimeRouting) {
+    run = appendWorkflowHandoffEntries(
+      run,
+      buildRuntimeSteeringHandoffEntry({
+        stageId: "building",
+        selection: buildRuntimeRouting,
+        steering: runtimeSteering,
+      }),
+    );
     run = upsertRuntimeRoutingSelection(run, buildRuntimeRouting, now);
     await deps.store.save(run);
   }
@@ -1050,6 +1092,14 @@ export async function runIssueWorkflow(
           steering: runtimeSteering,
         });
   if (verificationRuntimeRouting) {
+    run = appendWorkflowHandoffEntries(
+      run,
+      buildRuntimeSteeringHandoffEntry({
+        stageId: "verifying",
+        selection: verificationRuntimeRouting,
+        steering: runtimeSteering,
+      }),
+    );
     run = upsertRuntimeRoutingSelection(run, verificationRuntimeRouting, now);
     await deps.store.save(run);
   }

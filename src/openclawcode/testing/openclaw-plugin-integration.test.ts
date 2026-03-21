@@ -148,6 +148,26 @@ function createRun(): WorkflowRun {
         },
       ],
     },
+    runtimeRouting: {
+      selections: [
+        {
+          roleId: "coder",
+          adapterId: "codex",
+          assignmentSource: "blueprint",
+          configured: true,
+          appliedAgentId: "codex-coder",
+          agentSource: "adapter-env",
+        },
+        {
+          roleId: "verifier",
+          adapterId: "claude-code",
+          assignmentSource: "blueprint",
+          configured: true,
+          appliedAgentId: "verifier-steered",
+          agentSource: "stage-steering",
+        },
+      ],
+    },
     stageGates: {
       artifactExists: true,
       blueprintRevisionId: "rev-2026-03-16",
@@ -199,6 +219,15 @@ function createRun(): WorkflowRun {
           blockerCount: 0,
           suggestionCount: 1,
           latestDecision: null,
+        },
+      ],
+    },
+    handoffs: {
+      entries: [
+        {
+          kind: "runtime-steering",
+          recordedAt: "2026-03-10T06:12:30.000Z",
+          summary: "stage=verifying | role=verifier | adapter=claude-code | agent=verifier-steered",
         },
       ],
     },
@@ -457,6 +486,10 @@ describe("openclaw plugin integration helpers", () => {
     expect(message).toContain(
       "Stage gates: blocked=0, needsHuman=1, goal=ready, projection=ready, execution=ready, merge=needs-human-decision",
     );
+    expect(message).toContain(
+      "Runtime routing: coder=codex-coder | adapter=codex | source=adapter-env || verifier=verifier-steered | adapter=claude-code | source=stage-steering",
+    );
+    expect(message).toContain("Handoffs: runtime-steering=1");
     expect(message).toContain("PR: https://github.com/zhyongrui/openclawcode/pull/35");
     expect(message).toContain("Verification: approve-for-human-review");
   });

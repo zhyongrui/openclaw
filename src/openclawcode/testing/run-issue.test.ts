@@ -2414,6 +2414,24 @@ describe("runIssueWorkflow", () => {
           "Runtime routing for verifier: requested codex resolved via stage-steering using verifier-steered.",
         ]),
       );
+      expect(run.handoffs?.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "runtime-steering",
+            actor: "tester",
+            summary:
+              "stage=building | role=coder | adapter=claude-code | agent=builder-steered",
+            requestedCoderAgentId: "builder-steered",
+          }),
+          expect.objectContaining({
+            kind: "runtime-steering",
+            actor: "tester",
+            summary:
+              "stage=verifying | role=verifier | adapter=codex | agent=verifier-steered",
+            requestedVerifierAgentId: "verifier-steered",
+          }),
+        ]),
+      );
     } finally {
       await fs.rm(repoRoot, { recursive: true, force: true });
       await fs.rm(stateDir, { recursive: true, force: true });
