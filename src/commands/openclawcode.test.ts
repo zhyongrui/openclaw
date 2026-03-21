@@ -5017,6 +5017,20 @@ describe("openclawCodeRunCommand", () => {
       priority: "high",
     });
     expect(payload.evidence[0].discoveredWorkItem.kind).toBe("discovered");
+
+    const backlog = JSON.parse(
+      await readFile(path.join(repoRoot, ".openclawcode", "work-items.json"), "utf8"),
+    );
+    expect(backlog.exists).toBe(true);
+    expect(backlog.plannedWorkItemCount).toBe(1);
+    expect(backlog.discoveredWorkItemCount).toBe(1);
+    expect(
+      backlog.workItems.some(
+        (entry: { kind: string; fingerprint: string }) =>
+          entry.kind === "discovered" &&
+          entry.fingerprint === payload.evidence[0].discoveredWorkItem.fingerprint,
+      ),
+    ).toBe(true);
   });
 
   it("discovers stale work-item drift after the blueprint changes", async () => {

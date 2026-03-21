@@ -466,7 +466,7 @@ Status:
 
 - `[x]` first planned work-item decomposition landed
 - `[x]` incremental decomposition landed
-- `[ ]` broader discovered decomposition still open
+- `[x]` broader discovered decomposition landed
 
 Tasks:
 
@@ -485,6 +485,9 @@ Acceptance:
 
 - a newly agreed blueprint can produce an initial backlog without manual issue
   authoring
+- discovery evidence can now also be synchronized back into the same
+  repo-local backlog artifact instead of living only in a parallel discovery
+  file
 
 ### Phase M5: Discovery Pipeline
 

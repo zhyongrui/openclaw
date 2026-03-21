@@ -739,10 +739,82 @@ export async function deriveProjectWorkItemInventory(
   };
 }
 
+function mergeDiscoveredWorkItems(params: {
+  inventory: ProjectWorkItemInventory;
+  discoveredWorkItems: ProjectWorkItem[];
+}): ProjectWorkItemInventory {
+  if (params.discoveredWorkItems.length === 0) {
+    return params.inventory;
+  }
+
+  const plannedAndSuperseded = params.inventory.workItems.filter((item) => item.kind !== "discovered");
+  const existingDiscovered = params.inventory.workItems.filter((item) => item.kind === "discovered");
+  const existingByFingerprint = new Map(existingDiscovered.map((item) => [item.fingerprint, item]));
+  const mergedDiscovered = params.discoveredWorkItems.map((item) => {
+    const previous = existingByFingerprint.get(item.fingerprint);
+    return {
+      ...item,
+      id: previous?.id ?? item.id,
+      status: preserveProjectWorkItemStatus(previous, item.status),
+      githubIssue: previous?.githubIssue ?? item.githubIssue,
+    };
+  });
+  const retainedHistoricalDiscovered = existingDiscovered
+    .filter(
+      (item) =>
+        !params.discoveredWorkItems.some((candidate) => candidate.fingerprint === item.fingerprint),
+    )
+    .map((item) => ({
+      ...item,
+      status: "superseded" as const,
+    }));
+  const workItems = [...plannedAndSuperseded, ...mergedDiscovered, ...retainedHistoricalDiscovered];
+  const activeWorkItems = workItems.filter((item) => item.status !== "superseded");
+  const activePlannedWorkItemCount = workItems.filter(
+    (item) => item.kind === "planned" && item.status !== "superseded",
+  ).length;
+  const activeDiscoveredWorkItemCount = workItems.filter(
+    (item) => item.kind === "discovered" && item.status !== "superseded",
+  ).length;
+  const supersededWorkItemCount = workItems.filter((item) => item.status === "superseded").length;
+
+  return {
+    ...params.inventory,
+    workItemCount: activeWorkItems.length,
+    plannedWorkItemCount: activePlannedWorkItemCount,
+    discoveredWorkItemCount: activeDiscoveredWorkItemCount,
+    supersededWorkItemCount,
+    workItems,
+    readyForExecution: params.inventory.blockerCount === 0 && activeWorkItems.length > 0,
+    readyForIssueProjection: params.inventory.blockerCount === 0 && activeWorkItems.length > 0,
+  };
+}
+
 export async function writeProjectWorkItemInventory(
   repoRootInput: string,
 ): Promise<ProjectWorkItemInventory> {
   const inventory = await deriveProjectWorkItemInventory(repoRootInput);
+  if (!inventory.blueprintExists) {
+    return inventory;
+  }
+
+  await mkdir(path.dirname(inventory.inventoryPath), { recursive: true });
+  const persisted = {
+    ...inventory,
+    exists: true,
+  };
+  await writeFile(inventory.inventoryPath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
+  return persisted;
+}
+
+export async function writeProjectWorkItemInventoryWithDiscoveredItems(params: {
+  repoRoot: string;
+  discoveredWorkItems: ProjectWorkItem[];
+}): Promise<ProjectWorkItemInventory> {
+  const inventory = mergeDiscoveredWorkItems({
+    inventory: await deriveProjectWorkItemInventory(params.repoRoot),
+    discoveredWorkItems: params.discoveredWorkItems,
+  });
   if (!inventory.blueprintExists) {
     return inventory;
   }

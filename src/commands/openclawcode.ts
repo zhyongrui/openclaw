@@ -80,6 +80,7 @@ import {
   writeProjectProgressArtifact,
   writeProjectNextWorkSelection,
   writeProjectWorkItemInventory,
+  writeProjectWorkItemInventoryWithDiscoveredItems,
   runProjectAutonomousLoop,
   buildOpenClawCodePolicySnapshot,
   resolveAutoMergeDisposition,
@@ -4531,6 +4532,10 @@ export async function openclawCodeDiscoverWorkItemsCommand(
 ): Promise<void> {
   const repoRoot = path.resolve(opts.repoRoot ?? process.cwd());
   const inventory = await writeProjectDiscoveryInventory(repoRoot);
+  await writeProjectWorkItemInventoryWithDiscoveredItems({
+    repoRoot,
+    discoveredWorkItems: inventory.evidence.map((entry) => entry.discoveredWorkItem),
+  });
   logProjectDiscoveryInventory({
     inventory,
     runtime,
